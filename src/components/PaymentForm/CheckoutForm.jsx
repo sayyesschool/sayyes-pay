@@ -6,7 +6,7 @@ const CheckoutForm = ({ format, pack, amount, customer }) => {
         customer: {
             email: customer.email
         },
-        taxSystem: 2,
+        taxSystem: 6,
         items: [{
             quantity: 1,
             price: {
