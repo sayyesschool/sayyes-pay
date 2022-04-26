@@ -93,9 +93,9 @@ export const formats = [
         title: 'Онлайн в группе',
         description: 'Выберите это обучение, если вы занимаетесь в группе по Zoom',
         packs: [
-            { id: 1, description: '1 месяц обучения (8 занятий)', price: 8000 },
-            { id: 2, description: '3 месяца обучения (24 занятий)', price: 19500 },
-            { id: 3, description: '6 месяца обучения (48 занятия)', price: 31500 }
+            { id: 1, description: '1 месяц обучения (8 занятий)', price: 10000 },
+            { id: 2, description: '3 месяца обучения (24 занятий)', price: 26700 },
+            { id: 3, description: '6 месяца обучения (48 занятия)', price: 43200 }
         ]
     }
 ];
