@@ -49,7 +49,7 @@ export const formats = [
                 packs: [
                     { id: 5, description: '5 уроков', price: 6500 },
                     { id: 10, description: '10 уроков', price: 12300 },
-                    { id: 20, description: '20 уроков', price: 23000 },
+                    { id: 20, description: '20 уроков', price: 23100 },
                     { id: 40, description: '40 уроков', price: 41200 },
                     { id: 60, description: '60 уроков', price: 57000 }
                 ]
