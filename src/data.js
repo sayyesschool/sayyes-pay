@@ -66,7 +66,7 @@ export const formats = [
                 ]
             },
             {
-                id: 'children',
+                id: 'children-russian',
                 description: 'Детское обучение с русскоязычным преподавателем (25 мин.)',
                 packs: [
                     { id: 5, description: '5 уроков', price: 4300 },
@@ -77,8 +77,19 @@ export const formats = [
                 ]
             },
             {
+                id: 'children-native',
+                description: 'Детское обучение с носителем языка (25 мин.)',
+                packs: [
+                    { id: 5, description: '5 уроков', price: 4500 },
+                    { id: 10, description: '10 уроков', price: 8500 },
+                    { id: 20, description: '20 уроков', price: 16000 },
+                    { id: 40, description: '40 уроков', price: 30000 },
+                    { id: 60, description: '60 уроков', price: 42000 }
+                ]
+            },
+            {
                 id: 'prep-russian',
-                description: 'Подготовка к экзаменам, специальные курсы, бизнес-курс',
+                description: 'Подготовка к экзаменам, специальные курсы, бизнес-курс (русскоязычный преподаватель)',
                 packs: [
                     { id: 5, description: '5 урока', price: 9900 },
                     { id: 10, description: '10 уроков', price: 18500 },
@@ -88,7 +99,7 @@ export const formats = [
             },
             {
                 id: 'prep-native',
-                description: 'Подготовка к экзаменам, специальные курсы, бизнес-курс',
+                description: 'Подготовка к экзаменам, специальные курсы, бизнес-курс (носитель языка)',
                 packs: [
                     { id: 5, description: '5 урока', price: 11100 },
                     { id: 10, description: '10 уроков', price: 19900 },
