@@ -80,11 +80,11 @@ export const formats = [
                 id: 'children-native',
                 description: 'Детское обучение с носителем языка (25 мин.)',
                 packs: [
-                    { id: 5, description: '5 уроков', price: 4500 },
-                    { id: 10, description: '10 уроков', price: 8500 },
-                    { id: 20, description: '20 уроков', price: 16000 },
-                    { id: 40, description: '40 уроков', price: 30000 },
-                    { id: 60, description: '60 уроков', price: 42000 }
+                    { id: 5, description: '5 уроков', price: 5800 },
+                    { id: 10, description: '10 уроков', price: 10100 },
+                    { id: 20, description: '20 уроков', price: 18000 },
+                    { id: 40, description: '40 уроков', price: 32900 },
+                    { id: 60, description: '60 уроков', price: 44000 }
                 ]
             },
             {
