@@ -8,8 +8,6 @@ import {
     Typography
 } from 'mdc-react';
 
-import { PROMOCODE } from '../../data';
-
 import TypeList from './TypeList';
 import PackList from './PackList';
 import CustomerForm from './CustomerForm';
@@ -17,7 +15,7 @@ import CheckoutForm from './CheckoutForm';
 
 import './index.scss';
 
-const PaymentForm = ({ format }) => {
+const PaymentForm = ({ promocode, format }) => {
     const promocodeFieldRef = useRef();
 
     const [view, setView] = useState(format.types ? 'type' : 'pack');
@@ -48,7 +46,7 @@ const PaymentForm = ({ format }) => {
     const handlePromocode = useCallback(() => {
         const value = promocodeFieldRef.current.control.value;
 
-        if (value?.toUpperCase() !== PROMOCODE) return;
+        if (value?.toUpperCase() !== promocode) return;
 
         setTotalAmount(amount => {
             setOriginalAmount(amount);
@@ -56,7 +54,7 @@ const PaymentForm = ({ format }) => {
         });
 
         setHasDiscount(true);
-    }, []);
+    }, [promocode]);
 
     return (
         <div id="payment-form">

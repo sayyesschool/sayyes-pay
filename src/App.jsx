@@ -10,7 +10,7 @@ import PaymentForm from './components/PaymentForm';
 
 import './App.scss';
 
-const App = ({ formats }) => {
+const App = ({ data }) => {
     const [format, setFormat] = useState();
 
     return (
@@ -19,7 +19,7 @@ const App = ({ formats }) => {
 
             <section id="products">
                 <LayoutGrid>
-                    {formats.map(format =>
+                    {data.formats.map(format =>
                         <LayoutGrid.Cell key={format.id} span="4">
                             <ProductCard
                                 format={format}
@@ -41,6 +41,7 @@ const App = ({ formats }) => {
                 <Dialog.Content>
                     {format &&
                         <PaymentForm
+                            promocode={data.promocode}
                             format={format}
                         />
                     }

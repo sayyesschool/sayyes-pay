@@ -1,11 +1,12 @@
 import { render } from 'react-dom';
 
-import { formats } from './data';
 import App from './App';
 
 import './index.scss';
 
-render(
-    <App formats={formats} />,
-    document.querySelector('#app')
-);
+fetch('data.json')
+    .then(res => res.json())
+    .then(data => render(
+        <App data={data} />,
+        document.querySelector('#app')
+    ));
