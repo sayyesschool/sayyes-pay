@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "start": "webpack --watch --env=development --mode=development",
-    "server": "php -S localhost:8000 -t public",
-    "build": "webpack --env=production --mode=production"
+    "build": "webpack --env=production --mode=production",
+    "dev": "webpack --watch --env=development --mode=development",
+    "server": "php -S localhost:8000 -t public"
   },
   "dependencies": {
     "mdc-react": "^0.17.9",

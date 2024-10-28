@@ -1,0 +1,74 @@
+@use "@material/textfield";
+
+#payment-form {
+    .mdc-tab-bar {
+        margin-bottom: 1rem;
+    }
+
+    #type {
+        
+    }
+
+    #pack {
+        .mdc-list-item__meta {
+            font-size: 1.25rem;
+            color: inherit;
+        }
+
+        .mdc-text-field {
+            display: flex;
+            margin-bottom: 1rem;
+        }
+    }
+
+    #customer {
+        .mdc-text-field,
+        .mdc-form-field {
+            margin-bottom: 1rem;
+        }
+    }
+
+    #checkout {
+        .mdc-text-field {
+            @include textfield.height(48px);
+            margin-right: .5rem;
+        }
+
+        .price-label {
+            display: inline-flex;
+            align-items: center;
+            margin-left: auto;
+            margin-right: 1rem;
+    
+            strong {
+                font-size: 1.5rem;
+                margin-right: 4px;
+            }
+        }
+
+        footer {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            justify-content: space-between;
+
+            @media (max-width: 640px) {
+                flex-direction: column;
+                align-items: stretch;
+
+                .mdc-layout + .mdc-layout {
+                    margin-top: 1rem;
+                }
+
+                .price-label {
+                    margin-left: 0;
+                    margin-right: auto;
+                }
+            }
+        }
+    }
+
+    .mdc-button {
+        display: block;
+    }
+}
