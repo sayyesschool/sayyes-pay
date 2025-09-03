@@ -1,14 +1,23 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 export function useProducts() {
-    const [products, setProducts] = useState([]);
+    const [products, setProducts] = useState(null);
+    const loadingRef = useRef(false);
 
     useEffect(() => {
-        console.log('GET PRODUCTS');
+        if (products || loadingRef.current) return;
+
+        loadingRef.current = true;
+
         fetch("/api/products")
             .then(res => res.json())
-            .then(data => setProducts(data.items || []));
-    }, []);
+            .then(data => {
+                setProducts(data.items || []);
+            })
+            .finally(() => {
+                loadingRef.current = false;
+            });
+    }, [products]);
 
     return products;
 }

@@ -16,7 +16,7 @@ export default function Home() {
 				<h2>Выберите пакет и оплатите</h2>
 				{!user && <p className="small">Сначала <a href="/login">войдите по email</a>, затем нажмите «Оплатить».</p>}
 
-				{products.length === 0 ? (
+				{!products ? (
 					<p>Загружаю товары из Stripe…</p>
 				) : (
 					<ul>
