@@ -1,0 +1,87 @@
+[
+  {
+    "external_id": "IND005",
+    "product_id": "prod_Sy5xGtugi7L2Id",
+    "price_id": "price_1S29m1CKZT01dmUqKT3Ef5oM"
+  },
+  {
+    "external_id": "IND010",
+    "product_id": "prod_Sy5xljQzQiKrKt",
+    "price_id": "price_1S29m2CKZT01dmUq2OlOHYJG"
+  },
+  {
+    "external_id": "IND020",
+    "product_id": "prod_Sy5xaAQwSczFyh",
+    "price_id": "price_1S29m3CKZT01dmUqoKfuR3KS"
+  },
+  {
+    "external_id": "IND040",
+    "product_id": "prod_Sy5xzI3IzJDQhd",
+    "price_id": "price_1S29m4CKZT01dmUqALxbiDxz"
+  },
+  {
+    "external_id": "IND060",
+    "product_id": "prod_Sy5y3d73eFDl9A",
+    "price_id": "price_1S29m5CKZT01dmUq8QrhtlPr"
+  },
+  {
+    "external_id": "INDSP005",
+    "product_id": "prod_Sy5yBHV2t5tPmP",
+    "price_id": "price_1S29m6CKZT01dmUqTjyqVLGZ"
+  },
+  {
+    "external_id": "INDSP010",
+    "product_id": "prod_Sy5yCK1ApQtmZA",
+    "price_id": "price_1S29m7CKZT01dmUq0ecdIBmH"
+  },
+  {
+    "external_id": "INDSP020",
+    "product_id": "prod_Sy5yzrmv2fuBE1",
+    "price_id": "price_1S29m8CKZT01dmUqFrNB2TkN"
+  },
+  {
+    "external_id": "INDSP040",
+    "product_id": "prod_Sy5yfQaePjT1Na",
+    "price_id": "price_1S29m9CKZT01dmUqUxJn5agd"
+  },
+  {
+    "external_id": "INDSP060",
+    "product_id": "prod_Sy5yCGCK1P9gJP",
+    "price_id": "price_1S29mACKZT01dmUqAaOVRfCP"
+  },
+  {
+    "external_id": "GRP001",
+    "product_id": "prod_Sy5yBSF0dyZMXE",
+    "price_id": "price_1S29mBCKZT01dmUqJmqlIUrB"
+  },
+  {
+    "external_id": "GRP003",
+    "product_id": "prod_Sy5yi0FxhbRZlv",
+    "price_id": "price_1S29mCCKZT01dmUq8F9xnyyt"
+  },
+  {
+    "external_id": "GRP006",
+    "product_id": "prod_Sy5yTeRjC33zHL",
+    "price_id": "price_1S29mDCKZT01dmUqWF5iFRr3"
+  },
+  {
+    "external_id": "SPK000",
+    "product_id": "prod_Sy5yqY7G1qpzfS",
+    "price_id": "price_1S29mECKZT01dmUq5tV8DpGh"
+  },
+  {
+    "external_id": "SPK001",
+    "product_id": "prod_Sy5yyaVQVYdACG",
+    "price_id": "price_1S29mFCKZT01dmUqYESazIOs"
+  },
+  {
+    "external_id": "SPK003",
+    "product_id": "prod_Sy5yjfYfdEQXru",
+    "price_id": "price_1S29mGCKZT01dmUq6zQWWBaV"
+  },
+  {
+    "external_id": "SPK006",
+    "product_id": "prod_Sy5yfwFBDzSe4O",
+    "price_id": "price_1S29mHCKZT01dmUq90aYGYYI"
+  }
+]
