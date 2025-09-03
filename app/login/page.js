@@ -13,6 +13,7 @@ export default function Login() {
 	async function sendLink(e) {
 		e.preventDefault();
 		setError('');
+
 		const base = process.env.NEXT_PUBLIC_BASE_URL || (typeof window !== 'undefined' ? window.location.origin : '');
 		const redirectTo = `${base}/dashboard`;
 

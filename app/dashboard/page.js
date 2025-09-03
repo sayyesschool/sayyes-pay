@@ -1,31 +1,12 @@
 "use client";
 
-import { useEffect, useState } from 'react';
-
 import Layout from '@/components/Layout';
-import supabase from '@/lib/supabase/client';
+import { usePurchases } from '@/features/purchases';
+import { useUser } from '@/features/user';
 
 export default function Dashboard() {
-	const [user, setUser] = useState(null);
-	const [purchases, setPurchases] = useState([]);
-
-	useEffect(() => {
-		supabase.auth.getUser().then(({ data }) => setUser(data.user || null));
-
-		const { data: { subscription } } = supabase.auth.onAuthStateChange((_, session) => {
-			setUser(session?.user ?? null);
-		});
-
-		return () => subscription?.unsubscribe?.();
-	}, []);
-
-	useEffect(() => {
-		if (!user) return;
-
-		fetch(`/api/purchases?email=${encodeURIComponent(user.email)}`)
-			.then(res => res.json())
-			.then(data => setPurchases(data.purchases || []));
-	}, [user]);
+	const user = useUser();
+	const purchases = usePurchases(user);
 
 	if (!user) {
 		return (
