@@ -1,7 +1,5 @@
 import stripe from '@/lib/stripe';
 
-export const config = { api: { bodyParser: false } };
-
 export async function POST(request) {
   const sig = request.headers.get('stripe-signature');
   let event;

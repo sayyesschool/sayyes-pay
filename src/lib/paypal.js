@@ -52,13 +52,13 @@ export async function createOrder(data) {
     }),
   });
 
-  const data = await res.json();
+  const resData = await res.json();
 
   if (!res.ok) {
-    throw new Error('Failed to create order', { reason: data });
+    throw new Error('Failed to create order', { reason: resData });
   }
 
-  return data;
+  return resData;
 }
 
 export async function captureOrder(orderId) {
