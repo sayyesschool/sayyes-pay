@@ -2,8 +2,10 @@
 
 import { useState } from 'react';
 
-import Layout from '@/components/Layout';
 import supabase from '@/lib/supabase/client';
+import Page from '@/components/page';
+import Section from '@/components/section';
+import { Button, Input } from "@/ui";
 
 export default function Login() {
 	const [email, setEmail] = useState('');
@@ -27,28 +29,27 @@ export default function Login() {
 	}
 
 	return (
-		<Layout>
-			<div className="card">
-				<h2>Вход по email</h2>
+		<Page>
+			<Section title="Вход по email" centered>
 				{sent ? (
 					<p>Мы отправили письмо на <b>{email}</b>. Откройте ссылку из письма, чтобы войти.</p>
 				) : (
-					<form onSubmit={sendLink}>
-						<input
+					<form className="flex-column align-center gap-s" style={{ maxWidth: '400px' }} onSubmit={sendLink}>
+						<Input
 							className="input"
 							type="email"
 							placeholder="you@example.com"
 							value={email}
-							onChange={(e) => setEmail(e.target.value)}
 							required
+							onChange={(e) => setEmail(e.target.value)}
 						/>
-						<div style={{ marginTop: 12 }}>
-							<button className="btn primary" type="submit">Получить ссылку</button>
-						</div>
+
+						<Button type="submit" size="sm" full>Получить ссылку</Button>
 					</form>
 				)}
+
 				{error && <p className="small" style={{ color: '#fca5a5' }}>{error}</p>}
-			</div>
-		</Layout>
+			</Section>
+		</Page>
 	);
 }

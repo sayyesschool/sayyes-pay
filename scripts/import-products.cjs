@@ -7,16 +7,19 @@ const fs = require("fs");
 const csv = require("csv-parser");
 
 if (!process.env.STRIPE_SECRET_KEY) {
-  console.error("❌ STRIPE_SECRET_KEY не задан."); process.exit(1);
+  console.error("❌ STRIPE_SECRET_KEY не задан.");
+  process.exit(1);
 }
+
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 // автоопределение разделителя и снятие BOM
 function detectSeparator(sample) {
   const commas = (sample.match(/,/g) || []).length;
-  const semis  = (sample.match(/;/g) || []).length;
+  const semis = (sample.match(/;/g) || []).length;
   return semis > commas ? ";" : ",";
 }
+
 function readCsvSmart(path) {
   return new Promise((resolve, reject) => {
     const sample = fs.readFileSync(path, "utf8").slice(0, 2048);
@@ -74,14 +77,14 @@ async function findMatchingPrice(productId, { unit_amount, currency }) {
     try {
       const external_id = String(r.external_id || "").trim();
       const name = String(r.name || "").trim();
-      if (!external_id || !name) { console.warn(`⚠️ [row ${i+1}] нужен external_id и name`, r); continue; }
+      if (!external_id || !name) { console.warn(`⚠️ [row ${i + 1}] нужен external_id и name`, r); continue; }
 
       const description = (r.description || "").trim() || undefined;
       const active = String(r.active ?? "true").toLowerCase() === "true";
       const currency = (r.currency || "eur").toLowerCase();
 
       const priceFloat = parseFloat(String(r.price).replace(",", "."));
-      if (Number.isNaN(priceFloat)) { console.warn(`⚠️ [row ${i+1}] некорректная price: "${r.price}"`, r); continue; }
+      if (Number.isNaN(priceFloat)) { console.warn(`⚠️ [row ${i + 1}] некорректная price: "${r.price}"`, r); continue; }
       const unit_amount = Math.round(priceFloat * 100);
 
       // 1) Product с metadata.external_id
@@ -91,8 +94,8 @@ async function findMatchingPrice(productId, { unit_amount, currency }) {
         console.log(`+ product created: [${external_id}] ${name} → ${product.id}`);
       } else {
         const needUpdate = product.name !== name ||
-                           (product.description || "") !== (description || "") ||
-                           product.active !== active;
+          (product.description || "") !== (description || "") ||
+          product.active !== active;
         if (needUpdate) {
           product = await stripe.products.update(product.id, { name, description, active });
           console.log(`~ product updated: [${external_id}] ${name} → ${product.id}`);
@@ -107,18 +110,18 @@ async function findMatchingPrice(productId, { unit_amount, currency }) {
         price = await stripe.prices.create({
           currency, unit_amount, product: product.id, metadata: { external_id }
         });
-        console.log(`+ price created: ${price.id} → ${(unit_amount/100).toFixed(2)} ${currency.toUpperCase()}`);
+        console.log(`+ price created: ${price.id} → ${(unit_amount / 100).toFixed(2)} ${currency.toUpperCase()}`);
       } else {
         // если у цены нет metadata.external_id — добавим
         if (!price.metadata?.external_id) {
-          await stripe.prices.update(price.id, { metadata: { ...(price.metadata||{}), external_id } });
+          await stripe.prices.update(price.id, { metadata: { ...(price.metadata || {}), external_id } });
         }
         console.log(`= price exists: ${price.id}`);
       }
 
       out.push({ external_id, product_id: product.id, price_id: price.id });
     } catch (e) {
-      console.error(`❌ [row ${i+1}] error:`, e.message);
+      console.error(`❌ [row ${i + 1}] error:`, e.message);
     }
   }
 

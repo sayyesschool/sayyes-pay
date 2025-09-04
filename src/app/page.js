@@ -1,37 +1,61 @@
 "use client";
 
-import Layout from '@/components/Layout';
+import Page from '@/components/page';
+import Hero from '@/components/hero';
+import Section from '@/components/section';
 import { useUser } from '@/features/user';
-import { useProducts } from '@/features/products';
+import { Products, useProducts } from '@/features/products';
 import { useCheckout } from '@/features/checkout';
+import { Button } from '@/ui';
 
 export default function Home() {
 	const user = useUser();
 	const products = useProducts();
-	const { checkout, loading } = useCheckout(user);
+	const { checkout } = useCheckout(user);
 
 	return (
-		<Layout user={user}>
-			<div className="card">
-				<h2>Выберите пакет и оплатите</h2>
-				{!user && <p className="small">Сначала <a href="/login">войдите по email</a>, затем нажмите «Оплатить».</p>}
+		<Page user={user}>
+			<Hero
+				title="Английский — твой путь к успеху!"
+				description="Более 12 лет опыта. Более 5 000 историй успеха!"
+			>
+				<div className="mt-xxl mb-xxl">
+					<Button color="yellow" data-scroll-to="#products">
+						Записаться на пробное занятие
+					</Button>
+				</div>
+			</Hero>
 
-				{!products ? (
-					<p>Загружаю товары из Stripe…</p>
-				) : (
-					<ul>
-						{products.map((item) => (
-							<li key={item.product_id}>
-								<b>{item.name}</b> — {(item.price / 100).toFixed(2)} {item.currency?.toUpperCase()}
+			<Section
+				id="about"
+				title="О нас"
+				centered
+			>
+				<p>Фото/коллаж преподавателей и студентов.</p>
+				<p>Текст о школе (адаптировать с sayyes.school).</p>
+				<p>Акценты: опыт, методика, индивидуальный подход.</p>
+			</Section>
 
-								<button className="btn primary" disabled={loading} onClick={() => checkout(item.price_id)}>
-									Оплатить
-								</button>
-							</li>
-						))}
-					</ul>
-				)}
-			</div>
-		</Layout>
+			<Section
+				id="products"
+				title="Курсы"
+				centered
+			>
+				<Products
+					products={products}
+					onPurchase={checkout}
+				/>
+			</Section>
+
+			<Section title="Отзывы" centered>
+				<p>Слайдер или сетка с отзывами студентов.</p>
+				<p>Фото + текст + звёзды.</p>
+			</Section>
+
+			<Section title="Контакты" centered>
+				<p>Форма «Оставить заявку».</p>
+				<p>Контакты (телефон, email, соцсети).</p>
+			</Section>
+		</Page>
 	);
 }

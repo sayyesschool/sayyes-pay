@@ -10,29 +10,6 @@ export async function GET(request) {
     }
 
     const raw = resp.data.filter((p) => !p.recurring);
-
-    const mapItem = async (p) => {
-      let product = typeof p.product === "string" ? null : p.product;
-
-      if (!product && typeof p.product === "string") {
-        try {
-          product = await stripe.products.retrieve(p.product);
-        } catch (e) { }
-      }
-
-      const external_id = p.metadata?.external_id || product?.metadata?.external_id || null;
-
-      return {
-        external_id,
-        price_id: p.id,
-        product_id: product?.id || (typeof p.product === "string" ? p.product : null),
-        name: (product?.name || "").trim() || "Product",
-        description: (product?.description || "").trim() || "",
-        amount: p.unit_amount,
-        currency: p.currency,
-        price: p.unit_amount,
-      };
-    };
     const items = await Promise.all(raw.map(mapItem));
 
     return new Response(JSON.stringify({ items }), { status: 200, headers: { 'Content-Type': 'application/json' } });
@@ -40,3 +17,26 @@ export async function GET(request) {
     return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
   }
 }
+
+async function mapItem(p) {
+  let product = typeof p.product === "string" ? null : p.product;
+
+  if (!product && typeof p.product === "string") {
+    try {
+      product = await stripe.products.retrieve(p.product);
+    } catch (e) { }
+  }
+
+  const external_id = p.metadata?.external_id || product?.metadata?.external_id || null;
+
+  return {
+    external_id,
+    price_id: p.id,
+    product_id: product?.id || (typeof p.product === "string" ? p.product : null),
+    name: (product?.name || "").trim() || "Product",
+    description: (product?.description || "").trim() || "",
+    amount: p.unit_amount,
+    currency: p.currency,
+    price: p.unit_amount,
+  };
+};

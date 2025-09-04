@@ -1,0 +1,55 @@
+.root {
+    font-family: 'Material Symbols Rounded';
+    font-weight: normal;
+    font-style: normal;
+    font-size: 24px;  /* Preferred icon size */
+    display: inline-block;
+    line-height: 1;
+    text-transform: none;
+    letter-spacing: normal;
+    word-wrap: normal;
+    white-space: nowrap;
+    direction: ltr;
+}
+
+.xxs,
+.smallest {
+    font-size: 14px;
+}
+
+.xs,
+.smaller {
+    font-size: 16px;
+}
+
+.s,
+.sm,
+.small {
+    font-size: 18px;
+}
+
+.m,
+.md,
+.medium {
+    font-size: 20px;
+}
+
+.l,
+.lg,
+.large {
+    font-size: 24px;
+}
+
+.xl,
+.larger {
+    font-size: 36px;
+}
+
+.xxl,
+.largest {
+    font-size: 48px;
+}
+
+.filled {
+    font-variation-settings: 'FILL' 1;
+}

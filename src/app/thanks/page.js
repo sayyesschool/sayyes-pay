@@ -1,10 +1,10 @@
 "use client";
 
-import Layout from '@/components/Layout';
+import Page from '@/components/page';
 
 export default function Thanks() {
 	return (
-		<Layout>
+		<Page>
 			<div className="card">
 				<h2>Спасибо за оплату! 🎉</h2>
 				<p>
@@ -12,6 +12,6 @@ export default function Thanks() {
 					Историю покупок смотрите в <a href="/dashboard">личном кабинете</a>.
 				</p>
 			</div>
-		</Layout>
+		</Page>
 	);
 }
