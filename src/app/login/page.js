@@ -16,8 +16,8 @@ export default function Login() {
 		e.preventDefault();
 		setError('');
 
-		const base = process.env.NEXT_PUBLIC_BASE_URL || (typeof window !== 'undefined' ? window.location.origin : '');
-		const redirectTo = `${base}/dashboard`;
+		const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_VERCEL_URL || (typeof window !== 'undefined' ? window.location.origin : '');
+		const redirectTo = `${baseUrl}/dashboard`;
 
 		const { error } = await supabase.auth.signInWithOtp({
 			email,
