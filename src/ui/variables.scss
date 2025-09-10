@@ -1,0 +1,83 @@
+@use 'sass:map';
+
+$font-family: 'Raleway', 'Open Sans', 'Helvetica', Arial, sans-serif;
+
+$black: #262626;
+$white: #fffcff;
+$grey: #e5e3e2;
+$yellow: #ffd754;
+$purple: #7831b2;
+$dark-purple: #5e288a;
+$violet: #a68ad5;
+$pink: #e71985;
+$pale-pink: #f8dcd6;
+$pale-white: #f8f0ee;
+$linen: #f9e2de;
+$almond-crayola: #f6e7e5;
+$pearl-white: #f9f4f2;
+$red: #e71919;
+
+$primary-color: $purple;
+$secondary-color: $yellow;
+
+$body-color: $pearl-white;
+$background-color: $white;
+$font-color: $black;
+
+$container-max-width: 1156px;
+
+$dirs: (top, right, bottom, left);
+$sizes: (xs, sm, md, lg, xl);
+
+$border-radii: (
+    xxs: 5px,
+    xs: 10px,
+    s: 15px,
+    m: 20px,
+    l: 30px,
+    xl: 40px,
+    xxl: 50px
+);
+
+$br-xxs: map-get($border-radii, 'xxs');
+$br-xs: map-get($border-radii, 'xs');
+$br-s: map-get($border-radii, 's');
+$br-m: map-get($border-radii, 'm');
+$br-l: map-get($border-radii, 'l');
+$br-xl: map-get($border-radii, 'xl');
+$br-xxl: map-get($border-radii, 'xxl');
+
+$spacing: (
+    xxs: 5px,
+    xs: 10px,
+    s: 15px,
+    m: 20px,
+    l: 30px,
+    xl: 40px,
+    xxl: 50px
+);
+
+$sp-xxs: map-get($spacing, 'xxs');
+$sp-xs: map-get($spacing, 'xs');
+$sp-s: map-get($spacing, 's');
+$sp-m: map-get($spacing, 'm');
+$sp-l: map-get($spacing, 'l');
+$sp-xl: map-get($spacing, 'xl');
+$sp-xxl: map-get($spacing, 'xxl');
+
+$breakpoints: (
+	xs: 360px,
+	s: 540px,
+	sm: 540px,
+	m: 768px,
+	md: 768px,
+	l: 1024px,
+	lg: 1024px,
+	xl: 1280px
+);
+
+$bp-xl: map-get($breakpoints, 'xl');
+$bp-l: map-get($breakpoints, 'l');
+$bp-m: map-get($breakpoints, 'm');
+$bp-s: map-get($breakpoints, 's');
+$bp-xs: map-get($breakpoints, 'xs');

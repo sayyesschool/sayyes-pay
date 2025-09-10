@@ -1,5 +1,7 @@
 import '@/styles/global.css';
 
+import { UserProvider } from '@/features/user';
+
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
@@ -10,7 +12,11 @@ export default function RootLayout({ children }) {
         <script src="https://s3.regru.cloud/sayyes-static/scripts/shared.js" async></script>
       </head>
 
-      <body>{children}</body>
+      <body>
+        <UserProvider>
+          {children}
+        </UserProvider>
+      </body>
     </html>
   );
 }

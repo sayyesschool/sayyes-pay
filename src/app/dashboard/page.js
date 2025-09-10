@@ -1,5 +1,6 @@
 "use client";
 
+import Loader from '@/components/loader';
 import Page from '@/components/page';
 import Section from '@/components/section';
 import { usePurchases } from '@/features/purchases';
@@ -9,12 +10,14 @@ export default function Dashboard() {
 	const user = useUser();
 	const purchases = usePurchases(user);
 
+	if (user === undefined) {
+		return <Loader size="lg" />;
+	}
+
 	return (
 		<Page user={user} auth>
-			<Section title="Мои покупки" className="section">
-				{purchases.length === 0 ? (
-					<p>Пока пусто</p>
-				) : (
+			<Section title="Мои покупки" description={purchases.length === 0 && 'Пока пусто'}>
+				{purchases.length === 0 && (
 					<ul>
 						{purchases.map(p => (
 							<li key={p.id} className="small">

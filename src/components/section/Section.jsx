@@ -1,18 +1,33 @@
 import cn from 'classnames';
 
-export default function Section({ title, header, content, centered, children = content, ...props }) {
+export default function Section({
+    title,
+    description,
+    header,
+    content,
+    color,
+    centered,
+    padded,
+    children = content,
+    ...props
+}) {
     return (
         <section
-            className={cn("section", {
-                "section--centered": centered
+            className={cn("section", color && `section--${color}`, {
+                "section--centered": centered,
+                "section--padded": padded
             })}
             {...props}
         >
             <div className="section__container">
-                {(title || header) &&
+                {(title || description || header) &&
                     <div className="section__header">
                         {title &&
                             <h2 className="section__title">{title}</h2>
+                        }
+
+                        {description &&
+                            <p className="section__description">{description}</p>
                         }
 
                         {header}

@@ -2,17 +2,6 @@ body {
     padding-top: 65px !important;
 }
 
-.header {
-    --header-background-color: rgba(249, 244, 242, .75) !important;
-    --header-font-color: var(--primary-color) !important;
-    --header-blur: 5px !important;
-}
-
-.header__main {
-    border-top-left-radius: 0 !important;
-    border-top-right-radius: 0 !important;
-}
-
 .btn:not(.btn--full) {
     width: auto !important;
 }

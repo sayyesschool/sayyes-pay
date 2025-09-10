@@ -7,6 +7,8 @@ export default function Products({ products, onPurchase }) {
     const [priceId, setPriceId] = useState(null);
     const [loading, setLoading] = useState(false);
 
+    console.log(products);
+
     const purchase = async (priceId) => {
         setPriceId(priceId);
         setLoading(true);
@@ -25,9 +27,13 @@ export default function Products({ products, onPurchase }) {
 
     return (
         <div>
-            <div className="grid grid-3-lg">
+            <div className="grid grid-2-lg">
                 {Object.keys(byGroup).map((group) => (
                     <div key={group} className="card card--sm flex-column" >
+                        <div className="card__media">
+                            <img className="image" src="https://sayyes.school/wp-content/themes/sayyes/static/images/corporate-formats/school.jpg" alt="В школе в Москве " />
+                        </div>
+
                         <div className="card__header">
                             <h2 className="card__title">{group}</h2>
                         </div>
@@ -37,7 +43,10 @@ export default function Products({ products, onPurchase }) {
                                 {byGroup[group].map((item) => (
                                     <Item key={item.product_id}>
                                         <div className="flex align-center justify-between">
-                                            {(item.price / 100).toFixed(2)} {item.currency?.toUpperCase()}
+                                            <div className="flex-column gap-xxs">
+                                                <span className="text--bold">{item.description}</span>
+                                                <span className="text--muted">{(item.price / 100).toFixed(2)} {item.currency?.toUpperCase()}</span>
+                                            </div>
 
                                             <button
                                                 className={cn("btn btn--sm btn--outlined", {

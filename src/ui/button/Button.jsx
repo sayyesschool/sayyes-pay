@@ -8,13 +8,14 @@ export default function Button({
     color,
     size,
     full,
+    loading,
     className,
     children = content,
     ...props
 }) {
     return (
         <button
-            className={cn(className, 'btn', color && `btn--${color}`, full && 'btn--full', size && `btn--${size}`)}
+            className={cn(className, 'btn', color && `btn--${color}`, full && 'btn--full', loading && 'btn--loading', size && `btn--${size}`)}
             {...props}
         >
             {icon && <Icon name={icon} />}

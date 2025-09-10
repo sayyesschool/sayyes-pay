@@ -1,6 +1,16 @@
 import Link from 'next/link';
 
+import supabase from '@/lib/supabase/client';
+import { redirect } from 'next/navigation';
+
+import './Header.scss';
+
 export default function Header({ user }) {
+    async function logout() {
+        await supabase.auth.signOut();
+        return redirect('/login');
+    }
+
     return (
         <header className="header header--blurred">
             <div className="header__main">
@@ -16,7 +26,11 @@ export default function Header({ user }) {
                             <Link href="/dashboard" className="btn btn--sm btn--transparent btn--uppercase">Личный кабинет</Link>
                         }
 
-                        <Link href="/login" className="btn btn--sm btn--transparent btn--uppercase">{user ? 'Сменить аккаунт' : 'Вход'}</Link>
+                        {user ? (
+                            <button className="btn btn--sm btn--transparent btn--uppercase" onClick={logout}>Выйти</button>
+                        ) : (
+                            <Link href="/login" className="btn btn--sm btn--transparent btn--uppercase">Вход</Link>
+                        )}
                     </nav>
                 </div>
             </div>
