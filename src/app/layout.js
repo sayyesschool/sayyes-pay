@@ -1,6 +1,6 @@
 import '@/styles/global.css';
 
-import { UserProvider } from '@/features/user';
+import { UserProvider } from '@/features/user/client';
 
 export default function RootLayout({ children }) {
   return (

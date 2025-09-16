@@ -3,8 +3,8 @@
 import Loader from '@/components/loader';
 import Page from '@/components/page';
 import Section from '@/components/section';
-import { usePurchases } from '@/features/purchases';
-import { useUser } from '@/features/user';
+import { usePurchases } from '@/features/purchases/client';
+import { useUser } from '@/features/user/client';
 
 export default function Dashboard() {
 	const user = useUser();

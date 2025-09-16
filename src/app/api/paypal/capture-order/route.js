@@ -7,7 +7,7 @@ export async function POST(request) {
     const { orderID } = await request.json();
     const data = await captureOrder(orderID);
 
-    return NextResponse.json({ data }, { status: 200 });
+    return NextResponse.json({ data });
   } catch (error) {
     return NextResponse.json({
       error: 'Failed to capture PayPal order',

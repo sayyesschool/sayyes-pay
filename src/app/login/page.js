@@ -2,9 +2,9 @@
 
 import { useState } from 'react';
 
-import supabase from '@/lib/supabase/client';
 import Page from '@/components/page';
 import Section from '@/components/section';
+import { signIn } from '@/features/user/client';
 import { Button, Input } from "@/ui";
 
 export default function Login() {
@@ -19,13 +19,7 @@ export default function Login() {
 		setError('');
 		setLoading(true);
 
-		const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_VERCEL_URL || (typeof window !== 'undefined' ? window.location.origin : '');
-		const redirectTo = `${baseUrl}/dashboard`;
-
-		const { error } = await supabase.auth.signInWithOtp({
-			email,
-			options: { emailRedirectTo: redirectTo }
-		});
+		await signIn({ email });
 
 		setLoading(false);
 

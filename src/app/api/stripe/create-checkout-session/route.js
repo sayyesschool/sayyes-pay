@@ -1,23 +1,36 @@
-import stripe from '@/lib/stripe';
+import { NextResponse } from 'next/server';
+
+import { createCheckoutSession } from '@/features/checkout/server';
 
 export async function POST(request) {
   try {
     const { email, price_id } = await request.json();
 
-    if (!email) return new Response(JSON.stringify({ error: "Нет email. Сначала войдите." }), { status: 400 });
-    if (!price_id) return new Response(JSON.stringify({ error: "Не передан price_id." }), { status: 400 });
-    
+    if (!email) {
+      return NextResponse.json({
+        error: "Нет email. Сначала войдите."
+      }, {
+        status: 400
+      });
+    }
+
+    if (!price_id) {
+      return NextResponse.json({
+        error: "Не передан price_id."
+      }, {
+        status: 400
+      });
+    }
+
     const origin = request.headers.get('origin') || '';
-    const session = await stripe.checkout.sessions.create({
-      mode: "payment",
-      success_url: `${origin}/thanks`,
-      cancel_url: `${origin}/`,
-      line_items: [{ price: price_id, quantity: 1 }],
-      customer_email: email,
-      metadata: { email, price_id }
+    const { url } = await createCheckoutSession({
+      email,
+      price_id,
+      baseUrl: origin
     });
-    return new Response(JSON.stringify({ url: session.url }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+
+    return NextResponse.json({ url });
   } catch (e) {
-    return new Response(JSON.stringify({ error: e.message }), { status: 500 });
+    return NextResponse.json({ error: e.message }, { status: 500 });
   }
 }

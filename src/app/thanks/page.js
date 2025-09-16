@@ -1,17 +1,19 @@
 "use client";
 
+import Link from 'next/link';
+
 import Page from '@/components/page';
+import Section from '@/components/section';
 
 export default function Thanks() {
 	return (
 		<Page>
-			<div className="card">
-				<h2>Спасибо за оплату! 🎉</h2>
-				<p>
+			<Section title="Спасибо за оплату! 🎉" centered>
+				<p className="text text--center">
 					Письмо с подтверждением отправлено на ваш email.
-					Историю покупок смотрите в <a href="/dashboard">личном кабинете</a>.
+					Историю покупок смотрите в <Link className="text--purple" href="/dashboard">личном кабинете</Link>.
 				</p>
-			</div>
+			</Section>
 		</Page>
 	);
 }

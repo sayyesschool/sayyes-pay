@@ -1,13 +1,14 @@
 import Link from 'next/link';
 
-import supabase from '@/lib/supabase/client';
 import { redirect } from 'next/navigation';
+
+import { signOut } from '@/features/user/client';
 
 import './Header.scss';
 
 export default function Header({ user }) {
     async function logout() {
-        await supabase.auth.signOut();
+        await signOut();
         return redirect('/login');
     }
 
