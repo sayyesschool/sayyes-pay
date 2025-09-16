@@ -33,12 +33,24 @@ function readCsvSmart(path) {
   });
 }
 
-async function findProductByExternalId(externalId) {
+async function findProductByExternalId(externalId, { includeArchived = true } = {}) {
+  // 1) сначала ищем среди активных
   let starting_after = undefined;
   while (true) {
-    const res = await stripe.products.list({ limit: 100, starting_after });
+    const res = await stripe.products.list({ limit: 100, active: true, starting_after });
     for (const p of res.data) {
-      if ((p.metadata && p.metadata.external_id) === externalId) return p;
+      if ((p.metadata?.external_id) === externalId) return p;
+    }
+    if (!res.has_more) break;
+    starting_after = res.data[res.data.length - 1].id;
+  }
+  if (!includeArchived) return null;
+  // 2) если не нашли — ищем среди архивных (active:false)
+  starting_after = undefined;
+  while (true) {
+    const res = await stripe.products.list({ limit: 100, active: false, starting_after });
+    for (const p of res.data) {
+      if ((p.metadata?.external_id) === externalId) return p;
     }
     if (!res.has_more) break;
     starting_after = res.data[res.data.length - 1].id;
@@ -46,12 +58,13 @@ async function findProductByExternalId(externalId) {
   return null;
 }
 
-async function findMatchingPrice(productId, { unit_amount, currency }) {
+async function findMatchingPrice(productId, { unit_amount, currency, onlyActive = true }) {
   let starting_after = undefined;
   while (true) {
     const res = await stripe.prices.list({ product: productId, limit: 100, starting_after });
     for (const pr of res.data) {
-      if (pr.recurring) continue; // нам нужны one-off
+      if (pr.recurring) continue;                   // только разовые
+      if (onlyActive && !pr.active) continue;      // по умолчанию — только активные
       if (pr.unit_amount !== unit_amount) continue;
       if ((pr.currency || "").toLowerCase() !== (currency || "").toLowerCase()) continue;
       return pr;
@@ -93,37 +106,49 @@ async function findMatchingPrice(productId, { unit_amount, currency }) {
         product = await stripe.products.create({ name, description, active, metadata: { external_id } });
         console.log(`+ product created: [${external_id}] ${name} → ${product.id}`);
       } else {
-        const needUpdate = product.name !== name ||
+        // если продукт архивный, а в CSV active=true — разархивируем (active:true)
+        const shouldUnarchive = (product.active === false) && active === true;
+        const needUpdate =
+          product.name !== name ||
           (product.description || "") !== (description || "") ||
-          product.active !== active;
+          product.active !== active ||
+          shouldUnarchive;
+      
         if (needUpdate) {
           product = await stripe.products.update(product.id, { name, description, active });
-          console.log(`~ product updated: [${external_id}] ${name} → ${product.id}`);
+          console.log(`~ product updated: [${external_id}] ${name} → ${product.id} (active=${active})`);
         } else {
-          console.log(`= product exists: [${external_id}] ${name} → ${product.id}`);
+          console.log(`= product exists: [${external_id}] ${name} → ${product.id} (active=${product.active})`);
         }
       }
 
       // 2) Price (one-off) + metadata.external_id
-      let price = await findMatchingPrice(product.id, { unit_amount, currency });
+      let price = await findMatchingPrice(product.id, { unit_amount, currency, onlyActive: true });
       if (!price) {
         price = await stripe.prices.create({
-          currency, unit_amount, product: product.id, metadata: { external_id }
+          currency,
+          unit_amount,
+          product: product.id,
+          active,                              // цена сразу в нужном статусе
+          metadata: { external_id },
         });
-        console.log(`+ price created: ${price.id} → ${(unit_amount / 100).toFixed(2)} ${currency.toUpperCase()}`);
+        console.log(`+ price created: ${price.id} → ${(unit_amount / 100).toFixed(2)} ${currency.toUpperCase()} (active=${active})`);
       } else {
-        // если у цены нет metadata.external_id — добавим
+        let updated = false;
+        // добиваем external_id в metadata, если отсутствует
         if (!price.metadata?.external_id) {
           await stripe.prices.update(price.id, { metadata: { ...(price.metadata || {}), external_id } });
+          updated = true;
         }
-        console.log(`= price exists: ${price.id}`);
+        // приводим статус цены к CSV (Stripe позволяет менять active у цены)
+        if (typeof active === "boolean" && price.active !== active) {
+          await stripe.prices.update(price.id, { active });
+          updated = true;
+        }
+        console.log(`${updated ? "~" : "="} price ${updated ? "updated" : "exists"}: ${price.id} (active=${active})`);
       }
 
-      out.push({ external_id, product_id: product.id, price_id: price.id });
-    } catch (e) {
-      console.error(`❌ [row ${i + 1}] error:`, e.message);
-    }
-  }
+out.push({ external_id, product_id: product.id, price_id: price.id });
 
   fs.writeFileSync("scripts/stripe_map.json", JSON.stringify(out, null, 2), "utf-8");
   console.log(`\n✅ Mapping saved to scripts/stripe_map.json (items: ${out.length})`);
