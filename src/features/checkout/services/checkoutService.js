@@ -9,8 +9,10 @@ export async function createCheckoutSession({
 } = {}) {
     const session = await stripe.checkout.sessions.create({
         mode: "payment",
-        success_url: `${baseUrl}/thanks`,
-        cancel_url: `${baseUrl}/`,
+        ui_mode: "embedded",
+        // success_url: `${baseUrl}/thanks`,
+        // cancel_url: `${baseUrl}/`,
+        return_url: baseUrl,
         line_items: [{ price: price_id, quantity: 1 }],
         customer_email: email,
         metadata: { email, price_id }

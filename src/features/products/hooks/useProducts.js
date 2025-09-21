@@ -12,7 +12,7 @@ export function useProducts() {
         fetch("/api/products")
             .then(res => res.json())
             .then(data => {
-                setProducts(data.items || []);
+                setProducts(data.products || []);
             })
             .finally(() => {
                 loadingRef.current = false;

@@ -1,67 +1,42 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useRef } from 'react';
 import http from 'axios';
+import { loadStripe } from '@stripe/stripe-js';
+import {
+    EmbeddedCheckoutProvider,
+    EmbeddedCheckout
+} from '@stripe/react-stripe-js';
 
 import styles from './styles.module.css';
 
-export default function Checkout({
+const stripePromise = loadStripe("pk_test_51S8C57BuEx9CSU7MxLqiYAgTOdZrgRsCGKV8VHmKsBrIp20NywWDm63CqrBLXp6Im1ZtYWFPSo0bLAczRttFZ9Hp009e9fLs1Y");
+
+export default function Payment({
     data,
     onComplete,
     onError
 }) {
     const checkoutRef = useRef();
 
-    useEffect(() => {
-        const params = new URLSearchParams(window.location.search);
-        const requestId = params.get('requestId') ?? undefined;
-        const utm = {
-            source: params.get('utm_source') ?? undefined,
-            medium: params.get('utm_medium') ?? undefined,
-            campaign: params.get('utm_campaign') ?? undefined,
-            content: params.get('utm_content') ?? undefined,
-            term: params.get('utm_term') ?? undefined
-        };
+    const fetchClientSecret = useCallback(() => {
+        return fetch("/api/stripe/create-checkout-session", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(data)
+        })
+            .then((res) => res.json())
+            .then((data) => data.clientSecret);
+    }, [data]);
 
-        http.post('/api/payments/create', {
-            ...data,
-            requestId,
-            utm
-        }).then(res => new Promise((resolve, reject) => {
-            const payment = res.data;
-            const checkout = new window.YooMoneyCheckoutWidget({
-                confirmation_token: payment.confirmation.confirmationToken,
-                customization: {
-                    colors: {
-                        control_primary: '#6c167b',
-                        background: '#ffffff'
-                    }
-                },
-                error_callback: reject
-            });
-
-            checkoutRef.current = checkout;
-
-            checkout.on('success', () => resolve(payment));
-            checkout.on('fail', reject);
-
-            checkout.render('checkout');
-        })).then(payment => http.post('/api/payments/process', {
-            uuid: payment.uuid
-        })).then(() => {
-            onComplete();
-        }).catch(error => {
-            console.error(`Checkout error: ${error.message}`);
-            onError(error);
-        }).finally(() => {
-            checkoutRef.current?.destroy();
-            checkoutRef.current = null;
-        });
-
-        return () => {
-            checkoutRef.current?.destroy();
-        };
-    }, []);
+    const options = { fetchClientSecret };
 
     return (
-        <div id="checkout" className={styles.root} />
+        <div id="checkout" className={styles.root}>
+            <EmbeddedCheckoutProvider
+                stripe={stripePromise}
+                options={options}
+            >
+                <EmbeddedCheckout />
+            </EmbeddedCheckoutProvider>
+        </div>
     );
 }

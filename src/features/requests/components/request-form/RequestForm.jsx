@@ -13,18 +13,6 @@ export default function RequestForm() {
         <form id="request-form" className="request-form form" onSubmit={submit}>
             <input type="hidden" name="type" value="lesson" />
 
-            <div className="request-form__format">
-                <div className="radio-group">
-                    <label className="radio-group__label">Выберите желаемый формат обучения:</label>
-
-                    <div className="radio-group__items">
-                        <Radio name="format" value="offline" label="Офлайн" defaultChecked />
-                        <Radio name="format" value="online" label="Онлайн" />
-                        <Radio name="format" value="unknown" label="Не знаю" />
-                    </div>
-                </div>
-            </div>
-
             <div className="request-form__contact">
                 <Input name="name" type="text" placeholder="Имя*" required />
                 <Input name="phone" type="tel" placeholder="Телефон*" required />

@@ -19,7 +19,7 @@ export default function Header({ user }) {
                     <a className="header__logo logo" href="/">
                         <img src="https://s3.regru.cloud/sayyes-static/images/logos/sayyes-english-school_purple.svg" alt="Логотип Say Yes" />
                     </a>
-
+                    {/* 
                     <nav className="header__buttons">
                         <Link href="/" className="btn btn--sm btn--transparent btn--uppercase">Главная</Link>
 
@@ -32,7 +32,7 @@ export default function Header({ user }) {
                         ) : (
                             <Link href="/login" className="btn btn--sm btn--transparent btn--uppercase">Вход</Link>
                         )}
-                    </nav>
+                    </nav> */}
                 </div>
             </div>
         </header>

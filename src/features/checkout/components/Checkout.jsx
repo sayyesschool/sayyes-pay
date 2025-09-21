@@ -2,24 +2,29 @@ import { useState } from 'react';
 
 import { Tab, Tabs } from '@/ui';
 
+import { useCheckout } from '../hooks/useCheckout';
+
 import ErrorState from './ErrorState';
 import Pack from './Pack';
 import Payment from './Payment';
 import Type from './Type';
 import SuccessState from './SuccessState';
+import Contact from './Contact';
 
 const View = {
-    TYPE: 0,
-    PACK: 1,
-    CONTACT: 2,
-    CHECKOUT: 3,
-    SUCCESS: 4
+    Type: 0,
+    Pack: 1,
+    Contact: 2,
+    Payment: 3,
+    Success: 4
 };
 
-export default function Checkout({ format }) {
-    const [view, setView] = useState(format.types ? View.TYPE : View.PACK);
+export default function Checkout({ products, groupId }) {
+    const { checkout } = useCheckout();
+
+    const [view, setView] = useState(View.Pack);
     const [type, setType] = useState();
-    const [pack, setPack] = useState();
+    const [priceId, setPriceId] = useState();
     const [amount, setAmount] = useState();
     const [contact, setContact] = useState({});
     const [error, setError] = useState(null);
@@ -30,91 +35,76 @@ export default function Checkout({ format }) {
     if (error)
         return <ErrorState error={error} />;
 
-    const types = format.types;
-    const packs = type ? type.packs : format.packs;
+    const packs = products;
 
     return (
         <div className="flex-column gap-l">
             <div className="flex align-center justify-between gap-s">
                 <div className="flex-column gap-xs">
-                    <h3 className="heading-5">{format.title}</h3>
+                    <h3 className="heading-5">{groupId}</h3>
 
-                    {view > View.TYPE &&
+                    {view > View.Type &&
                         <div className="flex align-center gap-xs">
-                            {view > View.TYPE && type &&
+                            {view > View.Type && type &&
                                 <p className="text--body1">{type.description}</p>
                             }
 
-                            {view > View.PACK && pack && <>
+                            {/* {view > View.Pack && pack && <>
                                 <span>·</span>
                                 <p className="text--body2">{pack.description}</p>
-                            </>}
+                            </>} */}
                         </div>
                     }
                 </div>
 
-                {view > View.PACK && (pack || amount) &&
+                {/* {view > View.Pack && (pack || amount) &&
                     <p><span className="heading-5">{amount || pack.price}</span> руб.</p>
-                }
+                } */}
             </div>
 
             <Tabs color="violet" pills>
-                {types &&
-                    <Tab
-                        content="Тип обучения"
-                        icon={view >= View.PACK ? 'check' : 'person'}
-                        active={view === View.TYPE}
-                    />
-                }
-
                 <Tab
                     content="Пакет"
-                    icon={view >= View.CONTACT ? 'check' : 'person'}
-                    active={view === View.PACK}
+                    active={view === View.Pack}
+                />
+
+                <Tab
+                    content="Контактные данные"
+                    active={view === View.Contact}
                 />
 
                 <Tab
                     content="Оплата"
-                    icon={view >= View.SUCCESS ? 'check' : 'payment'}
-                    active={view === View.CHECKOUT}
+                    active={view === View.Payment}
                 />
             </Tabs>
 
-            {view === 0 &&
-                <Type
-                    types={types}
-                    selectedType={type}
-                    onChange={setType}
-                    onNext={() => setView(View.PACK)}
+            {view === 1 &&
+                <Pack
+                    prices={packs}
+                    selectedPriceId={priceId}
+                    amount={amount}
+                    onChange={setPriceId}
+                    onAmountChange={setAmount}
+                    onNext={() => setView(View.Contact)}
                 />
             }
 
-            {view === 1 &&
-                <Pack
-                    format={format}
-                    packs={packs}
-                    selectedPack={pack}
-                    amount={amount}
-                    customPriceAvailable={format.customPriceAvailable}
-                    onChange={setPack}
-                    onAmountChange={setAmount}
-                    onNext={() => setView(View.CONTACT)}
+            {view === 2 &&
+                <Contact
+                    contact={contact}
+                    onChange={setContact}
+                    onNext={() => setView(View.Payment)}
                 />
             }
 
             {view === 3 &&
                 <Payment
                     data={{
-                        amount: amount || pack.price,
-                        contact,
-                        data: {
-                            formatId: format?.id,
-                            typeId: type?.id,
-                            packId: pack?.id
-                        },
-                        purpose: 'study'
+                        email: contact.email,
+                        price_id: priceId
                     }}
-                    onComplete={() => setView(View.SUCCESS)}
+                    onComplete={() => setView(View.Success)}
                     onError={error => setError(error)}
                 />
             }

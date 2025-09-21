@@ -8,7 +8,7 @@ export async function POST(request) {
 
     if (!email) {
       return NextResponse.json({
-        error: "Нет email. Сначала войдите."
+        error: "Нет email"
       }, {
         status: 400
       });
@@ -16,20 +16,23 @@ export async function POST(request) {
 
     if (!price_id) {
       return NextResponse.json({
-        error: "Не передан price_id."
+        error: "Не передан price_id"
       }, {
         status: 400
       });
     }
 
     const origin = request.headers.get('origin') || '';
-    const { url } = await createCheckoutSession({
+    const { url, client_secret } = await createCheckoutSession({
       email,
       price_id,
       baseUrl: origin
     });
 
-    return NextResponse.json({ url });
+    return NextResponse.json({
+      url,
+      clientSecret: client_secret
+    });
   } catch (e) {
     return NextResponse.json({ error: e.message }, { status: 500 });
   }

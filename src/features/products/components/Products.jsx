@@ -1,69 +1,60 @@
 import { useState } from 'react';
 import cn from 'classnames';
 
-import { Item } from '@/ui';
+import { Item, Modal } from '@/ui';
+import { Checkout } from '@/features/checkout/client';
+
+import './Products.scss';
 
 export default function Products({ products, onPurchase }) {
-    const [priceId, setPriceId] = useState(null);
+    const [groupId, setGroupId] = useState();
     const [loading, setLoading] = useState(false);
-
-    console.log(products);
-
-    const purchase = async (priceId) => {
-        setPriceId(priceId);
-        setLoading(true);
-        await onPurchase(priceId);
-        setLoading(false);
-    };
+    const [isModalOpen, setModalOpen] = useState(false);
 
     if (!products) return <p>Загрузка...</p>;
 
     if (products.length === 0) return null;
 
-    const byGroup = products.reduce((acc, product) => {
-        (acc[product.name] = acc[product.name] || []).push(product);
+    const checkout = async (groupId) => {
+        setGroupId(groupId);
+        setModalOpen(true);
+    };
+
+    const groups = products.reduce((acc, product) => {
+        if (!acc[product.group_id]) {
+            acc[product.group_id] = product.name;
+        }
         return acc;
     }, {});
+    const groupProducts = products.filter(product => product.group_id === groupId);
 
     return (
-        <div>
+        <div className="products">
             <div className="grid grid-2-lg">
-                {Object.keys(byGroup).map((group) => (
-                    <div key={group} className="card card--sm flex-column" >
+                {Object.entries(groups).map(([groupId, groupName]) => (
+                    <div key={groupId} className="card card--sm flex-column" >
                         <div className="card__media">
                             <img className="image" src="https://sayyes.school/wp-content/themes/sayyes/static/images/corporate-formats/school.jpg" alt="В школе в Москве " />
                         </div>
 
                         <div className="card__header">
-                            <h2 className="card__title">{group}</h2>
+                            <h2 className="card__title">{groupName}</h2>
                         </div>
 
                         <div className="card__body">
-                            <ul className="list gap-s">
-                                {byGroup[group].map((item) => (
-                                    <Item key={item.product_id}>
-                                        <div className="flex align-center justify-between">
-                                            <div className="flex-column gap-xxs">
-                                                <span className="text--bold">{item.description}</span>
-                                                <span className="text--muted">{(item.price / 100).toFixed(2)} {item.currency?.toUpperCase()}</span>
-                                            </div>
-
-                                            <button
-                                                className={cn("btn btn--sm btn--outlined", {
-                                                    "btn--loading": priceId === item.price_id && loading
-                                                })}
-                                                disabled={loading}
-                                                onClick={() => purchase(item.price_id)}>
-                                                Оплатить
-                                            </button>
-                                        </div>
-                                    </Item>
-                                ))}
-                            </ul>
+                            <button className="pay-btn btn btn--outlined" onClick={() => checkout(groupId)}>Выбрать и оплатить</button>
                         </div>
                     </div>
                 ))}
             </div>
+
+            <Modal
+                open={isModalOpen}
+                title="Оформление заказа"
+                onClose={() => setModalOpen(false)}
+            >
+                <Checkout products={groupProducts} groupId={groupId} />
+            </Modal>
         </div>
     );
 }

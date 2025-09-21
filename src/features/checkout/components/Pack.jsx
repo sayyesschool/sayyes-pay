@@ -1,8 +1,8 @@
 import { Button, Input, Radio } from '@/ui';
 
 export default function Pack({
-    packs,
-    selectedPack,
+    prices = [],
+    selectedPriceId,
     amount,
     customPriceAvailable,
     onAmountChange,
@@ -11,17 +11,17 @@ export default function Pack({
 }) {
     return (
         <div className="list gap-s">
-            {packs.map(pack =>
-                <div key={pack.id} className="list-item">
+            {prices.map(item =>
+                <div key={item.id} className="list-item">
                     <Radio
                         name="pack"
-                        value={pack.id}
-                        checked={pack.id === selectedPack?.id}
+                        value={item.price_id}
+                        checked={item.price_id === selectedPriceId}
                         label={<>
-                            {pack.description}
-                            <span><strong className="text">{pack.price}</strong> руб.</span>
+                            {item.description}
+                            <span><strong className="text">{(item.price / 100).toFixed(2)}</strong> {item.currency?.toUpperCase()}</span>
                         </>}
-                        onClick={() => onChange(pack)}
+                        onClick={() => onChange(item.price_id)}
                     />
 
                 </div>
@@ -41,7 +41,7 @@ export default function Pack({
             <Button
                 className="mh-auto"
                 content="Далее"
-                disabled={!selectedPack && !amount}
+                disabled={!selectedPriceId && !amount}
                 outlined
                 onClick={onNext}
             />
