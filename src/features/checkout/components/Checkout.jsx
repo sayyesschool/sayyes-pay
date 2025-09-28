@@ -2,8 +2,6 @@ import { useState } from 'react';
 
 import { Tab, Tabs } from '@/ui';
 
-import { useCheckout } from '../hooks/useCheckout';
-
 import ErrorState from './ErrorState';
 import Pack from './Pack';
 import Payment from './Payment';
@@ -21,13 +19,13 @@ const View = {
 };
 
 export default function Checkout({ products, groupId }) {
-    const { checkout } = useCheckout();
-
     const [view, setView] = useState(View.Pack);
-    const [type, setType] = useState();
     const [priceId, setPriceId] = useState();
     const [amount, setAmount] = useState();
-    const [contact, setContact] = useState({});
+    const [contact, setContact] = useState({
+        name: '',
+        email: ''
+    });
     const [error, setError] = useState(null);
 
     if (view === 4)
@@ -38,7 +36,6 @@ export default function Checkout({ products, groupId }) {
 
     const groupProducts = products.filter(product => product.group_id === groupId);
     const packs = groupProducts;
-
 
     return (
         <div className="checkout flex-column gap-l">

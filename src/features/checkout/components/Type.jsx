@@ -22,7 +22,6 @@ export default function Type({ types, selectedType, onChange, onNext }) {
                 className="mh-auto"
                 content="Далее"
                 disabled={!selectedType}
-                outlined
                 onClick={onNext}
             />
         </div>

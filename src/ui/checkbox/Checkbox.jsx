@@ -3,7 +3,6 @@ export default function Checkbox({
     value,
     id = `${name}_${value}`,
     label,
-    onChange,
     ...props
 }) {
     return (
@@ -14,7 +13,6 @@ export default function Checkbox({
                 type="checkbox"
                 name={name}
                 value={value}
-                onInput={onChange}
                 {...props}
             />
 

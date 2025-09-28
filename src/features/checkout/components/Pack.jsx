@@ -12,16 +12,18 @@ export default function Pack({
     return (
         <div className="list gap-s">
             {prices.map(item =>
-                <div key={item.id} className="list-item">
+                <div key={item.price_id} className="list-item">
                     <Radio
                         name="pack"
                         value={item.price_id}
                         checked={item.price_id === selectedPriceId}
                         label={<>
                             {item.description}
-                            <span className="price"><strong className="text text--bold">{(item.price / 100).toFixed(2)}</strong> {item.currency?.toUpperCase()}</span>
+                            <span className="price">
+                                <strong className="text text--bold">{(item.price / 100).toFixed(2)}</strong> {item.currency?.toUpperCase()}
+                            </span>
                         </>}
-                        onClick={() => onChange(item.price_id)}
+                        onChange={() => onChange(item.price_id)}
                     />
 
                 </div>
@@ -42,7 +44,6 @@ export default function Pack({
                 className="mh-auto"
                 content="Далее"
                 disabled={!selectedPriceId && !amount}
-                outlined
                 onClick={onNext}
             />
         </div>

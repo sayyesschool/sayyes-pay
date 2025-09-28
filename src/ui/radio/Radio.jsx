@@ -3,7 +3,6 @@ export default function Radio({
     value,
     id = `${name}_${value}`,
     label,
-    onChange,
     ...props
 }) {
     return (

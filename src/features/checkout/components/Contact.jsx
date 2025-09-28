@@ -33,7 +33,6 @@ export default function Contact({ contact, onChange, onNext }) {
             <Button
                 content="Далее"
                 disabled={!isValid}
-                outlined
                 onClick={onNext}
             />
         </div>

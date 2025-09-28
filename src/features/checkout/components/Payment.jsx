@@ -4,7 +4,7 @@ export default function Payment({
     data,
 }) {
     useEffect(() => {
-        return fetch("/api/stripe/create-checkout-session", {
+        fetch("/api/stripe/create-checkout-session", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(data)
