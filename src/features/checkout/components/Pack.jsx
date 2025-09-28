@@ -19,7 +19,7 @@ export default function Pack({
                         checked={item.price_id === selectedPriceId}
                         label={<>
                             {item.description}
-                            <span><strong className="text">{(item.price / 100).toFixed(2)}</strong> {item.currency?.toUpperCase()}</span>
+                            <span className="price"><strong className="text text--bold">{(item.price / 100).toFixed(2)}</strong> {item.currency?.toUpperCase()}</span>
                         </>}
                         onClick={() => onChange(item.price_id)}
                     />

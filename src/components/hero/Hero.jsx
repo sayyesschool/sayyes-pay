@@ -2,6 +2,7 @@ export default function Hero({
     title,
     description,
     content,
+    image,
     centered,
     children = content,
     ...props
@@ -19,6 +20,12 @@ export default function Hero({
 
                 {children}
             </div>
+
+            {image && (
+                <div className="hero__image">
+                    {image}
+                </div>
+            )}
         </div>
     );
 }

@@ -5,7 +5,7 @@ import { Button, Checkbox, Input } from '@/ui';
 export default function Contact({ contact, onChange, onNext }) {
     const [consent, setConsent] = useState(false);
 
-    const isValid = contact.name && contact.email && contact.phone && consent;
+    const isValid = contact.name && contact.email && consent;
 
     return (
         <div id="contact" className="flex flex-column align-center gap-s">
@@ -20,13 +20,6 @@ export default function Contact({ contact, onChange, onNext }) {
                 placeholder="Email"
                 name="email"
                 value={contact.email}
-                onInput={event => onChange(prev => ({ ...prev, [event.target.name]: event.target.value }))}
-            />
-
-            <Input
-                placeholder="Телефон"
-                name="phone"
-                value={contact.phone}
                 onInput={event => onChange(prev => ({ ...prev, [event.target.name]: event.target.value }))}
             />
 

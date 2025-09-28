@@ -1,4 +1,5 @@
 import Header from '@/components/header';
+import Footer from '@/components/footer';
 
 export default function Page({ user, auth, children }) {
     return (<>
@@ -14,5 +15,7 @@ export default function Page({ user, auth, children }) {
                     </div>
                 )}
         </main>
+        
+        <Footer />
     </>);
 }

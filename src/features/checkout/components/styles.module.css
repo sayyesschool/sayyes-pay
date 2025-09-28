@@ -1,7 +1,0 @@
-.root {
-    &:empty:before {
-        content: 'Загрузка...';
-        display: block;
-        text-align: center;
-    }
-}

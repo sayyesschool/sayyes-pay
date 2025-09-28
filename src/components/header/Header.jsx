@@ -1,17 +1,6 @@
-import Link from 'next/link';
-
-import { redirect } from 'next/navigation';
-
-import { signOut } from '@/features/user/client';
-
 import './Header.scss';
 
 export default function Header({ user }) {
-    async function logout() {
-        await signOut();
-        return redirect('/login');
-    }
-
     return (
         <header className="header header--blurred">
             <div className="header__main">

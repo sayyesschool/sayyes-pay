@@ -1,36 +1,50 @@
 "use client";
 
+import {useState} from 'react';
+
+
+import Hero from '@/components/hero';
 import Loader from '@/components/loader';
 import Page from '@/components/page';
-import Hero from '@/components/hero';
 import Section from '@/components/section';
-import Footer from '@/components/footer';
-import { useUser } from '@/features/user/client';
+
+import { Checkout } from '@/features/checkout/client';
 import { Products, useProducts } from '@/features/products/client';
 import { RequestForm } from '@/features/requests/client';
+import { useUser } from '@/features/user/client';
 import useScrollTo from '@/hooks/useScrollTo';
 
-import { Button } from '@/ui';
+import { Button, Modal } from '@/ui';
+
+import './styles.scss';
 
 export default function Home() {
-	const user = useUser();
 	const products = useProducts();
-	const scrollToProducts = useScrollTo('#products', {
-		block: 'start'
+	const scrollToRequest = useScrollTo('#request', {
+		block: 'center'
 	});
 
-	if (user === undefined) {
+	const [groupId, setGroupId] = useState();
+	const [isModalOpen, setModalOpen] = useState(false);
+
+	if (!products) {
 		return <Loader size="lg" />;
 	}
 
+	const handleCheckout = (groupId) => {
+		setGroupId(groupId);
+        setModalOpen(true);
+	};
+
 	return (
-		<Page user={user}>
+		<Page>
 			<Hero
 				title="Английский — твой путь к успеху!"
 				description="Более 12 лет опыта. Более 5 000 историй успеха!"
+				image={<img className="image" src="/images/hero.png" alt="Команда мечты" />}
 			>
 				<div className="mt-xxl mb-xxl">
-					<Button color="yellow" onClick={scrollToProducts}>
+					<Button color="yellow" onClick={scrollToRequest}>
 						Записаться на пробное занятие
 					</Button>
 				</div>
@@ -89,12 +103,8 @@ export default function Home() {
 						</div>
 
 						<div className="dream-team__details">
-							<div className="dream-team__video">
-								<div className="video video--autoplay" data-video-autoplay="true">
-									<div className="video__media">
-										<video src="https://sayyes.school/wp-content/themes/sayyes/static/videos/teacher.mp4" prealod="metadata" muted="" autoplay="" className="video--playing"></video>
-									</div>
-								</div>
+							<div className="dream-team__image">
+								<img className="image" src="/images/teacher.jpg" alt="Преподаватель" />
 							</div>
 
 							<div className="dream-team__list">
@@ -164,21 +174,17 @@ export default function Home() {
 				</div>
 			</section>
 
-			<section className="practice section">
-				<div className="practice__container section__container">
+			<section className="manager section section--white section--horizontal">
+				<div className="section__container">
+					<div className="section__header">
+						<h2 className="section__title">Персональный менеджер, всегда готовый ответить на ваши вопросы</h2>
 
-					<div className="practice__header section__header">
-						<h2 className="practice__title section__title">Максимальная практика английского языка</h2>
+						<div className="section__description">Ваш успех — наша забота. Наши менеджеры всегда рядом, чтобы ответить на вопросы, поддержать и помочь вам учиться легко и с удовольствием. Мы создаём условия, в которых прогресс становится естественным.</div>
 					</div>
 
-					<div className="practice__content section__content">
-						<div className="text">
-							<p>С первого занятия 70% урока говорите вы.</p>
-							<p>Ведь чтобы научиться говорить на языке - нужно очень много практиковать.</p>
-						</div>
-
+					<div className="section__media">
 						<div className="picture">
-							<img className="image" src="https://sayyes.school/wp-content/themes/sayyes/static/images/pictures/practice.jpg" alt="Практика" />
+							<img className="image" src="/images/manager.jpg" alt="Менеджер" />
 						</div>
 					</div>
 				</div>
@@ -186,15 +192,17 @@ export default function Home() {
 
 			<Section
 				id="products"
-				title="Курсы"
+				title="Мы предлагаем курсы в различных форматах"
 				centered
 			>
 				<Products
 					products={products}
+					onCheckout={handleCheckout}
 				/>
 			</Section>
 
 			<Section
+				id="request"
 				title="Оставьте заявку на пробный урок"
 				description="Мы свяжемся с вами, запишем на урок, ответим на вопросы и расскажем о курсах"
 				centered
@@ -206,7 +214,15 @@ export default function Home() {
 				</div>
 			</Section>
 
-			<Footer />
+			<Modal
+				open={isModalOpen}
+				title="Оформление заказа"
+				onClose={() => setModalOpen(false)}
+			>
+				{products &&
+					<Checkout products={products} groupId={groupId} />
+				}
+			</Modal>
 		</Page>
 	);
 }

@@ -1,0 +1,19 @@
+.checkout {
+    .list-item {
+        .radio {
+            &__label {
+                display: flex;
+                justify-content: space-between;
+            }
+        }
+    }
+}
+
+.checkout-payment {
+    display: flex;
+    overflow: hidden;
+
+    .spinner {
+        margin: auto;
+    }
+}

@@ -6,7 +6,7 @@ export default function Modal({
     ...props
 }) {
     return (
-        <div className={`modal ${open ? 'modal--open' : ''}`} {...props}>
+        <div className={`modal${open ? ' modal--open' : ''}`} {...props}>
             <div className="modal__surface">
                 <button className="modal__close" onClick={onClose}>
                     <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">

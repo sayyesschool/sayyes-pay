@@ -7,9 +7,10 @@ import { useCheckout } from '../hooks/useCheckout';
 import ErrorState from './ErrorState';
 import Pack from './Pack';
 import Payment from './Payment';
-import Type from './Type';
 import SuccessState from './SuccessState';
 import Contact from './Contact';
+
+import './styles.scss';
 
 const View = {
     Type: 0,
@@ -35,33 +36,12 @@ export default function Checkout({ products, groupId }) {
     if (error)
         return <ErrorState error={error} />;
 
-    const packs = products;
+    const groupProducts = products.filter(product => product.group_id === groupId);
+    const packs = groupProducts;
+
 
     return (
-        <div className="flex-column gap-l">
-            <div className="flex align-center justify-between gap-s">
-                <div className="flex-column gap-xs">
-                    <h3 className="heading-5">{groupId}</h3>
-
-                    {view > View.Type &&
-                        <div className="flex align-center gap-xs">
-                            {view > View.Type && type &&
-                                <p className="text--body1">{type.description}</p>
-                            }
-
-                            {/* {view > View.Pack && pack && <>
-                                <span>·</span>
-                                <p className="text--body2">{pack.description}</p>
-                            </>} */}
-                        </div>
-                    }
-                </div>
-
-                {/* {view > View.Pack && (pack || amount) &&
-                    <p><span className="heading-5">{amount || pack.price}</span> руб.</p>
-                } */}
-            </div>
-
+        <div className="checkout flex-column gap-l">
             <Tabs color="violet" pills>
                 <Tab
                     content="Пакет"
