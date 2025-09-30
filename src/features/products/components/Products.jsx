@@ -1,10 +1,9 @@
-import data from './data';
+import ProductCard from './ProductCard';
 
-export default function Products({ products, onCheckout }) {
-    if (!products) return <p>Загрузка...</p>;
-
-    if (products.length === 0) return null;
-
+export default function Products({
+    products = [],
+    onCheckout
+}) {
     const groups = products.reduce((acc, product) => {
         if (!acc[product.group_id]) {
             acc[product.group_id] = product.name;
@@ -12,25 +11,18 @@ export default function Products({ products, onCheckout }) {
         return acc;
     }, {});
 
+    const ids = Object.keys(groups).sort((a, b) => a.localeCompare(b));
+
     return (
         <div className="products">
             <div className="grid grid-2-lg">
-                {Object.entries(groups).map(([groupId, groupName]) => (
-                    <div key={groupId} className="card card--sm flex-column" >
-                        <div className="card__media">
-                            <img className="image" src={data[groupId].image} alt="В школе в Москве " />
-                        </div>
-
-                        <div className="card__header">
-                            <h2 className="card__title">{groupName}</h2>
-
-                            <div className="card__description">{data[groupId].description}</div>
-                        </div>
-
-                        <div className="card__body">
-                            <button className="pay-btn btn btn--outlined" onClick={() => onCheckout(groupId)}>Выбрать и оплатить</button>
-                        </div>
-                    </div>
+                {ids.map(groupId => (
+                    <ProductCard
+                        key={groupId}
+                        groupId={groupId}
+                        groupName={groups[groupId]}
+                        onCheckout={onCheckout}
+                    />
                 ))}
             </div>
 

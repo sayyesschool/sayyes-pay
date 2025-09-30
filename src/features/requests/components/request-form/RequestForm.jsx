@@ -1,5 +1,4 @@
-import { Button, Input, Radio } from '@/ui';
-import Select from '@/ui/select';
+import { Button, Input, Select } from '@/ui';
 
 export default function RequestForm() {
     const submit = (e) => {
@@ -16,7 +15,7 @@ export default function RequestForm() {
             <div className="request-form__contact">
                 <Input name="name" type="text" placeholder="Имя*" required />
                 <Input name="phone" type="tel" placeholder="Телефон*" required />
-                <Input name="email" type="email" placeholder="Email*" required />
+                {/* <Input name="email" type="email" placeholder="Email*" required /> */}
 
                 <div className="request-form__communication">
                     <Select
@@ -24,10 +23,10 @@ export default function RequestForm() {
                         name="communication"
                         defaultValue="call"
                         options={[
-                            { value: 'call', label: 'Позвоните мне' },
-                            { value: 'whatsapp', label: 'Напишите мне на почту' },
+                            { value: 'whatsapp', label: 'Напишите мне в WhatsApp' },
+                            { value: 'whatsapp-call', label: 'Позвоните мне в WhatsApp' },
                             { value: 'telegram', label: 'Напишите мне в Telegram' },
-                            { value: 'email', label: 'Напишите мне на почту' }
+                            { value: 'telegram-call', label: 'Позвоните мне в Telegram' },
                         ]}
                         onChange={event => console.log('Select changed:', event.target.value)}
                     />

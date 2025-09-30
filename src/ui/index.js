@@ -5,6 +5,7 @@ export * from './input';
 export * from './item';
 export * from './modal';
 export * from './radio';
+export * from './select';
 export * from './tabs';
 export * from './tag';
 export * from './text';
