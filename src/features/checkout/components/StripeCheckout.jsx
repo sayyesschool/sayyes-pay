@@ -5,7 +5,7 @@ import {
     EmbeddedCheckout
 } from '@stripe/react-stripe-js';
 
-const stripePromise = loadStripe("pk_test_51S8C57BuEx9CSU7MxLqiYAgTOdZrgRsCGKV8VHmKsBrIp20NywWDm63CqrBLXp6Im1ZtYWFPSo0bLAczRttFZ9Hp009e9fLs1Y");
+const stripePromise = loadStripe("pk_live_51S27OEFuP3FP4gnKjgHZ6O4vHEVZJt99hXAqR6dMGw9WnEVc7ujkTwhpG8WiMbEjAWtHud1JttBdtqQcNK8SePTi00VjA1CDe1");
 
 export default function StripeCheckout({
     data,
