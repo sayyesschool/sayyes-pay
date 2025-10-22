@@ -17,7 +17,7 @@
     }
 }
 
-.section.manager {
+#manager {
     border-top-left-radius: 0;
     border-top-right-radius: 0;
     padding: 25px;
@@ -26,6 +26,11 @@
     .section__header {
         max-width: 750px;
     }
+}
+
+#request .card {
+    max-width: 600px;
+    margin: 0 auto;
 }
 
 .modal {

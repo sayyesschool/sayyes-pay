@@ -28,17 +28,20 @@ export default function Checkout({ products, groupId }) {
     });
     const [error, setError] = useState(null);
 
-    if (view === 4)
-        return <SuccessState />;
+    if (view === 4) return <SuccessState />;
 
-    if (error)
-        return <ErrorState error={error} />;
+    if (error) return <ErrorState error={error} />;
 
     const groupProducts = products.filter(product => product.group_id === groupId);
     const packs = groupProducts;
+    const groupName = groupProducts[0]?.name;
+
+    if (!groupProducts.length) return null;
 
     return (
         <div className="checkout flex-column gap-l">
+            {groupName && <h3 className="heading-5">{groupName}</h3>}
+
             <Tabs color="violet" pills>
                 <Tab
                     content="Пакет"

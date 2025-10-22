@@ -34,6 +34,16 @@ export default function Footer() {
                     <small>© {year} SAY&nbsp;YES!</small>
                     <small>Все права защищены</small>
                 </div>
+
+                <div className="footer__legal">
+                    <ul className="flex flex-wrap justify-center gap-s">
+                        <li className="list-item"><a className="link" href="/legal/widerrufsrecht">Widerrufsrecht <br /> <span className="text--muted text--small">Право на отзыв</span></a></li>
+                        <li className="list-item"><a className="link" href="/legal/haftungsausschluss">Haftungsausschluss <br /> <span className="text--muted text--small">Отказ от ответственности</span></a></li>
+                        <li className="list-item"><a className="link" href="/legal/datenschutzerklarung">Datenschutzerklärung <br /> <span className="text--muted text--small">Политика конфиденциальности</span></a></li>
+                        <li className="list-item"><a className="link" href="/legal/agb">AGB – Allgemeine Geschäftsbedingungen <br /> <span className="text--muted text--small">Общие условия оказания услуг</span></a></li>
+                        <li className="list-item"><a className="link" href="/legal/cookie-richtlinie">Cookie-Richtlinie <br /> <span className="text--muted text--small">Политика использования cookies услуг</span></a></li>
+                    </ul>
+                </div>
             </div>
         </footer>
     );

@@ -1,6 +1,7 @@
 import cn from 'classnames';
 
 export default function Section({
+    id,
     title,
     description,
     header,
@@ -13,6 +14,7 @@ export default function Section({
 }) {
     return (
         <section
+            id={id}
             className={cn("section", color && `section--${color}`, {
                 "section--centered": centered,
                 "section--padded": padded

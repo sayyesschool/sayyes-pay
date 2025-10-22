@@ -1,7 +1,7 @@
 "use client";
 
-import {useState} from 'react';
-
+import { useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 
 import Hero from '@/components/hero';
 import Loader from '@/components/loader';
@@ -11,7 +11,6 @@ import Section from '@/components/section';
 import { Checkout } from '@/features/checkout/client';
 import { Products, useProducts } from '@/features/products/client';
 import { RequestForm } from '@/features/requests/client';
-import { useUser } from '@/features/user/client';
 import useScrollTo from '@/hooks/useScrollTo';
 
 import { Button, Modal } from '@/ui';
@@ -20,12 +19,12 @@ import './styles.scss';
 
 export default function Home() {
 	const products = useProducts();
+	const searchParams = useSearchParams();
 	const scrollToRequest = useScrollTo('#request', {
 		block: 'center'
 	});
 
-	const [groupId, setGroupId] = useState();
-	const [isModalOpen, setModalOpen] = useState(false);
+	const [groupId, setGroupId] = useState(searchParams.get('id')?.toUpperCase());
 
 	if (!products) {
 		return <Loader size="lg" />;
@@ -33,7 +32,6 @@ export default function Home() {
 
 	const handleCheckout = (groupId) => {
 		setGroupId(groupId);
-        setModalOpen(true);
 	};
 
 	return (
@@ -172,7 +170,7 @@ export default function Home() {
 				</div>
 			</section>
 
-			<section className="manager section section--white section--horizontal">
+			<section id="manager" className="section section--white section--horizontal">
 				<div className="section__container">
 					<div className="section__header">
 						<h2 className="section__title">Персональный менеджер</h2>
@@ -209,7 +207,7 @@ export default function Home() {
 				description="Мы свяжемся с вами, запишем на урок, ответим на вопросы и расскажем о курсах"
 				centered
 			>
-				<div className="card card--yellow" style={{ maxWidth: 600, margin: '0 auto' }}>
+				<div className="card card--yellow">
 					<div className="card__body">
 						<RequestForm />
 					</div>
@@ -217,12 +215,15 @@ export default function Home() {
 			</Section>
 
 			<Modal
-				open={isModalOpen}
 				title="Оформление заказа"
-				onClose={() => setModalOpen(false)}
+				open={!!groupId}
+				onClose={() => setGroupId(undefined)}
 			>
 				{products &&
-					<Checkout products={products} groupId={groupId} />
+					<Checkout
+						products={products}
+						groupId={groupId}
+					/>
 				}
 			</Modal>
 		</Page>

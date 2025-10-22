@@ -1,0 +1,49 @@
+body {
+    padding-top: 65px !important;
+}
+
+.btn:not(.btn--full) {
+    width: auto !important;
+}
+
+.legal {
+    max-width: 1024px;
+    margin: auto;
+
+    section {
+        margin-top: 2rem;
+    }
+
+    h1, h2, h3 {
+        margin-top: 1rem;
+        margin-bottom: 1rem;
+        font-weight: 700;
+    }
+
+    h1 {
+        font-size: 42px;
+        line-height: 40px;
+    }
+
+    h2 {
+        font-size: 32px;
+        line-height: 30px;
+    }
+
+    p, li {
+        margin-top: 10px;
+        font-size: 18px;
+        line-height: 20px;
+        font-weight: 600;
+    }
+
+    ol, ul {
+        margin-top: 10px;
+        list-style: inside;
+    }
+
+    a {
+        color: var(--primary-color);
+        text-decoration: underline;
+    }
+}
