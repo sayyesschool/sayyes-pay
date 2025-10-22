@@ -26,7 +26,7 @@ export default function Contact({ contact, onChange, onNext }) {
             <Checkbox
                 id="consent"
                 checked={consent}
-                label="Я согласен/на на обработку персональных данных"
+                label={<small className="text text--small">Я согласен/на на обработку персональных данных в соответствии с <a className="link link--underlined" href="/legal/datenschutzerklarung">Политикой конфиденциальности</a>.</small>}
                 onChange={() => setConsent(v => !v)}
             />
 

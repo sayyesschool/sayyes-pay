@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from 'react';
-import { useSearchParams } from 'next/navigation';
 
 import Hero from '@/components/hero';
 import Loader from '@/components/loader';
@@ -16,14 +15,17 @@ import { Button, Modal } from '@/ui';
 
 import './styles.scss';
 
+const defaultGroupId = globalThis.location
+	? new URLSearchParams(globalThis.location.search).get('id')?.toUpperCase()
+	: undefined;
+
 export default function Home() {
 	const products = useProducts();
-	const searchParams = useSearchParams();
 	const scrollToRequest = useScrollTo('#request', {
 		block: 'center'
 	});
 
-	const [groupId, setGroupId] = useState(searchParams.get('id')?.toUpperCase());
+	const [groupId, setGroupId] = useState(defaultGroupId);
 
 	if (!products) {
 		return <Loader size="lg" />;

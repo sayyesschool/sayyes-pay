@@ -15,7 +15,6 @@ export default function RequestForm() {
             <div className="request-form__contact">
                 <Input name="name" type="text" placeholder="Имя*" required />
                 <Input name="phone" type="tel" placeholder="Телефон*" required />
-                {/* <Input name="email" type="email" placeholder="Email*" required /> */}
 
                 <div className="request-form__communication">
                     <Select
