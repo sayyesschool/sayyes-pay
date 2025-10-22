@@ -1,7 +1,5 @@
 "use client";
 
-import Link from 'next/link';
-
 import Page from '@/components/page';
 import Section from '@/components/section';
 

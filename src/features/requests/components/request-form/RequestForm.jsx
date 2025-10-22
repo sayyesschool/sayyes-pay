@@ -35,7 +35,7 @@ export default function RequestForm() {
                 <div className="request-form__submit">
                     <Button content="Записаться" type="submit" full />
 
-                    {/* <small className="text text--small">Нажимая «Записаться», я принимаю <a className="link link--underlined" href="https://sayyes.school/agreement">Пользовательское соглашение</a> и даю согласие на обработку своих персональных данных на условиях <a className="link link--underlined" href="https://sayyes.school/politika-konfidentsialnosti">Политики конфиденциальности</a>.</small> */}
+                    <small className="text text--small">Нажимая «Записаться», я даю согласие на обработку своих персональных данных в соответствии с <a className="link link--underlined" href="/legal/datenschutzerklarung">Политикой конфиденциальности</a>.</small>
                 </div>
             </div>
         </form>

@@ -18,7 +18,7 @@ export async function getProducts({ limit, active } = { limit: 50, active: true 
     const raw = res.data.filter((p) => !p.recurring && !!p.metadata.external_id);
     const items = await Promise.all(raw.map(mapItem));
 
-    return items;
+    return items.sort((a, b) => a.price - b.price);
 }
 
 async function mapItem(p) {
