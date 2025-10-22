@@ -45,7 +45,7 @@ export default function Home() {
 			>
 				<div className="mt-xxl mb-xxl">
 					<Button color="yellow" onClick={scrollToRequest}>
-						Записаться на пробное урок
+						Записаться на пробный урок
 					</Button>
 				</div>
 			</Hero>
