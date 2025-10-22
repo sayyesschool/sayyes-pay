@@ -12,7 +12,6 @@ import { Checkout } from '@/features/checkout/client';
 import { Products, useProducts } from '@/features/products/client';
 import { RequestForm } from '@/features/requests/client';
 import useScrollTo from '@/hooks/useScrollTo';
-
 import { Button, Modal } from '@/ui';
 
 import './styles.scss';
