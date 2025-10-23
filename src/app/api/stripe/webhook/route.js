@@ -11,7 +11,7 @@ export async function POST(request) {
     if (event.type === SESSION_COMPLETED_EVENT) {
       const purchaseData = await getCheckoutSessionDataForPurchase(event.data.object);
 
-      await fetch('https://api.sayyes.school/payment',{
+      await fetch('https://api.sayyes.school/payment', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
