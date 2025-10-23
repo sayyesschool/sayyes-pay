@@ -3,7 +3,6 @@
 import { useState } from 'react';
 
 import Hero from '@/components/hero';
-import Loader from '@/components/loader';
 import Page from '@/components/page';
 import Section from '@/components/section';
 
@@ -13,7 +12,7 @@ import { RequestForm } from '@/features/request';
 
 import useScrollTo from '@/hooks/useScrollTo';
 
-import { Button, Modal } from '@/ui';
+import { Button, Loader, Modal } from '@/ui';
 
 import './styles.scss';
 
