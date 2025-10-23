@@ -7,10 +7,12 @@ import Loader from '@/components/loader';
 import Page from '@/components/page';
 import Section from '@/components/section';
 
-import { Checkout } from '@/features/checkout/client';
-import { Products, useProducts } from '@/features/products/client';
-import { RequestForm } from '@/features/requests/client';
+import { Checkout } from '@/features/checkout';
+import { Products, useProducts } from '@/features/products';
+import { RequestForm } from '@/features/request';
+
 import useScrollTo from '@/hooks/useScrollTo';
+
 import { Button, Modal } from '@/ui';
 
 import './styles.scss';
@@ -26,6 +28,7 @@ export default function Home() {
 	});
 
 	const [groupId, setGroupId] = useState(defaultGroupId);
+	const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
 
 	if (!products) {
 		return <Loader size="lg" />;
@@ -210,7 +213,7 @@ export default function Home() {
 			>
 				<div className="card card--yellow">
 					<div className="card__body">
-						<RequestForm />
+						<RequestForm onSubmit={() => setIsRequestModalOpen(true)} />
 					</div>
 				</div>
 			</Section>
@@ -226,6 +229,15 @@ export default function Home() {
 						groupId={groupId}
 					/>
 				}
+			</Modal>
+
+			<Modal
+				title="Заявка принята"
+				open={isRequestModalOpen}
+				onClose={() => setIsRequestModalOpen(false)}
+			>
+				<p>Спасибо за вашу заявку!</p>
+				<p>Мы свяжемся с вами в ближайшее время.</p>
 			</Modal>
 		</Page>
 	);

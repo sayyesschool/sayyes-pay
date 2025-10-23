@@ -1,7 +1,8 @@
 export default function Modal({
     open,
     title,
-    children,
+    content,
+    children = content,
     onClose,
     ...props
 }) {

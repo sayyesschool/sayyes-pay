@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-import { createCheckoutSession } from '@/features/checkout/server';
+import { createCheckoutSession } from '@/services/stripe';
 
 export async function POST(request) {
   try {

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-import { captureOrder } from '@/lib/paypal';
+import { captureOrder } from '@/services/paypal';
 
 export async function POST(request) {
   try {

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-import { getProducts } from '@/features/products/server';
+import { getProducts } from '@/services/stripe';
 
 export async function GET() {
   try {

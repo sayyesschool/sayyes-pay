@@ -1,9 +1,8 @@
-import { getWebhookEvent } from '@/lib/stripe';
-
 import {
   SESSION_COMPLETED_EVENT,
+  getWebhookEvent,
   getCheckoutSessionDataForPurchase
-} from '@/features/checkout/server';
+} from '@/services/stripe';
 
 export async function POST(request) {
   try {
@@ -12,7 +11,27 @@ export async function POST(request) {
     if (event.type === SESSION_COMPLETED_EVENT) {
       const purchaseData = await getCheckoutSessionDataForPurchase(event.data.object);
 
-      // await createPurchase(purchaseData);
+      await fetch('https://api.sayyes.school/payment',{
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          uuid: purchaseData.externalId,
+          amount: purchaseData.amount,
+          currency: purchaseData.currency,
+          description: label,
+          status: 'succeeded',
+          operator: 'stripe',
+          purpose: 'Оплата обучения',
+          paid: true,
+          metadata: {
+            email: purchaseData.email,
+            sessionId: purchaseData.sessionId,
+            ...purchaseData.metadata
+          }
+        })
+      });
     }
 
     return new Response('ok', { status: 200 });
