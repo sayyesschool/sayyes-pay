@@ -5,7 +5,6 @@
   "scripts": {
     "build": "next build",
     "dev": "next dev",
-    "import": "node --env-file=./.env.local ./scripts/import-products.cjs",
     "start": "next start"
   },
   "dependencies": {

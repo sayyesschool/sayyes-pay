@@ -1,6 +1,8 @@
-// Импорт продуктов и цен в Stripe из CSV (one-off).
-// CSV-колонки: external_id;name;description;price;currency;active
-// Запуск (Test mode): export STRIPE_SECRET_KEY=sk_test_... && node scripts/import-products.cjs
+/**
+ * Импорт продуктов и цен в Stripe из CSV (one-off).
+ * CSV-колонки: external_id;name;description;price;currency;active
+ * Запуск (Test mode): node --env-file=./.env.local scripts/import-products.cjs
+ * */
 
 const Stripe = require("stripe");
 const fs = require("fs");
