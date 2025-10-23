@@ -1,6 +1,13 @@
 import Page from '@/components/page';
 
-export default function MdLayout({ children }) {
+export const metadata = {
+  robots: {
+    index: false,
+    follow: false
+  }
+};
+
+export default function LegalLayout({ children }) {
   return (
     <Page>
         <article className="legal">
