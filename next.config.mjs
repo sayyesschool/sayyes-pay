@@ -6,5 +6,13 @@ const withMDX = createMDX({
 
 export default withMDX({
     pageExtensions: ['js', 'jsx', 'md', 'mdx', 'ts', 'tsx'],
-    reactStrictMode: true
+    reactStrictMode: true,
+        async rewrites() {
+                    return [
+                        {
+                                            source: '/learn_easy',
+                                            destination: '/learn_easy.html'
+                        }
+                                ];
+        }
 });
