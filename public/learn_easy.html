@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>SAY YES! — Quiz Funnel v3</title>
+<title>SAY YES! — Подбор программы</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -12,9 +12,9 @@
   --dark:#1a1a1a;--gray:#666;--light-gray:#f7f7f7;--border:#eee;--white:#fff;
   --tg-blue:#0088cc;--success:#10b981;--gold:#F59E0B;
 }
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#e8e0f0;display:flex;justify-content:center;align-items:flex-start;min-height:100vh;padding:20px}
-.phone{width:390px;background:var(--white);border-radius:40px;box-shadow:0 20px 60px rgba(91,45,142,0.2);overflow:hidden;position:relative;border:8px solid #1a1a1a}
-.screen{display:none;flex-direction:column;min-height:764px;animation:fadeIn .35s ease}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--white);min-height:100vh}
+.phone{max-width:480px;margin:0 auto;background:var(--white);overflow:hidden;position:relative}
+.screen{display:none;flex-direction:column;min-height:100dvh;animation:fadeIn .35s ease}
 .screen.active{display:flex}
 @keyframes fadeIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
 @keyframes slideUp{from{opacity:0;transform:translateY(30px)}to{opacity:1;transform:translateY(0)}}
@@ -96,9 +96,6 @@ h2{font-size:21px;font-weight:700;color:var(--dark);line-height:1.3;margin-botto
 .logo{display:flex;align-items:center;gap:6px;padding:16px 20px 8px}
 .logo-text{font-size:15px;font-weight:800;color:var(--purple);letter-spacing:.5px}
 
-/* Proto label */
-.proto{position:fixed;top:10px;left:10px;background:var(--purple-dark);color:#fff;font-size:10px;padding:5px 10px;border-radius:6px;opacity:.7;z-index:999}
-
 /* Time grid */
 .tgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
 .tslot{padding:14px 10px;border:2px solid var(--border);border-radius:12px;text-align:center;cursor:pointer;transition:all .2s}
@@ -116,10 +113,16 @@ h2{font-size:21px;font-weight:700;color:var(--dark);line-height:1.3;margin-botto
 
 /* Note */
 .note{font-size:12px;color:var(--purple-mid);line-height:1.5;margin-top:12px;display:flex;align-items:flex-start;gap:6px}
+.tslot.booked{opacity:.35;pointer-events:none;border-color:var(--border)}
+.tslot.booked .time::after{content:" ✕";color:var(--gray);font-size:12px}
+#slotsGrid .tslot .tz-note{font-size:10px;color:var(--gray);margin-top:2px}
+.spinner{display:inline-block;width:20px;height:20px;border:3px solid var(--border);border-top-color:var(--purple);border-radius:50%;animation:spin .6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.submit-status{text-align:center;padding:16px;font-size:14px;color:var(--gray)}
 </style>
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
 </head>
 <body>
-<div class="proto">SAY YES! Quiz Funnel v3 — Prototype</div>
 <div class="phone">
 
 <!-- ======= S1: WELCOME ======= -->
@@ -353,21 +356,12 @@ h2{font-size:21px;font-weight:700;color:var(--dark);line-height:1.3;margin-botto
   <div class="nav"><button class="back-btn" onclick="go(12)">← Назад</button></div>
   <div class="content">
     <h2>Выберите удобное время</h2>
-    <p class="sub">Пробный урок · 30 мин · Zoom</p>
+    <p class="sub">Консультация · 30 мин · Zoom</p>
 
-    <div class="tgrid">
-      <div class="tslot" onclick="slot(this)"><div class="day">Ср, 21 мая</div><div class="time">10:00</div></div>
-      <div class="tslot" onclick="slot(this)"><div class="day">Ср, 21 мая</div><div class="time">14:00</div></div>
-      <div class="tslot" onclick="slot(this)"><div class="day">Чт, 22 мая</div><div class="time">11:00</div></div>
-      <div class="tslot" onclick="slot(this)"><div class="day">Чт, 22 мая</div><div class="time">18:00</div></div>
-      <div class="tslot" onclick="slot(this)"><div class="day">Пт, 23 мая</div><div class="time">10:00</div></div>
-      <div class="tslot" onclick="slot(this)"><div class="day">Пт, 23 мая</div><div class="time">16:00</div></div>
-      <div class="tslot" onclick="slot(this)"><div class="day">Сб, 24 мая</div><div class="time">11:00</div></div>
-      <div class="tslot" onclick="slot(this)"><div class="day">Сб, 24 мая</div><div class="time">15:00</div></div>
-      <div class="tslot" onclick="document.getElementById('cDate').textContent='Заявка отправлена!';go(14)" style="grid-column:1/-1;border-style:dashed;color:var(--gray)"><div class="time" style="font-size:14px;font-weight:500;color:var(--gray)">🕐 Нет удобного времени? Просто оставьте заявку и мы подберём время позже</div></div>
-    </div>
+    <div id="slotsLoading" style="text-align:center;padding:30px 0;color:var(--gray)">Загрузка доступных слотов...</div>
+    <div class="tgrid" id="slotsGrid" style="display:none"></div>
 
-    <button class="cta disabled" id="slotCta" onclick="go(14)">Записаться на это время</button>
+    <button class="cta disabled" id="slotCta" onclick="submitBooking()">Записаться на это время</button>
   </div>
 </div>
 
@@ -377,7 +371,7 @@ h2{font-size:21px;font-weight:700;color:var(--dark);line-height:1.3;margin-botto
     <div class="confirm-box">
       <div class="icon">💜</div>
       <div class="big" id="cDate">Вы записаны!</div>
-      <div class="small">Пробный урок · 30 мин · Zoom</div>
+      <div class="small">Консультация · 30 мин · Zoom</div>
     </div>
 
     <p style="font-size:14px;color:var(--dark);line-height:1.6;margin-bottom:20px;text-align:center">Мы свяжемся с вами в ближайшее время и поможем подобрать комфортный формат обучения под ваши цели и график.</p>
@@ -395,28 +389,251 @@ h2{font-size:21px;font-weight:700;color:var(--dark);line-height:1.3;margin-botto
 </div><!-- /phone -->
 
 <script>
+// ===== Navigation =====
 function go(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById('s' + id).classList.add('active');
+  if (id == 13) loadSlots();
 }
 
 function pick(el, next) {
   el.classList.add('selected');
-  setTimeout(() => {
-    go(next);
-    el.classList.remove('selected');
-  }, 280);
+  setTimeout(() => { go(next); el.classList.remove('selected'); }, 280);
 }
 
-function slot(el) {
+// ===== Booking Widget =====
+let selectedSlot = null;
+let bookedSlots = [];
+const MSK_OFFSET = 3; // Moscow is UTC+3
+const DAYS_RU = ['Вс','Пн','Вт','Ср','Чт','Пт','Сб'];
+const MONTHS_RU = ['янв','фев','мар','апр','мая','июн','июл','авг','сен','окт','ноя','дек'];
+
+function getNextWeekdays(count) {
+  const days = [];
+  const now = new Date();
+  let d = new Date(now);
+  d.setDate(d.getDate() + 1); // start from tomorrow
+  while (days.length < count) {
+    const dow = d.getDay();
+    if (dow >= 1 && dow <= 5) { // Mon-Fri
+      days.push(new Date(d));
+    }
+    d.setDate(d.getDate() + 1);
+  }
+  return days;
+}
+
+// Deterministic pseudo-random based on date string
+function seededRandom(seed) {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) {
+    h = ((h << 5) - h + seed.charCodeAt(i)) | 0;
+  }
+  return function() {
+    h = (h * 16807 + 0) % 2147483647;
+    return (h & 0x7fffffff) / 2147483647;
+  };
+}
+
+function generateSlots(date, count) {
+  // All possible 30-min slots from 10:00 to 19:30 Moscow time (20 slots)
+  const allSlots = [];
+  for (let h = 10; h < 20; h++) {
+    allSlots.push(h * 60);       // :00
+    allSlots.push(h * 60 + 30);  // :30
+  }
+  // Seed based on date
+  const dateStr = date.toISOString().slice(0, 10);
+  const rng = seededRandom(dateStr + 'sayyes');
+  // Shuffle and pick
+  for (let i = allSlots.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [allSlots[i], allSlots[j]] = [allSlots[j], allSlots[i]];
+  }
+  return allSlots.slice(0, count).sort((a, b) => a - b);
+}
+
+function mskMinutesToLocal(mskMinutes, date) {
+  // Create a Date in Moscow time for this slot
+  const year = date.getFullYear();
+  const month = date.getMonth();
+  const day = date.getDate();
+  const hours = Math.floor(mskMinutes / 60);
+  const mins = mskMinutes % 60;
+  // Create UTC date from Moscow time
+  const utcDate = new Date(Date.UTC(year, month, day, hours - MSK_OFFSET, mins));
+  return utcDate;
+}
+
+function formatTime(date) {
+  return date.getHours().toString().padStart(2, '0') + ':' + date.getMinutes().toString().padStart(2, '0');
+}
+
+function formatMskTime(minutes) {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return h.toString().padStart(2, '0') + ':' + m.toString().padStart(2, '0');
+}
+
+async function loadSlots() {
+  const grid = document.getElementById('slotsGrid');
+  const loading = document.getElementById('slotsLoading');
+  grid.style.display = 'none';
+  loading.style.display = 'block';
+  grid.innerHTML = '';
+  selectedSlot = null;
+  document.getElementById('slotCta').classList.add('disabled');
+
+  // Fetch booked slots
+  try {
+    const resp = await fetch('/api/slots');
+    if (resp.ok) {
+      const data = await resp.json();
+      bookedSlots = data.booked || [];
+    }
+  } catch(e) { bookedSlots = []; }
+
+  const days = getNextWeekdays(5);
+  const userTZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const isMsk = userTZ === 'Europe/Moscow';
+
+  days.forEach(date => {
+    const slots = generateSlots(date, 7);
+    slots.forEach(mskMin => {
+      const localDate = mskMinutesToLocal(mskMin, date);
+      const dateKey = date.toISOString().slice(0, 10) + '_' + formatMskTime(mskMin);
+      const isBooked = bookedSlots.includes(dateKey);
+
+      const el = document.createElement('div');
+      el.className = 'tslot' + (isBooked ? ' booked' : '');
+      el.dataset.key = dateKey;
+      el.dataset.msk = formatMskTime(mskMin);
+      el.dataset.date = date.toISOString().slice(0, 10);
+
+      const dayLabel = DAYS_RU[date.getDay()] + ', ' + date.getDate() + ' ' + MONTHS_RU[date.getMonth()];
+      const localTime = formatTime(localDate);
+      const mskTime = formatMskTime(mskMin);
+
+      let timeLabel = localTime;
+      let tzNote = '';
+      if (!isMsk) {
+        tzNote = '<div class="tz-note">(' + mskTime + ' МСК)</div>';
+      }
+
+      el.innerHTML = '<div class="day">' + dayLabel + '</div><div class="time">' + timeLabel + '</div>' + tzNote;
+
+      if (!isBooked) {
+        el.onclick = function() { selectSlot(this); };
+      }
+      grid.appendChild(el);
+    });
+  });
+
+  // "No convenient time" option
+  const noTimeEl = document.createElement('div');
+  noTimeEl.className = 'tslot';
+  noTimeEl.style.cssText = 'grid-column:1/-1;border-style:dashed;color:var(--gray)';
+  noTimeEl.innerHTML = '<div class="time" style="font-size:14px;font-weight:500;color:var(--gray)">🕐 Нет удобного времени? Просто оставьте заявку и мы подберём время позже</div>';
+  noTimeEl.onclick = function() {
+    selectedSlot = { key: 'no_time', msk: '', date: '' };
+    document.querySelectorAll('.tslot').forEach(s => s.classList.remove('sel'));
+    this.classList.add('sel');
+    document.getElementById('slotCta').classList.remove('disabled');
+    document.getElementById('slotCta').textContent = 'Отправить заявку';
+  };
+  grid.appendChild(noTimeEl);
+
+  loading.style.display = 'none';
+  grid.style.display = 'grid';
+}
+
+function selectSlot(el) {
   document.querySelectorAll('.tslot').forEach(s => s.classList.remove('sel'));
   el.classList.add('sel');
+  selectedSlot = {
+    key: el.dataset.key,
+    msk: el.dataset.msk,
+    date: el.dataset.date
+  };
   document.getElementById('slotCta').classList.remove('disabled');
   const day = el.querySelector('.day').textContent;
   const time = el.querySelector('.time').textContent;
-  document.getElementById('cDate').textContent = day + ' в ' + time;
+  document.getElementById('slotCta').textContent = 'Записаться: ' + day + ', ' + time;
+}
+
+// ===== Form Submission =====
+async function submitBooking() {
+  if (!selectedSlot) return;
+
+  const name = document.getElementById('uName').value.trim();
+  const tg = document.getElementById('uTg').value.trim();
+  const email = document.getElementById('uEmail').value.trim();
+
+  if (!name) { alert('Пожалуйста, укажите ваше имя'); go(12); return; }
+  if (!tg && !email) { alert('Пожалуйста, укажите Telegram или Email'); go(12); return; }
+
+  const btn = document.getElementById('slotCta');
+  btn.textContent = 'Отправка...';
+  btn.classList.add('disabled');
+
+  // Get Turnstile token
+  let turnstileToken = '';
+  try {
+    turnstileToken = await new Promise((resolve, reject) => {
+      if (typeof turnstile !== 'undefined') {
+        turnstile.render('#turnstile-container', {
+          sitekey: window.TURNSTILE_SITE_KEY || '1x00000000000000000000AA',
+          callback: resolve,
+          'error-callback': () => resolve(''),
+          'expired-callback': () => resolve(''),
+          size: 'invisible'
+        });
+      } else {
+        resolve('');
+      }
+    });
+  } catch(e) { turnstileToken = ''; }
+
+  try {
+    const resp = await fetch('/api/book', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name, telegram: tg, email,
+        slot: selectedSlot.key,
+        slotMsk: selectedSlot.msk,
+        slotDate: selectedSlot.date,
+        turnstileToken
+      })
+    });
+
+    if (resp.ok) {
+      if (selectedSlot.key === 'no_time') {
+        document.getElementById('cDate').textContent = 'Заявка отправлена!';
+      } else {
+        const dayEl = document.querySelector('.tslot.sel .day');
+        const timeEl = document.querySelector('.tslot.sel .time');
+        if (dayEl && timeEl) {
+          document.getElementById('cDate').textContent = dayEl.textContent + ' в ' + timeEl.textContent;
+        } else {
+          document.getElementById('cDate').textContent = 'Вы записаны!';
+        }
+      }
+      go(14);
+    } else {
+      const data = await resp.json().catch(() => ({}));
+      alert(data.error || 'Произошла ошибка. Попробуйте ещё раз.');
+      btn.textContent = 'Записаться на это время';
+      btn.classList.remove('disabled');
+    }
+  } catch(e) {
+    alert('Ошибка подключения. Попробуйте ещё раз.');
+    btn.textContent = 'Записаться на это время';
+    btn.classList.remove('disabled');
+  }
 }
 </script>
+<div id="turnstile-container"></div>
 
 </body>
 </html>
