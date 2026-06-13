@@ -386,6 +386,11 @@ export async function POST(request) {
       const chatId = chat.id;
       const username = from?.username;
 
+      // Save usernameâchatId mapping for daily summaries
+      if (username) {
+        await kvSet(`user_chat:${username.toLowerCase()}`, String(chatId));
+      }
+
       // Command: /start
       if (text?.startsWith('/start')) {
         const args = text.split(' ')[1]; // deep link parameter
