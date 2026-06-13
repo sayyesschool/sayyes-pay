@@ -89,11 +89,11 @@ export function bookingActionsKeyboard(bookingId) {
     reply_markup: {
       inline_keyboard: [
         [
-          { text: 'ÐÐµÑÐµÐ½ÐµÑÑÐ¸ Ð·Ð°Ð¿Ð¸ÑÑ', callback_data: `reschedule:${bookingId}` },
-          { text: 'ÐÑÐ¼ÐµÐ½Ð¸ÑÑ Ð·Ð°Ð¿Ð¸ÑÑ', callback_data: `cancel:${bookingId}` }
+          { text: 'Перенести запись', callback_data: `reschedule:${bookingId}` },
+          { text: 'Отменить запись', callback_data: `cancel:${bookingId}` }
         ],
         [
-          { text: 'Ð¡Ð²ÑÐ·Ð°ÑÑÑÑ Ñ Ð¼ÐµÐ½ÐµÐ´Ð¶ÐµÑÐ¾Ð¼', callback_data: `contact:${bookingId}` }
+          { text: 'Связаться с менеджером', callback_data: `contact:${bookingId}` }
         ]
       ]
     }
@@ -105,8 +105,8 @@ export function confirmCancelKeyboard(bookingId) {
     reply_markup: {
       inline_keyboard: [
         [
-          { text: 'ÐÐ°, Ð¾ÑÐ¼ÐµÐ½Ð¸ÑÑ', callback_data: `confirm_cancel:${bookingId}` },
-          { text: 'ÐÐµÑ, Ð¾ÑÑÐ°Ð²Ð¸ÑÑ', callback_data: `keep:${bookingId}` }
+          { text: 'Да, отменить', callback_data: `confirm_cancel:${bookingId}` },
+          { text: 'Нет, оставить', callback_data: `keep:${bookingId}` }
         ]
       ]
     }
@@ -114,7 +114,7 @@ export function confirmCancelKeyboard(bookingId) {
 }
 
 export function slotsKeyboard(slots, bookingId) {
-  // slots: array of { key: "2026-06-15_11:00", label: "ÐÐ½, 15 Ð¸ÑÐ½ 11:00 (ÐÐ¡Ð)" }
+  // slots: array of { key: "2026-06-15_11:00", label: "Пн, 15 июн 11:00 (МСК)" }
   const rows = [];
   for (let i = 0; i < slots.length; i += 2) {
     const row = [{ text: slots[i].label, callback_data: `newslot:${bookingId}:${slots[i].key}` }];
@@ -123,7 +123,7 @@ export function slotsKeyboard(slots, bookingId) {
     }
     rows.push(row);
   }
-  rows.push([{ text: 'ÐÑÐ¼ÐµÐ½Ð°', callback_data: `keep:${bookingId}` }]);
+  rows.push([{ text: 'Отмена', callback_data: `keep:${bookingId}` }]);
   return { reply_markup: { inline_keyboard: rows } };
 }
 
@@ -131,38 +131,47 @@ export function slotsKeyboard(slots, bookingId) {
 
 export function formatBookingConfirmation(booking) {
   const timeInfo = booking.slot === 'no_time'
-    ? 'ÐÑÐµÐ¼Ñ: Ð¿Ð¾Ð´Ð±ÐµÑÑÐ¼ Ð¿Ð¾Ð·Ð¶Ðµ'
-    : `ÐÐ°ÑÐ°: ${booking.slotDate}\nÐÑÐµÐ¼Ñ (ÐÐ¡Ð): ${booking.slotMsk}`;
+    ? 'Время: подберём позже'
+    : `Дата: ${booking.slotDate}\nВремя (МСК): ${booking.slotMsk}`;
 
-  return `ÐÐ°ÑÐ° Ð·Ð°Ð¿Ð¸ÑÑ Ð¿Ð¾Ð´ÑÐ²ÐµÑÐ¶Ð´ÐµÐ½Ð°!\n\n` +
+  return `Ваша запись подтверждена!\n\n` +
     `${timeInfo}\n` +
-    `Ð¤Ð¾ÑÐ¼Ð°Ñ: ÐÐ¾Ð½ÑÑÐ»ÑÑÐ°ÑÐ¸Ñ Â· 30 Ð¼Ð¸Ð½ Â· Zoom\n\n` +
-    `ÐÑ ÑÐ²ÑÐ¶ÐµÐ¼ÑÑ Ñ Ð²Ð°Ð¼Ð¸ Ð² Ð±Ð»Ð¸Ð¶Ð°Ð¹ÑÐµÐµ Ð²ÑÐµÐ¼Ñ!`;
+    `Формат: Консультация · 30 мин · Zoom\n\n` +
+    `Мы свяжемся с вами в ближайшее время!`;
 }
 
 export function formatBookingForManager(booking, action = 'new') {
   const timeInfo = booking.slot === 'no_time'
-    ? 'ÐÑÐµÐ¼Ñ: Ð½Ðµ Ð²ÑÐ±ÑÐ°Ð½Ð¾'
-    : `ÐÐ°ÑÐ°: ${booking.slotDate}\nÐÑÐµÐ¼Ñ (ÐÐ¡Ð): ${booking.slotMsk}`;
+    ? 'Время: не выбрано'
+    : `Дата: ${booking.slotDate}\nВремя (МСК): ${booking.slotMsk}`;
 
-  const icons = { new: 'ÐÐ¾Ð²Ð°Ñ Ð·Ð°ÑÐ²ÐºÐ°', cancel: 'ÐÑÐ¼ÐµÐ½Ð° Ð·Ð°Ð¿Ð¸ÑÐ¸', reschedule: 'ÐÐµÑÐµÐ½Ð¾Ñ Ð·Ð°Ð¿Ð¸ÑÐ¸' };
-  const emoji = { new: 'ð', cancel: 'â', reschedule: 'ð' };
+  const icons = { new: 'Новая заявка', cancel: 'Отмена записи', reschedule: 'Перенос записи' };
+  const emoji = { new: '📝', cancel: '❌', reschedule: '🔄' };
+
+  let answersText = '';
+  if (booking.quizAnswers && Object.keys(booking.quizAnswers).length > 0) {
+    answersText = '\n\n📋 <b>Ответы на вопросы:</b>\n' +
+      Object.entries(booking.quizAnswers)
+        .map(([q, a]) => `• ${q}: ${a}`)
+        .join('\n');
+  }
 
   return `${emoji[action]} ${icons[action]} SAY YES!\n\n` +
-    `ÐÐ¼Ñ: ${booking.name}\n` +
-    `Telegram: ${booking.telegram || 'â'}\n` +
-    `Email: ${booking.email || 'â'}\n` +
-    `${timeInfo}\n\n` +
+    `Имя: ${booking.name}\n` +
+    `Telegram: ${booking.telegram || '—'}\n` +
+    `Email: ${booking.email || '—'}\n` +
+    `${timeInfo}` +
+    `${answersText}\n\n` +
     `ID: ${booking.id}`;
 }
 
 export function formatReminder(booking, hoursLeft) {
-  const timeLabel = hoursLeft === 24 ? 'Ð·Ð°Ð²ÑÑÐ°' : 'ÑÐµÑÐµÐ· 1 ÑÐ°Ñ';
-  return `ÐÐ°Ð¿Ð¾Ð¼Ð¸Ð½Ð°Ð½Ð¸Ðµ: Ð²Ð°ÑÐ° ÐºÐ¾Ð½ÑÑÐ»ÑÑÐ°ÑÐ¸Ñ ${timeLabel}!\n\n` +
-    `ÐÐ°ÑÐ°: ${booking.slotDate}\n` +
-    `ÐÑÐµÐ¼Ñ (ÐÐ¡Ð): ${booking.slotMsk}\n` +
-    `Ð¤Ð¾ÑÐ¼Ð°Ñ: Zoom Â· 30 Ð¼Ð¸Ð½\n\n` +
-    `ÐÑÐ»Ð¸ Ð½ÑÐ¶Ð½Ð¾ Ð¿ÐµÑÐµÐ½ÐµÑÑÐ¸ Ð¸Ð»Ð¸ Ð¾ÑÐ¼ÐµÐ½Ð¸ÑÑ, Ð½Ð°Ð¶Ð¼Ð¸ÑÐµ ÐºÐ½Ð¾Ð¿ÐºÑ Ð½Ð¸Ð¶Ðµ.`;
+  const timeLabel = hoursLeft === 24 ? 'завтра' : 'через 1 час';
+  return `Напоминание: ваша консультация ${timeLabel}!\n\n` +
+    `Дата: ${booking.slotDate}\n` +
+    `Время (МСК): ${booking.slotMsk}\n` +
+    `Формат: Zoom · 30 мин\n\n` +
+    `Если нужно перенести или отменить, нажмите кнопку ниже.`;
 }
 
 // --- Deep link ---
