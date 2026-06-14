@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
 import {
   getBookedSlots, addBookedSlot,
-  createBooking, setPendingBooking
+  createBooking, setPendingBooking,
+    getManagerChatId
 } from '@/lib/redis';
-import { makeDeepLink, sendMessage, getManagerChatId, formatBookingForManager } from '@/lib/telegram';
+import { makeDeepLink, sendMessage, formatBookingForManager } from '@/lib/telegram';
 
 // Generate short unique booking ID
 function generateBookingId() {
