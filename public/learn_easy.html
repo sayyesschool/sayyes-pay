@@ -902,7 +902,7 @@ async function loadSlots() {
     // Day header
     const header = document.createElement('div');
     header.className = 'day-header';
-    header.innerHTML = '<div class="day-name">' + DAYS_FULL[date.getDay()].slice(0,2) + '</div><div class="day-date">' + date.getDate() + ' ' + MONTHS_RU[date.getMonth()] + '</div>';
+    header.innerHTML = '<div class="day-name">' + DAYS_RU[date.getDay()] + '</div><div class="day-date">' + date.getDate() + ' ' + MONTHS_RU[date.getMonth()] + '</div>';
     col.appendChild(header);
 
     const slots = generateSlots(date, 7);
@@ -1005,22 +1005,23 @@ async function submitBooking() {
   btn.textContent = 'Отправка...';
   btn.classList.add('disabled');
 
-  // Get Turnstile token
+  // Get Turnstile token (only if real sitekey is configured)
   let turnstileToken = '';
   try {
-    turnstileToken = await new Promise((resolve, reject) => {
-      if (typeof turnstile !== 'undefined') {
+    if (typeof turnstile !== 'undefined' && window.TURNSTILE_SITE_KEY) {
+      turnstileToken = await new Promise((resolve) => {
+        const container = document.getElementById('turnstile-container');
+        container.innerHTML = '';
         turnstile.render('#turnstile-container', {
-          sitekey: window.TURNSTILE_SITE_KEY || '1x00000000000000000000AA',
+          sitekey: window.TURNSTILE_SITE_KEY,
           callback: resolve,
           'error-callback': () => resolve(''),
           'expired-callback': () => resolve(''),
           size: 'invisible'
         });
-      } else {
-        resolve('');
-      }
-    });
+        setTimeout(() => resolve(''), 8000); // fallback timeout
+      });
+    }
   } catch(e) { turnstileToken = ''; }
 
   try {
