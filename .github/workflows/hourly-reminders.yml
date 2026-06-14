@@ -1,0 +1,21 @@
+name: Hourly Reminders
+
+on:
+  schedule:
+    - cron: '0 * * * *'
+  workflow_dispatch:
+
+jobs:
+  send-reminders:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call reminders endpoint
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            https://www.sayyestoenglish.com/api/cron/reminders)
+          echo "Response status: $STATUS"
+          if [ "$STATUS" != "200" ]; then
+            echo "ERROR: endpoint returned $STATUS"
+            exit 1
+          fi
