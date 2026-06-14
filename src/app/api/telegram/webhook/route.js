@@ -49,8 +49,8 @@ function generateAvailableSlots(bookedSlots) {
       if (slotDate - now < 2 * 60 * 60 * 1000) continue;
 
       // Format label
-      const dayNames = ['ÐÑ', 'ÐÐ½', 'ÐÑ', 'Ð¡Ñ', 'Ð§Ñ', 'ÐÑ', 'Ð¡Ð±'];
-      const monthNames = ['ÑÐ½Ð²', 'ÑÐµÐ²', 'Ð¼Ð°Ñ', 'Ð°Ð¿Ñ', 'Ð¼Ð°Ð¹', 'Ð¸ÑÐ½', 'Ð¸ÑÐ»', 'Ð°Ð²Ð³', 'ÑÐµÐ½', 'Ð¾ÐºÑ', 'Ð½Ð¾Ñ', 'Ð´ÐµÐº'];
+      const dayNames = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+      const monthNames = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
       const dayName = dayNames[date.getDay()];
       const monthName = monthNames[date.getMonth()];
       const label = `${dayName}, ${date.getDate()} ${monthName} ${time}`;
@@ -68,10 +68,10 @@ async function handleStart(chatId, username, args) {
   if (isManager(username)) {
     await setManagerChatId(chatId);
     await sendMessage(chatId,
-      'ÐÑ Ð·Ð°ÑÐµÐ³Ð¸ÑÑÑÐ¸ÑÐ¾Ð²Ð°Ð½Ñ ÐºÐ°Ðº Ð¼ÐµÐ½ÐµÐ´Ð¶ÐµÑ SAY YES!\n\n' +
-      'ÐÑ Ð±ÑÐ´ÐµÑÐµ Ð¿Ð¾Ð»ÑÑÐ°ÑÑ ÑÐ²ÐµÐ´Ð¾Ð¼Ð»ÐµÐ½Ð¸Ñ Ð¾ Ð½Ð¾Ð²ÑÑ Ð·Ð°ÑÐ²ÐºÐ°Ñ, Ð¾ÑÐ¼ÐµÐ½Ð°Ñ Ð¸ Ð¿ÐµÑÐµÐ½Ð¾ÑÐ°Ñ.\n\n' +
-      'ÐÐ¾Ð³Ð´Ð° ÑÑÐµÐ½Ð¸Ðº Ð½Ð°Ð¿Ð¸ÑÐµÑ ÑÐµÑÐµÐ· Ð±Ð¾ÑÐ°, ÐµÐ³Ð¾ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ñ Ð±ÑÐ´ÑÑ Ð¿ÐµÑÐµÑÑÐ»Ð°ÑÑÑÑ Ð²Ð°Ð¼ ÑÑÐ´Ð°. ' +
-      'ÐÑÐ²ÐµÑÑÑÐµ Ð½Ð° Ð¿ÐµÑÐµÑÐ»Ð°Ð½Ð½Ð¾Ðµ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ðµ, Ð¸ Ð²Ð°Ñ Ð¾ÑÐ²ÐµÑ Ð±ÑÐ´ÐµÑ Ð¾ÑÐ¿ÑÐ°Ð²Ð»ÐµÐ½ ÑÑÐµÐ½Ð¸ÐºÑ.'
+      'Вы зарегистрированы как менеджер SAY YES!\n\n' +
+      'Вы будете получать уведомления о новыф заявках, отменах и переносах.\n\n' +
+      'Когда ученик напишет через бота, его сообщения будут пересылаться вам сюда. ' +
+      'Ответьте на пересланное сообщение, и ваш ответ будет отправлен ученику.'
     );
     return;
   }
@@ -103,9 +103,9 @@ async function handleStart(chatId, username, args) {
 
     // Booking not found - maybe expired
     await sendMessage(chatId,
-      'ÐÐ¾Ð±ÑÐ¾ Ð¿Ð¾Ð¶Ð°Ð»Ð¾Ð²Ð°ÑÑ Ð² SAY YES! English School!\n\n' +
-      'Ð ÑÐ¾Ð¶Ð°Ð»ÐµÐ½Ð¸Ñ, ÑÑÐ° ÑÑÑÐ»ÐºÐ° ÑÑÑÐ°ÑÐµÐ»Ð°. ÐÐ¾Ð¶Ð°Ð»ÑÐ¹ÑÑÐ°, Ð·Ð°Ð¿Ð¸ÑÐ¸ÑÐµÑÑ Ð·Ð°Ð½Ð¾Ð²Ð¾ Ð½Ð° Ð½Ð°ÑÐµÐ¼ ÑÐ°Ð¹ÑÐµ.\n\n' +
-      'ÐÑÐ»Ð¸ Ñ Ð²Ð°Ñ ÐµÑÑÑ Ð°ÐºÑÐ¸Ð²Ð½Ð°Ñ Ð·Ð°Ð¿Ð¸ÑÑ, Ð¾Ð½Ð° Ð¿Ð¾ÑÐ²Ð¸ÑÑÑ Ð·Ð´ÐµÑÑ Ð°Ð²ÑÐ¾Ð¼Ð°ÑÐ¸ÑÐµÑÐºÐ¸.'
+      'Добро пожаловать в SAY YES! English School!\n\n' +
+      'К сожалению, эта ссылка устарела. Пожалуйста, запишитесь заново на нашем сайте.\n\n' +
+      'Если у вас есть активная запись, она появитсь здесь автоматически.'
     );
     return;
   }
@@ -116,11 +116,11 @@ async function handleStart(chatId, username, args) {
     const booking = await getBooking(existingBookingId);
     if (booking && booking.status === 'confirmed') {
       await sendMessage(chatId,
-        `ÐÐ¾Ð±ÑÐ¾ Ð¿Ð¾Ð¶Ð°Ð»Ð¾Ð²Ð°ÑÑ Ð² SAY YES! English School!\n\n` +
-        `Ð£ Ð²Ð°Ñ ÐµÑÑÑ Ð°ÐºÑÐ¸Ð²Ð½Ð°Ñ Ð·Ð°Ð¿Ð¸ÑÑ:\n` +
-        `ÐÐ°ÑÐ°: ${booking.slotDate}\n` +
-        `ÐÑÐµÐ¼Ñ (ÐÐ¡Ð): ${booking.slotMsk}\n\n` +
-        `Ð§ÑÐ¾ ÑÐ¾ÑÐ¸ÑÐµ ÑÐ´ÐµÐ»Ð°ÑÑ?`,
+        `Добро пожаловать в SAY YES! English School!\n\n` +
+        `У вас есть активная запись:\n` +
+        `Дата: ${booking.slotDate}\n` +
+        `Время (МСК): ${booking.slotMsk}\n\n` +
+        `Что хотите сделать?`,
         bookingActionsKeyboard(existingBookingId)
       );
       return;
@@ -128,24 +128,24 @@ async function handleStart(chatId, username, args) {
   }
 
   await sendMessage(chatId,
-    'ÐÐ¾Ð±ÑÐ¾ Ð¿Ð¾Ð¶Ð°Ð»Ð¾Ð²Ð°ÑÑ Ð² SAY YES! English School!\n\n' +
-    'Ð§ÑÐ¾Ð±Ñ Ð·Ð°Ð¿Ð¸ÑÐ°ÑÑÑÑ Ð½Ð° Ð±ÐµÑÐ¿Ð»Ð°ÑÐ½ÑÑ ÐºÐ¾Ð½ÑÑÐ»ÑÑÐ°ÑÐ¸Ñ, Ð¿ÐµÑÐµÐ¹Ð´Ð¸ÑÐµ Ð½Ð° Ð½Ð°Ñ ÑÐ°Ð¹Ñ:\n' +
+    'Добро пожаловать в SAY YES! English School!\n\n' +
+    'Чтобы записатьсь на бесплатную консультацию, перейдите на наш сайт:\n' +
     'https://www.sayyestoenglish.com/learn_easy\n\n' +
-    'ÐÐ¾ÑÐ»Ðµ Ð·Ð°Ð¿Ð¸ÑÐ¸ Ð²Ñ Ð¿Ð¾Ð»ÑÑÐ¸ÑÐµ Ð¿Ð¾Ð´ÑÐ²ÐµÑÐ¶Ð´ÐµÐ½Ð¸Ðµ Ð·Ð´ÐµÑÑ.'
+    'После записи вы получите подтверждение здесь.'
   );
 }
 
 async function handleCancel(chatId, bookingId, callbackQueryId) {
   const booking = await getBooking(bookingId);
   if (!booking || booking.status !== 'confirmed') {
-    await answerCallback(callbackQueryId, 'ÐÐ°Ð¿Ð¸ÑÑ Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½Ð°');
+    await answerCallback(callbackQueryId, 'Запись не найдена');
     return;
   }
 
   await answerCallback(callbackQueryId);
   await sendMessage(chatId,
-    `ÐÑ ÑÐ²ÐµÑÐµÐ½Ñ, ÑÑÐ¾ ÑÐ¾ÑÐ¸ÑÐµ Ð¾ÑÐ¼ÐµÐ½Ð¸ÑÑ Ð·Ð°Ð¿Ð¸ÑÑ?\n\n` +
-    `ÐÐ°ÑÐ°: ${booking.slotDate}\nÐÑÐµÐ¼Ñ (ÐÐ¡Ð): ${booking.slotMsk}`,
+    `Вы уверены, что хотите отменить запись?\n\n` +
+    `Дата: ${booking.slotDate}\nВремя (МСК): ${booking.slotMsk}`,
     confirmCancelKeyboard(bookingId)
   );
 }
@@ -153,7 +153,7 @@ async function handleCancel(chatId, bookingId, callbackQueryId) {
 async function handleConfirmCancel(chatId, bookingId, callbackQueryId, messageId) {
   const booking = await getBooking(bookingId);
   if (!booking) {
-    await answerCallback(callbackQueryId, 'ÐÐ°Ð¿Ð¸ÑÑ Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½Ð°');
+    await answerCallback(callbackQueryId, 'Запись не найдена');
     return;
   }
 
@@ -166,10 +166,10 @@ async function handleConfirmCancel(chatId, bookingId, callbackQueryId, messageId
   await updateBooking(bookingId, { status: 'cancelled' });
   await clearUserBooking(chatId);
 
-  await answerCallback(callbackQueryId, 'ÐÐ°Ð¿Ð¸ÑÑ Ð¾ÑÐ¼ÐµÐ½ÐµÐ½Ð°');
+  await answerCallback(callbackQueryId, 'Запись отменена');
   await editMessage(chatId, messageId,
-    'ÐÐ°ÑÐ° Ð·Ð°Ð¿Ð¸ÑÑ Ð¾ÑÐ¼ÐµÐ½ÐµÐ½Ð°.\n\n' +
-    'ÐÑÐ»Ð¸ Ð·Ð°ÑÐ¾ÑÐ¸ÑÐµ Ð·Ð°Ð¿Ð¸ÑÐ°ÑÑÑÑ ÑÐ½Ð¾Ð²Ð°:\nhttps://www.sayyestoenglish.com/learn_easy'
+    'Ваша запись отменена.\n\n' +
+    'Если захотите записаться снова:\nhttps://www.sayyestoenglish.com/learn_easy'
   );
 
   // Notify manager
@@ -182,7 +182,7 @@ async function handleConfirmCancel(chatId, bookingId, callbackQueryId, messageId
 async function handleReschedule(chatId, bookingId, callbackQueryId) {
   const booking = await getBooking(bookingId);
   if (!booking || booking.status !== 'confirmed') {
-    await answerCallback(callbackQueryId, 'ÐÐ°Ð¿Ð¸ÑÑ Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½Ð°');
+    await answerCallback(callbackQueryId, 'Запись не найдена');
     return;
   }
 
@@ -192,8 +192,8 @@ async function handleReschedule(chatId, bookingId, callbackQueryId) {
   if (available.length === 0) {
     await answerCallback(callbackQueryId);
     await sendMessage(chatId,
-      'Ð ÑÐ¾Ð¶Ð°Ð»ÐµÐ½Ð¸Ñ, ÑÐµÐ¹ÑÐ°Ñ Ð½ÐµÑ Ð´Ð¾ÑÑÑÐ¿Ð½ÑÑ ÑÐ»Ð¾ÑÐ¾Ð².\n' +
-      'ÐÐ¾Ð¿ÑÐ¾Ð±ÑÐ¹ÑÐµ Ð¿Ð¾Ð·Ð¶Ðµ Ð¸Ð»Ð¸ ÑÐ²ÑÐ¶Ð¸ÑÐµÑÑ Ñ Ð¼ÐµÐ½ÐµÐ´Ð¶ÐµÑÐ¾Ð¼.',
+      'К сожалению, сейчас нет доступных слотов.\n' +
+      'Попробуйте позже или свяжитесь с менеджером.',
       bookingActionsKeyboard(bookingId)
     );
     return;
@@ -201,8 +201,8 @@ async function handleReschedule(chatId, bookingId, callbackQueryId) {
 
   await answerCallback(callbackQueryId);
   await sendMessage(chatId,
-    `Ð¢ÐµÐºÑÑÐ°Ñ Ð·Ð°Ð¿Ð¸ÑÑ: ${booking.slotDate}, ${booking.slotMsk} (ÐÐ¡Ð)\n\n` +
-    `ÐÑÐ±ÐµÑÐ¸ÑÐµ Ð½Ð¾Ð²Ð¾Ðµ Ð²ÑÐµÐ¼Ñ:`,
+    `Текущая запись: ${booking.slotDate}, ${booking.slotMsk} (МСК)\n\n` +
+    `Выберите новое время:`,
     slotsKeyboard(available, bookingId)
   );
 }
@@ -210,7 +210,7 @@ async function handleReschedule(chatId, bookingId, callbackQueryId) {
 async function handleNewSlot(chatId, bookingId, newSlotKey, callbackQueryId, messageId) {
   const booking = await getBooking(bookingId);
   if (!booking) {
-    await answerCallback(callbackQueryId, 'ÐÐ°Ð¿Ð¸ÑÑ Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½Ð°');
+    await answerCallback(callbackQueryId, 'Запись не найдена');
     return;
   }
 
@@ -225,8 +225,8 @@ async function handleNewSlot(chatId, bookingId, newSlotKey, callbackQueryId, mes
   // Parse new slot info
   const [dateStr, time] = newSlotKey.split('_');
   const slotDateObj = new Date(dateStr + 'T00:00:00');
-  const dayNames = ['ÐÑ', 'ÐÐ½', 'ÐÑ', 'Ð¡Ñ', 'Ð§Ñ', 'ÐÑ', 'Ð¡Ð±'];
-  const monthNames = ['ÑÐ½Ð²', 'ÑÐµÐ²', 'Ð¼Ð°Ñ', 'Ð°Ð¿Ñ', 'Ð¼Ð°Ð¹', 'Ð¸ÑÐ½', 'Ð¸ÑÐ»', 'Ð°Ð²Ð³', 'ÑÐµÐ½', 'Ð¾ÐºÑ', 'Ð½Ð¾Ñ', 'Ð´ÐµÐº'];
+  const dayNames = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+  const monthNames = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
   const newSlotDate = `${dayNames[slotDateObj.getDay()]}, ${slotDateObj.getDate()} ${monthNames[slotDateObj.getMonth()]}`;
 
   // Update booking
@@ -238,12 +238,12 @@ async function handleNewSlot(chatId, bookingId, newSlotKey, callbackQueryId, mes
     reminded1h: false
   });
 
-  await answerCallback(callbackQueryId, 'ÐÐ°Ð¿Ð¸ÑÑ Ð¿ÐµÑÐµÐ½ÐµÑÐµÐ½Ð°!');
+  await answerCallback(callbackQueryId, 'Запись перенесен!');
   await editMessage(chatId, messageId,
-    `ÐÐ°Ð¿Ð¸ÑÑ Ð¿ÐµÑÐµÐ½ÐµÑÐµÐ½Ð°!\n\n` +
-    `ÐÐ¾Ð²Ð°Ñ Ð´Ð°ÑÐ°: ${newSlotDate}\n` +
-    `ÐÑÐµÐ¼Ñ (ÐÐ¡Ð): ${time}\n` +
-    `Ð¤Ð¾ÑÐ¼Ð°Ñ: ÐÐ¾Ð½ÑÑÐ»ÑÑÐ°ÑÐ¸Ñ Â· 30 Ð¼Ð¸Ð½ Â· Zoom`,
+    `Ђапись перенесенв!\n\n` +
+    `Новая дата: ${newSlotDate}\n` +
+    `Время (МСК): ${time}\n` +
+    `Х �рмат: @онсультация · 30 мин · Zoom`,
     bookingActionsKeyboard(bookingId)
   );
 
@@ -261,15 +261,15 @@ async function handleContact(chatId, bookingId, callbackQueryId) {
   await kvSet(`relay:${chatId}`, bookingId);
 
   await sendMessage(chatId,
-    'ÐÐ°Ð¿Ð¸ÑÐ¸ÑÐµ Ð²Ð°ÑÐµ ÑÐ¾Ð¾Ð±ÑÐµÐ½Ð¸Ðµ, Ð¸ Ð¼Ñ Ð¿ÐµÑÐµÐ´Ð°Ð´Ð¸Ð¼ ÐµÐ³Ð¾ Ð¼ÐµÐ½ÐµÐ´Ð¶ÐµÑÑ.\n\n' +
-    'ÐÐµÐ½ÐµÐ´Ð¶ÐµÑ Ð¾ÑÐ²ÐµÑÐ¸Ñ Ð²Ð°Ð¼ Ð·Ð´ÐµÑÑ, Ð² ÑÑÐ¾Ð¼ ÑÐ°ÑÐµ.\n\n' +
-    '<i>Ð§ÑÐ¾Ð±Ñ Ð²ÑÐ¹ÑÐ¸ Ð¸Ð· ÑÐµÐ¶Ð¸Ð¼Ð° ÑÐ²ÑÐ·Ð¸, Ð¾ÑÐ¿ÑÐ°Ð²ÑÑÐµ /cancel</i>'
+    'Напишите ваше сообщение, и мы передадим его менеджеру.\n\n' +
+    'Менеджер ответит вам здесь, в этом чате.\n\n' +
+    '<i>Чтобы выйти из режима связи, отправьтесь /cancel</i>'
   );
 }
 
 async function handleKeep(chatId, bookingId, callbackQueryId, messageId) {
   const booking = await getBooking(bookingId);
-  await answerCallback(callbackQueryId, 'Ð¥Ð¾ÑÐ¾ÑÐ¾, Ð·Ð°Ð¿Ð¸ÑÑ ÑÐ¾ÑÑÐ°Ð½ÐµÐ½Ð°');
+  await answerCallback(callbackQueryId, 'Хорошо, запись сохранена');
 
   if (booking) {
     await editMessage(chatId, messageId,
@@ -289,14 +289,14 @@ async function handleRelayFromUser(chatId, message) {
   const managerChatId = await getManagerChatId();
 
   if (!managerChatId) {
-    await sendMessage(chatId, 'Ð ÑÐ¾Ð¶Ð°Ð»ÐµÐ½Ð¸Ñ, Ð¼ÐµÐ½ÐµÐ´Ð¶ÐµÑ ÑÐµÐ¹ÑÐ°Ñ Ð½ÐµÐ´Ð¾ÑÑÑÐ¿ÐµÐ½. ÐÐ¾Ð¿ÑÐ¾Ð±ÑÐ¹ÑÐµ Ð¿Ð¾Ð·Ð¶Ðµ.');
+    await sendMessage(chatId, 'К сожалению, менеджер сейчас недоступен. Попробуйте позже.');
     return true;
   }
 
   // Forward message to manager with context
-  const header = `Ð¡Ð¾Ð¾Ð±ÑÐµÐ½Ð¸Ðµ Ð¾Ñ ${booking?.name || 'ÑÑÐµÐ½Ð¸ÐºÐ°'} (${booking?.telegram || ''}):\n` +
-    `ÐÐ°Ð¿Ð¸ÑÑ: ${booking?.slotDate || 'â'}, ${booking?.slotMsk || 'â'} ÐÐ¡Ð\n` +
-    `ââââââââââââââââ`;
+  const header = `Сообщение от ${booking?.name || 'ученика'} (${booking?.telegram || ''}):\n` +
+    `Запись: ${booking?.slotDate || '—'}, ${booking?.slotMsk || '—'} МСК\n` +
+    `‐‐‐‐‐‐‐‐‐‐‐‐‐‐‗b�`;
 
   if (message.text) {
     await sendMessage(managerChatId, `${header}\n\n${message.text}`);
@@ -310,8 +310,8 @@ async function handleRelayFromUser(chatId, message) {
   await kvSet(`mgr_reply:${managerChatId}`, String(chatId), 86400);
 
   await sendMessage(chatId,
-    'Ð¡Ð¾Ð¾Ð±ÑÐµÐ½Ð¸Ðµ Ð¾ÑÐ¿ÑÐ°Ð²Ð»ÐµÐ½Ð¾ Ð¼ÐµÐ½ÐµÐ´Ð¶ÐµÑÑ. ÐÐ¶Ð¸Ð´Ð°Ð¹ÑÐµ Ð¾ÑÐ²ÐµÑÐ°.\n\n' +
-    '<i>ÐÑÐ¿ÑÐ°Ð²ÑÑÐµ /done ÑÑÐ¾Ð±Ñ Ð·Ð°ÐºÐ¾Ð½ÑÐ¸ÑÑ Ð´Ð¸Ð°Ð»Ð¾Ð³</i>'
+    'Сообщение отправлено менеджеру. Ожидайте ответа.\n\n' +
+    '<i>Птобы выйти /done чтобы закончить диалог</i>'
   );
   return true;
 }
@@ -322,12 +322,12 @@ async function handleRelayFromManager(managerChatId, message) {
   if (!targetChatId) return false;
 
   if (message.text) {
-    await sendMessage(targetChatId, `ÐÑÐ²ÐµÑ Ð¼ÐµÐ½ÐµÐ´Ð¶ÐµÑÐ°:\n\n${message.text}`);
+    await sendMessage(targetChatId, `Ответ менеджера:\n\n${message.text}`);
   } else {
     await forwardMessage(targetChatId, managerChatId, message.message_id);
   }
 
-  await sendMessage(managerChatId, 'ÐÑÐ²ÐµÑ Ð¾ÑÐ¿ÑÐ°Ð²Ð»ÐµÐ½ ÑÑÐµÐ½Ð¸ÐºÑ.');
+  await sendMessage(managerChatId, 'Ответ отправлен ученику.');
   return true;
 }
 
@@ -386,7 +386,7 @@ export async function POST(request) {
       const chatId = chat.id;
       const username = from?.username;
 
-      // Save usernameâchatId mapping for daily summaries
+      // Save username→chatId mapping for daily summaries
       if (username) {
         await kvSet(`user_chat:${username.toLowerCase()}`, String(chatId));
       }
@@ -408,7 +408,7 @@ export async function POST(request) {
             const booking = await getBooking(bookingId);
             if (booking && booking.status === 'confirmed') {
               await sendMessage(chatId,
-                'ÐÐ¸Ð°Ð»Ð¾Ð³ Ñ Ð¼ÐµÐ½ÐµÐ´Ð¶ÐµÑÐ¾Ð¼ Ð·Ð°Ð²ÐµÑÑÑÐ½.\n\nÐÐ°ÑÐ° Ð·Ð°Ð¿Ð¸ÑÑ:',
+                'Диалог с менеджером завершён.\n\nВаша запись:',
               );
               await sendMessage(chatId,
                 formatBookingConfirmation(booking),
@@ -417,7 +417,7 @@ export async function POST(request) {
               return NextResponse.json({ ok: true });
             }
           }
-          await sendMessage(chatId, 'ÐÐ¸Ð°Ð»Ð¾Ð³ Ñ Ð¼ÐµÐ½ÐµÐ´Ð¶ÐµÑÐ¾Ð¼ Ð·Ð°Ð²ÐµÑÑÑÐ½.');
+          await sendMessage(chatId, 'Диалог с менеджером завершён.');
           return NextResponse.json({ ok: true });
         }
         // If no relay active, treat as regular message
@@ -437,8 +437,8 @@ export async function POST(request) {
           }
         }
         await sendMessage(chatId,
-          'Ð£ Ð²Ð°Ñ Ð½ÐµÑ Ð°ÐºÑÐ¸Ð²Ð½ÑÑ Ð·Ð°Ð¿Ð¸ÑÐµÐ¹.\n\n' +
-          'ÐÐ°Ð¿Ð¸ÑÐ°ÑÑÑÑ: https://www.sayyestoenglish.com/learn_easy'
+          'У вас нет активных записей.\n\n' +
+          'Записаться: https://www.sayyestoenglish.com/learn_easy'
         );
         return NextResponse.json({ ok: true });
       }
@@ -460,7 +460,7 @@ export async function POST(request) {
         const booking = await getBooking(bookingId);
         if (booking && booking.status === 'confirmed') {
           await sendMessage(chatId,
-            'Ð£ Ð²Ð°Ñ ÐµÑÑÑ Ð°ÐºÑÐ¸Ð²Ð½Ð°Ñ Ð·Ð°Ð¿Ð¸ÑÑ. Ð§ÑÐ¾ ÑÐ¾ÑÐ¸ÑÐµ ÑÐ´ÐµÐ»Ð°ÑÑ?',
+            'У вас есть активная запись. Что хотите сделать?',
             bookingActionsKeyboard(bookingId)
           );
           return NextResponse.json({ ok: true });
@@ -468,9 +468,9 @@ export async function POST(request) {
       }
 
       await sendMessage(chatId,
-        'Ð§ÑÐ¾Ð±Ñ Ð·Ð°Ð¿Ð¸ÑÐ°ÑÑÑÑ Ð½Ð° Ð±ÐµÑÐ¿Ð»Ð°ÑÐ½ÑÑ ÐºÐ¾Ð½ÑÑÐ»ÑÑÐ°ÑÐ¸Ñ:\n' +
+        'Чтобы записаться на бесплатную консультацию:\n' +
         'https://www.sayyestoenglish.com/learn_easy\n\n' +
-        'ÐÐ¾Ð¼Ð°Ð½Ð´Ñ:\n/myrecord â Ð¿Ð¾ÐºÐ°Ð·Ð°ÑÑ Ð²Ð°ÑÑ Ð·Ð°Ð¿Ð¸ÑÑ'
+        'Командч:\n/myrecord — показать вашу запись'
       );
     }
 
