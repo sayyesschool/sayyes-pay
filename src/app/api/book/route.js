@@ -2,9 +2,9 @@ import { NextResponse } from 'next/server';
 import {
   getBookedSlots, addBookedSlot,
   createBooking, setPendingBooking,
-    getManagerChatId
+  getManagerChatId, kvGet
 } from '@/lib/redis';
-import { makeDeepLink, sendMessage, formatBookingForManager } from '@/lib/telegram';
+import { makeDeepLink, sendMessage, formatBookingForManager, MANAGER_USERNAME } from '@/lib/telegram';
 
 // Generate short unique booking ID
 function generateBookingId() {
@@ -89,9 +89,15 @@ export async function POST(request) {
 
     // Notify manager immediately (even before user opens bot)
     try {
-      const managerChatId = await getManagerChatId();
+      let managerChatId = await getManagerChatId();
+      // Fallback: look up by username in case manager hasn't re-sent /start
+      if (!managerChatId) {
+        managerChatId = await kvGet(`user_chat:${MANAGER_USERNAME.toLowerCase()}`);
+      }
       if (managerChatId) {
         await sendMessage(managerChatId, formatBookingForManager(booking, 'new'));
+      } else {
+        console.warn('Manager chat ID not found — manager will not receive notification');
       }
     } catch (e) {
       console.error('Manager notification error:', e);
