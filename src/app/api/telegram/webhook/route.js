@@ -289,7 +289,7 @@ async function handleRelayFromUser(chatId, message) {
   const managerChatId = await getManagerChatId();
 
   if (!managerChatId) {
-    await sendMessage(chatId, 'К сожалению, менеджер сейчас недоступен. Попробуйте позже.');
+    await sendMessage(chatId, 'Напишите менеджеру напрямую: @sayesstephanie');
     return true;
   }
 
