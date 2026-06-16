@@ -388,8 +388,8 @@ export async function POST(request) {
             `• 10 занятий — 255 EUR\n` +
             `• 20 занятий — 460 EUR\n` +
             `• 40 занятий — 850 EUR\n` +
-            `• 60 занятий — 1 150 EUR\n\n` +
-            `Остались вопросы? Нажмите «Связаться с менеджером» ниже.`
+            `• 60 занятий — 1 150 EUR`,
+            bookingId ? bookingActionsKeyboard(bookingId) : {}
           );
           break;
         default:
