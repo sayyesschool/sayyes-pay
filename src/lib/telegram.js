@@ -94,6 +94,9 @@ export function bookingActionsKeyboard(bookingId) {
         ],
         [
           { text: 'Связаться с менеджером', callback_data: `contact:${bookingId}` }
+        ],
+        [
+          { text: '💰 Посмотреть стоимость обучения', callback_data: 'pricing' }
         ]
       ]
     }
