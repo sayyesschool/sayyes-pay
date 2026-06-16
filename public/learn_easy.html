@@ -916,6 +916,7 @@ async function loadSlots() {
       el.dataset.key = dateKey;
       el.dataset.msk = formatMskTime(mskMin);
       el.dataset.date = date.toISOString().slice(0, 10);
+      el.dataset.label = DAYS_RU[date.getDay()] + ', ' + date.getDate() + ' ' + MONTHS_RU[date.getMonth()];
 
       const dayLabel = DAYS_RU[date.getDay()] + ', ' + date.getDate() + ' ' + MONTHS_RU[date.getMonth()];
       const localTime = formatTime(localDate);
@@ -980,7 +981,7 @@ function selectSlot(el) {
   selectedSlot = {
     key: el.dataset.key,
     msk: el.dataset.msk,
-    date: el.dataset.date
+    date: el.dataset.label || el.dataset.date  // Russian format for display in Telegram
   };
   document.getElementById('slotCta').classList.remove('disabled');
   // Get day label from column header
@@ -1043,13 +1044,7 @@ async function submitBooking() {
       if (selectedSlot.key === 'no_time') {
         document.getElementById('cDate').textContent = 'Заявка отправлена!';
       } else {
-        const dayEl = document.querySelector('.tslot.sel .day');
-        const timeEl = document.querySelector('.tslot.sel .time');
-        if (dayEl && timeEl) {
-          document.getElementById('cDate').textContent = dayEl.textContent + ' в ' + timeEl.textContent;
-        } else {
-          document.getElementById('cDate').textContent = 'Вы записаны!';
-        }
+        document.getElementById('cDate').textContent = selectedSlot.date + ' в ' + selectedSlot.msk + ' (МСК)';
       }
       // Set bot deep link and auto-redirect so user gets confirmation in Telegram automatically
       const deepLink = data.botLink || 'https://t.me/SY_school_bot';
