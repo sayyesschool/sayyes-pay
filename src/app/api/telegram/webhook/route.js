@@ -69,7 +69,7 @@ async function handleStart(chatId, username, args) {
     await setManagerChatId(chatId);
     await sendMessage(chatId,
       'Вы зарегистрированы как менеджер SAY YES!\n\n' +
-      'Вы будете получать уведомления о новыф заявках, отменах и переносах.\n\n' +
+      'Вы будете получать уведомления о новых заявках, отменах и переносах.\n\n' +
       'Когда ученик напишет через бота, его сообщения будут пересылаться вам сюда. ' +
       'Ответьте на пересланное сообщение, и ваш ответ будет отправлен ученику.'
     );
@@ -92,12 +92,7 @@ async function handleStart(chatId, username, args) {
         formatBookingConfirmation(booking),
         bookingActionsKeyboard(bookingId)
       );
-
-      // Notify manager
-      const managerChatId = await getManagerChatId();
-      if (managerChatId) {
-        await sendMessage(managerChatId, formatBookingForManager(booking, 'new'));
-      }
+      // Note: manager notification is already sent by /api/book/route.js at booking time
       return;
     }
 
@@ -105,7 +100,7 @@ async function handleStart(chatId, username, args) {
     await sendMessage(chatId,
       'Добро пожаловать в SAY YES! English School!\n\n' +
       'К сожалению, эта ссылка устарела. Пожалуйста, запишитесь заново на нашем сайте.\n\n' +
-      'Если у вас есть активная запись, она появитсь здесь автоматически.'
+      'Если у вас есть активная запись, она появится здесь автоматически.'
     );
     return;
   }
@@ -129,7 +124,7 @@ async function handleStart(chatId, username, args) {
 
   await sendMessage(chatId,
     'Добро пожаловать в SAY YES! English School!\n\n' +
-    'Чтобы записатьсь на бесплатную консультацию, перейдите на наш сайт:\n' +
+    'Чтобы записаться на бесплатную консультацию, перейдите на наш сайт:\n' +
     'https://www.sayyestoenglish.com/learn_easy\n\n' +
     'После записи вы получите подтверждение здесь.'
   );
@@ -238,12 +233,12 @@ async function handleNewSlot(chatId, bookingId, newSlotKey, callbackQueryId, mes
     reminded1h: false
   });
 
-  await answerCallback(callbackQueryId, 'Запись перенесен!');
+  await answerCallback(callbackQueryId, 'Запись перенесена!');
   await editMessage(chatId, messageId,
-    `Ђапись перенесенв!\n\n` +
+    `Запись перенесена!\n\n` +
     `Новая дата: ${newSlotDate}\n` +
     `Время (МСК): ${time}\n` +
-    `Х �рмат: @онсультация · 30 мин · Zoom`,
+    `Формат: Консультация · 30 мин · Zoom`,
     bookingActionsKeyboard(bookingId)
   );
 
@@ -263,7 +258,7 @@ async function handleContact(chatId, bookingId, callbackQueryId) {
   await sendMessage(chatId,
     'Напишите ваше сообщение, и мы передадим его менеджеру.\n\n' +
     'Менеджер ответит вам здесь, в этом чате.\n\n' +
-    '<i>Чтобы выйти из режима связи, отправьтесь /cancel</i>'
+    '<i>Чтобы выйти из режима связи, отправьте /cancel</i>'
   );
 }
 
@@ -296,7 +291,7 @@ async function handleRelayFromUser(chatId, message) {
   // Forward message to manager with context
   const header = `Сообщение от ${booking?.name || 'ученика'} (${booking?.telegram || ''}):\n` +
     `Запись: ${booking?.slotDate || '—'}, ${booking?.slotMsk || '—'} МСК\n` +
-    `‐‐‐‐‐‐‐‐‐‐‐‐‐‐‗b�`;
+    `────────────────`;
 
   if (message.text) {
     await sendMessage(managerChatId, `${header}\n\n${message.text}`);
@@ -311,7 +306,7 @@ async function handleRelayFromUser(chatId, message) {
 
   await sendMessage(chatId,
     'Сообщение отправлено менеджеру. Ожидайте ответа.\n\n' +
-    '<i>Птобы выйти /done чтобы закончить диалог</i>'
+    '<i>Отправьте /done чтобы закончить диалог</i>'
   );
   return true;
 }
@@ -373,6 +368,29 @@ export async function POST(request) {
           break;
         case 'keep':
           await handleKeep(chatId, bookingId, callbackId, messageId);
+          break;
+        case 'pricing':
+          await answerCallback(callbackId);
+          await sendMessage(chatId,
+            `💰 <b>Стоимость обучения SAY YES!</b>\n\n` +
+            `<b>Онлайн-группы</b> (8 занятий × 1,5 ч/мес)\n` +
+            `• 1 мес — 140 EUR\n` +
+            `• 3 мес — 370 EUR\n` +
+            `• 6 мес — 650 EUR\n\n` +
+            `<b>Пакеты с русскоязычным преподавателем</b> (50 мин)\n` +
+            `• 5 занятий — 102 EUR\n` +
+            `• 10 занятий — 175 EUR\n` +
+            `• 20 занятий — 315 EUR\n` +
+            `• 40 занятий — 540 EUR\n` +
+            `• 60 занятий — 740 EUR\n\n` +
+            `<b>Пакеты с носителем / спец-курс</b> (50 мин)\n` +
+            `• 5 занятий — 150 EUR\n` +
+            `• 10 занятий — 255 EUR\n` +
+            `• 20 занятий — 460 EUR\n` +
+            `• 40 занятий — 850 EUR\n` +
+            `• 60 занятий — 1 150 EUR\n\n` +
+            `Остались вопросы? Нажмите «Связаться с менеджером» ниже.`
+          );
           break;
         default:
           await answerCallback(callbackId);
@@ -470,7 +488,7 @@ export async function POST(request) {
       await sendMessage(chatId,
         'Чтобы записаться на бесплатную консультацию:\n' +
         'https://www.sayyestoenglish.com/learn_easy\n\n' +
-        'Командч:\n/myrecord — показать вашу запись'
+        'Команды:\n/myrecord — показать вашу запись'
       );
     }
 
