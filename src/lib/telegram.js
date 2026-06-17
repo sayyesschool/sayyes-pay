@@ -133,14 +133,18 @@ export function slotsKeyboard(slots, bookingId) {
 // --- Message formatting ---
 
 export function formatBookingConfirmation(booking) {
-  const timeInfo = (!booking.slot || booking.slot === 'no_time')
-    ? 'Время: подберём позже'
-    : `Дата: ${booking.slotDate || '—'}\nВремя (МСК): ${booking.slotMsk || '—'}`;
+  const firstName = booking.name ? booking.name.split(' ')[0] : '';
+  const greeting = firstName ? `, ${firstName}` : '';
 
-  return `Ваша запись подтверждена!\n\n` +
+  const timeInfo = (!booking.slot || booking.slot === 'no_time')
+    ? '📅 Время: уточним с вами в ближайшее время'
+    : `📅 Дата: <b>${booking.slotDate || '—'}</b>\n🕐 Время (МСК): <b>${booking.slotMsk || '—'}</b>`;
+
+  return `✅ <b>Запись подтверждена${greeting}!</b>\n\n` +
     `${timeInfo}\n` +
-    `Формат: Консультация · 30 мин · Zoom\n\n` +
-    `Мы свяжемся с вами в ближайшее время!`;
+    `📹 Формат: Консультация · 30 мин · Zoom\n\n` +
+    `Ссылку на Zoom пришлём за час до начала.\n\n` +
+    `Кнопки ниже — перенести, отменить или задать вопрос менеджеру 👇`;
 }
 
 export function formatBookingForManager(booking, action = 'new') {
