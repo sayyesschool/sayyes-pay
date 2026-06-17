@@ -10,7 +10,14 @@ async function kvGet(key) {
     });
     const data = await resp.json();
     if (data.result === null || data.result === undefined) return null;
-    try { return JSON.parse(data.result); } catch { return data.result; }
+    try {
+      const parsed = JSON.parse(data.result);
+      // If parsed result is still a string (double-encoded), parse again
+      if (typeof parsed === 'string') {
+        try { return JSON.parse(parsed); } catch { return parsed; }
+      }
+      return parsed;
+    } catch { return data.result; }
   } catch (e) {
     console.error('KV get error:', key, e);
     return null;
