@@ -133,9 +133,9 @@ export function slotsKeyboard(slots, bookingId) {
 // --- Message formatting ---
 
 export function formatBookingConfirmation(booking) {
-  const timeInfo = booking.slot === 'no_time'
+  const timeInfo = (!booking.slot || booking.slot === 'no_time')
     ? 'Время: подберём позже'
-    : `Дата: ${booking.slotDate}\nВремя (МСК): ${booking.slotMsk}`;
+    : `Дата: ${booking.slotDate || '—'}\nВремя (МСК): ${booking.slotMsk || '—'}`;
 
   return `Ваша запись подтверждена!\n\n` +
     `${timeInfo}\n` +
