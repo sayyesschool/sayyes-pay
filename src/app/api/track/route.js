@@ -15,7 +15,7 @@ export async function POST(request) {
     // Increment step counter
     const data = await kvGet(key) || {};
     data[step] = (data[step] || 0) + 1;
-    await kvSet(key, data, { ex: 60 * 60 * 24 * 90 }); // keep 90 days
+    await kvSet(key, data, 60 * 60 * 24 * 90); // keep 90 days
 
     return NextResponse.json({ ok: true });
   } catch (e) {
