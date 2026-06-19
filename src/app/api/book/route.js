@@ -38,7 +38,7 @@ async function verifyTurnstile(token) {
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { name, telegram, email, slot, slotMsk, slotDate, turnstileToken, quizAnswers } = body;
+    const { name, telegram, email, slot, slotMsk, slotDate, slotLocal, turnstileToken, quizAnswers } = body;
 
     // Validate
     if (!name) {
@@ -73,6 +73,7 @@ export async function POST(request) {
       slot: slot || 'no_time',
       slotMsk: slotMsk || '',
       slotDate: slotDate || '',
+      slotLocal: slotLocal || '',
       chatId: null,
       status: 'confirmed',
       reminded24h: false,
