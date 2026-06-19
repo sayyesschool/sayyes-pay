@@ -604,8 +604,8 @@ h2{font-size:21px;font-weight:700;color:var(--dark);line-height:1.3;margin-botto
       <div class="small">Консультация · 30 мин · Zoom</div>
     </div>
 
-    <!-- What user gets in Telegram -->
-    <div style="background:var(--purple-light);border-radius:16px;padding:16px 18px;margin-bottom:20px">
+    <!-- What user gets in Telegram (regular booking) -->
+    <div id="s14TgBlock" style="background:var(--purple-light);border-radius:16px;padding:16px 18px;margin-bottom:20px">
       <div style="font-size:13px;font-weight:700;color:var(--purple-dark);margin-bottom:10px">📬 В Telegram вы получите:</div>
       <div style="font-size:13px;color:var(--dark);line-height:1.7">
         ✔ Подтверждение даты и времени консультации<br>
@@ -614,13 +614,20 @@ h2{font-size:21px;font-weight:700;color:var(--dark);line-height:1.3;margin-botto
       </div>
     </div>
 
+    <!-- No-time confirmation message (shown only for no_time bookings) -->
+    <div id="s14NoTimeMsg" style="display:none;background:var(--purple-light);border-radius:16px;padding:20px 18px;margin-bottom:20px;text-align:center">
+      <div style="font-size:32px;margin-bottom:10px">📞</div>
+      <div style="font-size:15px;font-weight:700;color:var(--dark);margin-bottom:6px">Менеджер свяжется с вами в ближайшее время</div>
+      <div style="font-size:13px;color:var(--gray);line-height:1.5">Мы подберём удобное время<br>и пришлём все детали в Telegram</div>
+    </div>
+
     <a id="botLinkBtn" href="https://t.me/SY_school_bot" target="_blank"
        style="display:flex;align-items:center;justify-content:center;gap:10px;width:100%;padding:18px;background:#0088cc;color:#fff;border:none;border-radius:100px;font-size:17px;font-weight:700;cursor:pointer;text-align:center;text-decoration:none;box-shadow:0 4px 20px rgba(0,136,204,0.35);margin-bottom:12px">
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" style="flex-shrink:0"><path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm4.93 6.54l-1.895 8.93c-.14.625-.51.778-.975.483l-2.7-1.99-1.303 1.253c-.144.144-.265.265-.543.265l.193-2.747 4.99-4.507c.217-.193-.047-.3-.337-.107l-6.168 3.882-2.656-.83c-.578-.18-.59-.578.12-.854l10.37-3.996c.48-.174.9.107.904.218z" fill="white"/></svg>
       Перейти в Telegram
     </a>
 
-    <p style="font-size:12px;color:var(--gray);text-align:center;line-height:1.6;margin-bottom:0">
+    <p id="botHint" style="font-size:12px;color:var(--gray);text-align:center;line-height:1.6;margin-bottom:0">
       Откроется бот SAY YES — нажмите&nbsp;<b>«Начать»</b>,<br>чтобы получить детали записи
     </p>
 
@@ -959,11 +966,10 @@ async function loadSlots() {
   noTimeEl.style.cssText = 'border-style:dashed;color:var(--gray);width:100%';
   noTimeEl.innerHTML = '<div class="time" style="font-size:14px;font-weight:500;color:var(--gray)">🕐 Нет удобного времени?</div>';
   noTimeEl.onclick = function() {
-    selectedSlot = { key: 'no_time', msk: '', date: '' };
+    selectedSlot = { key: 'no_time', msk: '', date: '', localTime: '' };
     document.querySelectorAll('.tslot').forEach(s => s.classList.remove('sel'));
     this.classList.add('sel');
-    document.getElementById('slotCta').classList.remove('disabled');
-    document.getElementById('slotCta').textContent = 'Отправить заявку';
+    submitBooking();
   };
   // Add no-time outside the grid, after it
   grid.parentNode.insertBefore(noTimeEl, grid.nextSibling);
@@ -994,10 +1000,12 @@ async function loadSlots() {
 function selectSlot(el) {
   document.querySelectorAll('.tslot').forEach(s => s.classList.remove('sel'));
   el.classList.add('sel');
+  const localTime = el.querySelector('.time') ? el.querySelector('.time').textContent : '';
   selectedSlot = {
     key: el.dataset.key,
     msk: el.dataset.msk,
-    date: el.dataset.label || el.dataset.date  // Russian format for display in Telegram
+    date: el.dataset.label || el.dataset.date,  // Russian format for display in Telegram
+    localTime: localTime  // local time shown to client
   };
   document.getElementById('slotCta').classList.remove('disabled');
   // Get day label from column header
@@ -1050,6 +1058,7 @@ async function submitBooking() {
         slot: selectedSlot.key,
         slotMsk: selectedSlot.msk,
         slotDate: selectedSlot.date,
+        slotLocal: selectedSlot.localTime || '',
         turnstileToken,
         quizAnswers
       })
@@ -1057,15 +1066,28 @@ async function submitBooking() {
 
     if (resp.ok) {
       const data = await resp.json().catch(() => ({}));
+      const tgBlock = document.getElementById('s14TgBlock');
+      const noTimeMsg = document.getElementById('s14NoTimeMsg');
+      const botBtn = document.getElementById('botLinkBtn');
+      const botHint = document.getElementById('botHint');
+
       if (selectedSlot.key === 'no_time') {
         document.getElementById('cDate').textContent = 'Заявка отправлена!';
+        if (tgBlock) tgBlock.style.display = 'none';
+        if (noTimeMsg) noTimeMsg.style.display = 'block';
+        if (botBtn) botBtn.style.display = 'none';
+        if (botHint) botHint.style.display = 'none';
       } else {
-        document.getElementById('cDate').textContent = selectedSlot.date + ' в ' + selectedSlot.msk + ' (МСК)';
+        // Show local time to client
+        const timeDisplay = selectedSlot.localTime
+          ? selectedSlot.date + ' в ' + selectedSlot.localTime
+          : selectedSlot.date + ' в ' + selectedSlot.msk + ' (МСК)';
+        document.getElementById('cDate').textContent = timeDisplay;
+        if (tgBlock) tgBlock.style.display = 'block';
+        if (noTimeMsg) noTimeMsg.style.display = 'none';
+        if (botBtn) { botBtn.style.display = 'flex'; botBtn.href = data.botLink || 'https://t.me/SY_school_bot'; }
+        if (botHint) botHint.style.display = 'block';
       }
-      // Set bot deep link on confirmation button
-      const deepLink = data.botLink || 'https://t.me/SY_school_bot';
-      const botBtn = document.getElementById('botLinkBtn');
-      if (botBtn) botBtn.href = deepLink;
       go(14);
     } else {
       const data = await resp.json().catch(() => ({}));
