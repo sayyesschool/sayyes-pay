@@ -99,13 +99,14 @@ export async function GET(request) {
         }
       });
 
-      const headers = ['Имя', 'Telegram', 'Email', 'Дата записи', 'Время (МСК)', ...quizKeys, 'ID', 'Время заявки'];
+      const headers = ['Имя', 'Telegram', 'Email', 'Дата записи', 'Время (МСК)', 'Время (локальное)', ...quizKeys, 'ID', 'Время заявки'];
       const rows = todayBookings.map(b => [
         b.name || '',
         b.telegram || '',
         b.email || '',
         b.slotDate || '',
         b.slotMsk || '',
+        b.slotLocal || '',
         ...quizKeys.map(k => (b.quizAnswers && b.quizAnswers[k]) ? b.quizAnswers[k] : ''),
         b.id || '',
         b.createdAt ? b.createdAt.slice(0, 16).replace('T', ' ') : ''
