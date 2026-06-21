@@ -136,9 +136,12 @@ export function formatBookingConfirmation(booking) {
   const firstName = booking.name ? booking.name.split(' ')[0] : '';
   const greeting = firstName ? `, ${firstName}` : '';
 
+  // Show local time to client; fall back to MSK if slotLocal not saved yet
+  const clientTime = booking.slotLocal || booking.slotMsk || '—';
+  const timeLabel = booking.slotLocal ? 'Время' : 'Время (МСК)';
   const timeInfo = (!booking.slot || booking.slot === 'no_time')
     ? '📅 Время: уточним с вами в ближайшее время'
-    : `📅 Дата: <b>${booking.slotDate || '—'}</b>\n🕐 Время (МСК): <b>${booking.slotMsk || '—'}</b>`;
+    : `📅 Дата: <b>${booking.slotDate || '—'}</b>\n🕐 ${timeLabel}: <b>${clientTime}</b>`;
 
   return `✅ <b>Запись подтверждена${greeting}!</b>\n\n` +
     `${timeInfo}\n` +
