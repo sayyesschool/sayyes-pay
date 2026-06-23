@@ -9,8 +9,8 @@ import {
 import {
   sendMessage, editMessage, answerCallback, forwardMessage,
   bookingActionsKeyboard, confirmCancelKeyboard, slotsKeyboard,
-  formatBookingConfirmation, formatBookingForManager, formatReminder,
-  isManager
+  managerActionsKeyboard, formatBookingConfirmation, formatBookingForManager,
+  formatReminder, isManager
 } from '@/lib/telegram';
 
 // Verify webhook secret (optional extra security)
@@ -22,8 +22,8 @@ function generateAvailableSlots(bookedSlots) {
   const now = new Date();
   const mskOffset = 3 * 60; // UTC+3
 
-  // Generate slots for next 7 days
-  for (let dayOffset = 0; dayOffset < 7; dayOffset++) {
+  // Generate slots for next 14 days
+  for (let dayOffset = 0; dayOffset < 14; dayOffset++) {
     const date = new Date(now);
     date.setDate(date.getDate() + dayOffset);
 
@@ -249,6 +249,47 @@ async function handleNewSlot(chatId, bookingId, newSlotKey, callbackQueryId, mes
   }
 }
 
+async function handleMgrCancel(chatId, bookingId, callbackQueryId, messageId) {
+  const booking = await getBooking(bookingId);
+  if (!booking) {
+    await answerCallback(callbackQueryId, 'Запись не найдена');
+    return;
+  }
+  if (booking.slot && booking.slot !== 'no_time') {
+    await removeBookedSlot(booking.slot);
+  }
+  await updateBooking(bookingId, { status: 'cancelled' });
+  await answerCallback(callbackQueryId, 'Запись отменена');
+  await editMessage(chatId, messageId,
+    `❌ Запись отменена менеджером.\n\nУченик: ${booking.name} (${booking.telegram || '—'})\nДата: ${booking.slotDate || '—'}, ${booking.slotMsk || '—'} (МСК)`
+  );
+  if (booking.chatId) {
+    await sendMessage(booking.chatId,
+      'Ваша запись была отменена менеджером.\n\n' +
+      'Если хотите записаться снова:\nhttps://www.sayyestoenglish.com/learn_easy'
+    );
+  }
+}
+
+async function handleMgrReschedule(chatId, bookingId, callbackQueryId) {
+  const booking = await getBooking(bookingId);
+  if (!booking) {
+    await answerCallback(callbackQueryId, 'Запись не найдена');
+    return;
+  }
+  const bookedSlots = await getBookedSlots();
+  const available = generateAvailableSlots(bookedSlots);
+  if (available.length === 0) {
+    await answerCallback(callbackQueryId, 'Нет доступных слотов');
+    return;
+  }
+  await answerCallback(callbackQueryId);
+  await sendMessage(chatId,
+    `Перенос для: ${booking.name}\nТекущее: ${booking.slotDate || '—'}, ${booking.slotMsk || '—'} (МСК)\n\nВыберите новое время:`,
+    slotsKeyboard(available, bookingId)
+  );
+}
+
 async function handleContact(chatId, bookingId, callbackQueryId) {
   await answerCallback(callbackQueryId);
 
@@ -362,6 +403,12 @@ export async function POST(request) {
         case 'newslot':
           const newSlot = params.slice(1).join(':'); // rejoin in case time has ':'
           await handleNewSlot(chatId, bookingId, newSlot, callbackId, messageId);
+          break;
+        case 'mgr_cancel':
+          await handleMgrCancel(chatId, bookingId, callbackId, messageId);
+          break;
+        case 'mgr_reschedule':
+          await handleMgrReschedule(chatId, bookingId, callbackId);
           break;
         case 'contact':
           await handleContact(chatId, bookingId, callbackId);
