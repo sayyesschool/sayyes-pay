@@ -4,7 +4,7 @@ import {
   createBooking, setPendingBooking,
   getManagerChatId, kvGet
 } from '@/lib/redis';
-import { makeDeepLink, sendMessage, formatBookingForManager, MANAGER_USERNAME } from '@/lib/telegram';
+import { makeDeepLink, sendMessage, formatBookingForManager, managerActionsKeyboard, MANAGER_USERNAME } from '@/lib/telegram';
 
 // Generate short unique booking ID
 function generateBookingId() {
@@ -96,7 +96,7 @@ export async function POST(request) {
         managerChatId = await kvGet(`user_chat:${MANAGER_USERNAME.toLowerCase()}`);
       }
       if (managerChatId) {
-        await sendMessage(managerChatId, formatBookingForManager(booking, 'new'));
+        await sendMessage(managerChatId, formatBookingForManager(booking, 'new'), managerActionsKeyboard(bookingId));
       } else {
         console.warn('Manager chat ID not found — manager will not receive notification');
       }
