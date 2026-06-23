@@ -116,6 +116,19 @@ export function confirmCancelKeyboard(bookingId) {
   };
 }
 
+export function managerActionsKeyboard(bookingId) {
+  return {
+    reply_markup: {
+      inline_keyboard: [
+        [
+          { text: '🔄 Перенести за ученика', callback_data: `mgr_reschedule:${bookingId}` },
+          { text: '❌ Отменить за ученика', callback_data: `mgr_cancel:${bookingId}` }
+        ]
+      ]
+    }
+  };
+}
+
 export function slotsKeyboard(slots, bookingId) {
   // slots: array of { key: "2026-06-15_11:00", label: "Пн, 15 июн 11:00 (МСК)" }
   const rows = [];
@@ -147,6 +160,8 @@ export function formatBookingConfirmation(booking) {
     `${timeInfo}\n` +
     `📹 Формат: Консультация · 30 мин · Zoom\n\n` +
     `Ссылку на Zoom пришлём за час до начала.\n\n` +
+    `<b>Важно:</b> Пробный урок — это знакомство со школой, преподавателем и нашей методикой обучения. Он будет полезен, если вы действительно рассматриваете изучение английского языка у нас.\n\n` +
+    `Если ваша цель — просто посетить бесплатное занятие без намерения продолжать обучение, пожалуйста, отмените запись. Давайте бережно относиться ко времени друг друга — вашему и нашему. Спасибо за понимание!\n\n` +
     `Кнопки ниже — перенести, отменить или задать вопрос менеджеру 👇`;
 }
 
