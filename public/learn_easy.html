@@ -6,6 +6,14 @@
 <meta name="description" content="Подберите программу изучения английского языка в школе SAY YES — пройдите короткий тест и запишитесь на бесплатную консультацию.">
 <meta name="robots" content="index, follow">
 <title>SAY YES! — Подбор программы английского языка</title>
+<!-- Facebook Pixel -->
+<script>
+!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');
+fbq('init', '1405840230688968');
+fbq('track', 'PageView');
+</script>
+<noscript><img height="1" width="1" style="display:none" src="https://www.facebook.com/tr?id=1405840230688968&ev=PageView&noscript=1"/></noscript>
+<!-- End Facebook Pixel -->
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -1089,6 +1097,7 @@ async function submitBooking() {
         if (botHint) botHint.style.display = 'block';
       }
       go(14);
+      if (typeof fbq === 'function') fbq('track', 'CompleteRegistration');
     } else {
       const data = await resp.json().catch(() => ({}));
       alert(data.error || 'Произошла ошибка. Попробуйте ещё раз.');
