@@ -1055,9 +1055,7 @@ async function submitBooking() {
         })
       });
       if (resp.ok) {
-        const timeDisplay = selectedSlot.localTime
-          ? selectedSlot.date + ' в ' + selectedSlot.localTime
-          : selectedSlot.date + ' в ' + selectedSlot.msk + ' (МСК)';
+        const timeDisplay = selectedSlot.date + ' в ' + (selectedSlot.localTime || selectedSlot.msk);
         document.getElementById('cDate').textContent = timeDisplay;
         const tgBlock = document.getElementById('s14TgBlock');
         const noTimeMsg = document.getElementById('s14NoTimeMsg');
@@ -1145,9 +1143,7 @@ async function submitBooking() {
         if (botHint) botHint.style.display = 'none';
       } else {
         // Show local time to client
-        const timeDisplay = selectedSlot.localTime
-          ? selectedSlot.date + ' в ' + selectedSlot.localTime
-          : selectedSlot.date + ' в ' + selectedSlot.msk + ' (МСК)';
+        const timeDisplay = selectedSlot.date + ' в ' + (selectedSlot.localTime || selectedSlot.msk);
         document.getElementById('cDate').textContent = timeDisplay;
         if (tgBlock) tgBlock.style.display = 'block';
         if (noTimeMsg) noTimeMsg.style.display = 'none';
