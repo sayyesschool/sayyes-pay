@@ -8,7 +8,7 @@ export {stripe as default};
 
 export const SESSION_COMPLETED_EVENT = 'checkout.session.completed';
 
-export async function getProducts({ limit, active } = { limit: 50, active: true }) {
+export async function getProducts({ limit, active } = { limit: 50,active: true }) {
     let res;
     try {
         res = await stripe.prices.list({
@@ -23,7 +23,7 @@ export async function getProducts({ limit, active } = { limit: 50, active: true 
         });
     }
 
-    const raw = res.data.filter((p) => !p.recurring && !!p.metadata.external_id);
+            const raw = res.data.filter((p) => !p.recurring && (!!p.metadata?.external_id || !!(p.product?.metadata?.external_id)));
     const items = await Promise.all(raw.map(mapItem));
 
     return items.sort((a, b) => a.price - b.price);
