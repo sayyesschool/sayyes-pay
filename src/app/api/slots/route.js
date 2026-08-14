@@ -1,30 +1,15 @@
 import { NextResponse } from 'next/server';
+import { getBookedSlots } from '@/lib/redis';
 
-// In-memory store as fallback
-const memoryStore = { booked: [] };
-
-async function getBookedSlots() {
-    if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
-        try {
-            const resp = await fetch(`${process.env.KV_REST_API_URL}/get/booked_slots`, {
-                headers: { Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}` }
-            });
-            const data = await resp.json();
-            return data.result ? JSON.parse(data.result) : [];
-        } catch (e) {
-            console.error('KV read error:', e);
-            return memoryStore.booked;
-        }
-    }
-    return memoryStore.booked;
-}
-
+// Раньше здесь была своя копия чтения из KV, которая разворачивала значение
+// только один раз — из-за двойного кодирования в kvSet ответ уходил СТРОКОЙ,
+// а не массивом. Теперь используем общий redis.js, который разворачивает верно.
 export async function GET() {
-    try {
-        const booked = await getBookedSlots();
-        return NextResponse.json({ booked });
-    } catch (e) {
-        console.error('Slots error:', e);
-        return NextResponse.json({ booked: [] });
-    }
+  try {
+    const booked = await getBookedSlots();
+    return NextResponse.json({ booked });
+  } catch (e) {
+    console.error('Slots error:', e);
+    return NextResponse.json({ booked: [] });
+  }
 }
