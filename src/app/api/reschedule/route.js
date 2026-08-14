@@ -4,6 +4,7 @@ import {
   getManagerChatId
 } from '@/lib/redis';
 import { sendMessage, formatBookingForManager, managerActionsKeyboard, bookingActionsKeyboard } from '@/lib/telegram';
+import { sendRescheduleConfirmation } from '@/lib/email';
 
 export async function POST(request) {
   try {
@@ -45,6 +46,13 @@ export async function POST(request) {
       reminded24h: false,
       reminded1h: false
     });
+
+    // Письмо о переносе — с новым .ics, чтобы старое событие в календаре заменилось
+    try {
+      await sendRescheduleConfirmation(updated || { ...booking, slot, slotMsk, slotDate, slotLocal });
+    } catch (e) {
+      console.error('Reschedule email error:', e);
+    }
 
     // Notify client in Telegram (if they linked the bot)
     if (booking.chatId) {
