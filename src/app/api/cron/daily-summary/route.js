@@ -61,6 +61,10 @@ export async function GET(request) {
       return tg.startsWith('+') || /^\d{7,}$/.test(tg.replace(/\s/g, ''));
     }).length;
     const totalActive = bookings.length;
+    // Ключевые метрики, которых раньше не было в сводке
+    const startedBot = todayBookings.filter(b => !!b.chatId).length;
+    const noTime = todayBookings.filter(b => !b.slot || b.slot === 'no_time').length;
+    const pickedSlot = totalToday - noTime;
 
     // Funnel step tracking
     const trackData = await kvGet(`track:${today}`) || {};
@@ -69,6 +73,9 @@ export async function GET(request) {
       `📊 <b>Ежедневная сводка SAY YES</b>\n` +
       `📅 ${today}\n\n` +
       `<b>Заявки сегодня:</b> ${totalToday}\n` +
+      `<b>Выбрали конкретный слот:</b> ${pickedSlot}\n` +
+      `<b>Нажали «Нет удобного времени»:</b> ${noTime}\n` +
+      `<b>Запустили бота («Начать»):</b> ${startedBot} из ${totalToday}\n` +
       `<b>Из них без Telegram аккаунта:</b> ${withoutTg}\n` +
       `<b>Всего активных записей:</b> ${totalActive}\n\n` +
       `<b>Воронка сегодня:</b>\n` +
@@ -99,7 +106,7 @@ export async function GET(request) {
         }
       });
 
-      const headers = ['Имя', 'Telegram', 'Email', 'Дата записи', 'Время (МСК)', 'Время (локальное)', ...quizKeys, 'ID', 'Время заявки'];
+      const headers = ['Имя', 'Telegram', 'Email', 'Дата записи', 'Время (МСК)', 'Время (локальное)', ...quizKeys, 'Запустил бота', 'fbclid', '_fbc', '_fbp', 'utm_source', 'utm_campaign', 'utm_content', 'ID', 'Время заявки'];
       const rows = todayBookings.map(b => [
         b.name || '',
         b.telegram || '',
@@ -108,6 +115,13 @@ export async function GET(request) {
         b.slotMsk || '',
         b.slotLocal || '',
         ...quizKeys.map(k => (b.quizAnswers && b.quizAnswers[k]) ? b.quizAnswers[k] : ''),
+        b.chatId ? 'да' : 'нет',
+        (b.attribution && b.attribution.fbclid) || '',
+        (b.attribution && b.attribution.fbc) || '',
+        (b.attribution && b.attribution.fbp) || '',
+        (b.attribution && b.attribution.utm_source) || '',
+        (b.attribution && b.attribution.utm_campaign) || '',
+        (b.attribution && b.attribution.utm_content) || '',
         b.id || '',
         b.createdAt ? b.createdAt.slice(0, 16).replace('T', ' ') : ''
       ]);
