@@ -38,14 +38,17 @@ async function verifyTurnstile(token) {
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { name, telegram, email, slot, slotMsk, slotDate, slotLocal, turnstileToken, quizAnswers } = body;
+    const { name, telegram, email, slot, slotMsk, slotDate, slotLocal, turnstileToken, quizAnswers, attribution } = body;
 
     // Validate
     if (!name) {
       return NextResponse.json({ error: 'Имя обязательно' }, { status: 400 });
     }
-    if (!telegram) {
-      return NextResponse.json({ error: 'Укажите Telegram или номер телефона' }, { status: 400 });
+    // Раньше Telegram был единственным обязательным каналом — и именно он
+    // ломался: без нажатия «Начать» в боте человек не получал ни подтверждения,
+    // ни напоминаний. Теперь достаточно любого одного канала.
+    if (!telegram && !email) {
+      return NextResponse.json({ error: 'Укажите Telegram или email' }, { status: 400 });
     }
 
     // Verify CAPTCHA
@@ -79,6 +82,7 @@ export async function POST(request) {
       reminded24h: false,
       reminded1h: false,
       quizAnswers: quizAnswers || {},
+      attribution: attribution || {},
       createdAt: new Date().toISOString()
     };
 
