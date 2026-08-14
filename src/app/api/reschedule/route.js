@@ -55,7 +55,7 @@ export async function POST(request) {
         `🔄 <b>Запись перенесена!</b>\n\n` +
         `📅 Дата: <b>${slotDate || '—'}</b>\n` +
         `🕐 ${timeLabel}: <b>${clientTime}</b>\n` +
-        `📹 Формат: Консультация · 30 мин · Zoom\n\n` +
+        `📹 Формат: Пробный урок · 30 мин · Zoom\n\n` +
         `Ссылку на Zoom пришлём за час до начала.`,
         bookingActionsKeyboard(bookingId)
       );
