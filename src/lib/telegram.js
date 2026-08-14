@@ -158,7 +158,7 @@ export function formatBookingConfirmation(booking) {
 
   return `✅ <b>Запись подтверждена${greeting}!</b>\n\n` +
     `${timeInfo}\n` +
-    `📹 Формат: Консультация · 30 мин · Zoom\n\n` +
+    `📹 Формат: Пробный урок · 30 мин · Zoom\n\n` +
     `Ссылку на Zoom пришлём за час до начала.\n\n` +
     `<b>Важно:</b> Пробный урок — это знакомство со школой, преподавателем и нашей методикой обучения. Он будет полезен, если вы действительно рассматриваете изучение английского языка у нас.\n\n` +
     `Если ваша цель — просто посетить бесплатное занятие без намерения продолжать обучение, пожалуйста, отмените запись. Давайте бережно относиться ко времени друг друга — вашему и нашему. Спасибо за понимание!\n\n` +
@@ -192,9 +192,15 @@ export function formatBookingForManager(booking, action = 'new') {
 
 export function formatReminder(booking, hoursLeft) {
   const timeLabel = hoursLeft === 24 ? 'завтра' : 'через 1 час';
-  return `Напоминание: ваша консультация ${timeLabel}!\n\n` +
+  // Показываем время в поясе клиента — он выбирал слот именно в нём.
+  // Раньше здесь был slotMsk, из-за чего человек видел час, отличный от забронированного.
+  const clientTime = booking.slotLocal || booking.slotMsk || '—';
+  const timeLine = booking.slotLocal
+    ? `Время: ${clientTime}`
+    : `Время (МСК): ${clientTime}`;
+  return `Напоминание: ваш пробный урок ${timeLabel}!\n\n` +
     `Дата: ${booking.slotDate}\n` +
-    `Время (МСК): ${booking.slotMsk}\n` +
+    `${timeLine}\n` +
     `Формат: Zoom · 30 мин\n\n` +
     `Если нужно перенести или отменить, нажмите кнопку ниже.`;
 }
