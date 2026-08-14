@@ -5,6 +5,7 @@ import {
   getManagerChatId, kvGet
 } from '@/lib/redis';
 import { makeDeepLink, sendMessage, formatBookingForManager, managerActionsKeyboard, MANAGER_USERNAME } from '@/lib/telegram';
+import { sendBookingConfirmation } from '@/lib/email';
 
 // Generate short unique booking ID
 function generateBookingId() {
@@ -88,6 +89,14 @@ export async function POST(request) {
 
     await createBooking(booking);
     await setPendingBooking(bookingId, booking);
+
+    // Письмо с подтверждением. Единственный канал, который не зависит от того,
+    // нажал ли человек «Начать» в боте. Без RESEND_API_KEY вызов молча пропускается.
+    try {
+      await sendBookingConfirmation(booking);
+    } catch (e) {
+      console.error('Confirmation email error:', e);
+    }
 
     // Generate deep link
     const botLink = makeDeepLink(bookingId);
