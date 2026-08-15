@@ -4,16 +4,36 @@
 // сообщение в Telegram — а Telegram доходил лишь до тех, кто нажал «Начать» в боте.
 // Почта закрывает этот разрыв: письмо уходит сразу и не зависит ни от чего.
 //
-// Всё под флагом: без RESEND_API_KEY модуль молча ничего не делает, ошибка отправки
-// никогда не роняет саму запись.
+// Провайдер выбирается по тому, какой ключ задан. Сделано так, потому что домен
+// сейчас на DNS Wix, где нельзя завести MX на субдомене, а Resend его требует.
+// Postmark, ZeptoMail и SendGrid обходятся TXT и CNAME и работают уже сегодня;
+// после переезда зоны на Cloudflare достаточно задать RESEND_API_KEY — код тот же.
+//
+// Приоритет: POSTMARK_TOKEN → ZEPTOMAIL_TOKEN → SENDGRID_API_KEY → RESEND_API_KEY.
+// Не задан ни один — модуль молча ничего не делает и никогда не роняет запись.
 
-const RESEND_API_KEY = () => process.env.RESEND_API_KEY;
-const MAIL_FROM = () => process.env.MAIL_FROM || 'SAY YES <hello@sayyestoenglish.com>';
-const MAIL_REPLY_TO = () => process.env.MAIL_REPLY_TO || '';
 const BOT_LINK_BASE = 'https://t.me/SY_school_bot';
 
+const MAIL_FROM = () => process.env.MAIL_FROM || 'SAY YES <hello@sayyestoenglish.com>';
+const MAIL_REPLY_TO = () => process.env.MAIL_REPLY_TO || '';
+
+function provider() {
+  if (process.env.POSTMARK_TOKEN) return 'postmark';
+  if (process.env.ZEPTOMAIL_TOKEN) return 'zeptomail';
+  if (process.env.SENDGRID_API_KEY) return 'sendgrid';
+  if (process.env.RESEND_API_KEY) return 'resend';
+  return null;
+}
+
 export function emailEnabled() {
-  return !!RESEND_API_KEY();
+  return !!provider();
+}
+
+// «SAY YES <hello@sayyestoenglish.com>» → { name, email }
+function parseFrom(value) {
+  const m = String(value).match(/^\s*(.*?)\s*<([^>]+)>\s*$/);
+  if (m) return { name: m[1].replace(/^"|"$/g, ''), email: m[2] };
+  return { name: '', email: String(value).trim() };
 }
 
 // --- .ics ---
@@ -115,10 +135,125 @@ ${hasSlot ? `<tr><td style="padding-bottom:18px;font-size:13px;color:#666;line-h
 </td></tr>`);
 }
 
+// --- адаптеры провайдеров ---
+// Каждый получает одинаковый msg: { from:{name,email}, to, replyTo, subject, html, ics }
+
+async function sendPostmark(msg) {
+  const body = {
+    From: msg.from.name ? `${msg.from.name} <${msg.from.email}>` : msg.from.email,
+    To: msg.to,
+    Subject: msg.subject,
+    HtmlBody: msg.html,
+    MessageStream: process.env.POSTMARK_STREAM || 'outbound'
+  };
+  if (msg.replyTo) body.ReplyTo = msg.replyTo;
+  if (msg.ics) {
+    body.Attachments = [{
+      Name: 'say-yes-probny-urok.ics',
+      Content: Buffer.from(msg.ics, 'utf-8').toString('base64'),
+      ContentType: 'text/calendar; charset=utf-8; method=PUBLISH'
+    }];
+  }
+  return fetch('https://api.postmarkapp.com/email', {
+    method: 'POST',
+    headers: {
+      'Accept': 'application/json',
+      'Content-Type': 'application/json',
+      'X-Postmark-Server-Token': process.env.POSTMARK_TOKEN
+    },
+    body: JSON.stringify(body)
+  });
+}
+
+async function sendZeptoMail(msg) {
+  const body = {
+    from: { address: msg.from.email, name: msg.from.name || undefined },
+    to: [{ email_address: { address: msg.to } }],
+    subject: msg.subject,
+    htmlbody: msg.html
+  };
+  if (msg.replyTo) body.reply_to = [{ address: msg.replyTo }];
+  if (msg.ics) {
+    body.attachments = [{
+      name: 'say-yes-probny-urok.ics',
+      content: Buffer.from(msg.ics, 'utf-8').toString('base64'),
+      mime_type: 'text/calendar'
+    }];
+  }
+  // Домен и почта школы в европейском датацентре Zoho, поэтому по умолчанию .eu
+  const url = process.env.ZEPTOMAIL_URL || 'https://api.zeptomail.eu/v1.1/email';
+  return fetch(url, {
+    method: 'POST',
+    headers: {
+      'Accept': 'application/json',
+      'Content-Type': 'application/json',
+      'Authorization': `Zoho-enczapikey ${process.env.ZEPTOMAIL_TOKEN}`
+    },
+    body: JSON.stringify(body)
+  });
+}
+
+async function sendSendGrid(msg) {
+  const body = {
+    personalizations: [{ to: [{ email: msg.to }] }],
+    from: { email: msg.from.email, name: msg.from.name || undefined },
+    subject: msg.subject,
+    content: [{ type: 'text/html', value: msg.html }]
+  };
+  if (msg.replyTo) body.reply_to = { email: msg.replyTo };
+  if (msg.ics) {
+    body.attachments = [{
+      content: Buffer.from(msg.ics, 'utf-8').toString('base64'),
+      filename: 'say-yes-probny-urok.ics',
+      type: 'text/calendar',
+      disposition: 'attachment'
+    }];
+  }
+  return fetch('https://api.sendgrid.com/v3/mail/send', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${process.env.SENDGRID_API_KEY}`
+    },
+    body: JSON.stringify(body)
+  });
+}
+
+async function sendResend(msg) {
+  const body = {
+    from: msg.from.name ? `${msg.from.name} <${msg.from.email}>` : msg.from.email,
+    to: [msg.to],
+    subject: msg.subject,
+    html: msg.html
+  };
+  if (msg.replyTo) body.reply_to = msg.replyTo;
+  if (msg.ics) {
+    body.attachments = [{
+      filename: 'say-yes-probny-urok.ics',
+      content: Buffer.from(msg.ics, 'utf-8').toString('base64')
+    }];
+  }
+  return fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(body)
+  });
+}
+
+const ADAPTERS = {
+  postmark: sendPostmark,
+  zeptomail: sendZeptoMail,
+  sendgrid: sendSendGrid,
+  resend: sendResend
+};
+
 // Отправка. Никогда не бросает наружу: запись важнее письма.
 export async function sendBookingConfirmation(booking, mode = 'new') {
-  const key = RESEND_API_KEY();
-  if (!key) return { skipped: 'no RESEND_API_KEY' };
+  const which = provider();
+  if (!which) return { skipped: 'no mail provider configured' };
   if (!booking || !booking.email) return { skipped: 'no email' };
 
   const hasSlot = booking.slot && booking.slot !== 'no_time';
@@ -129,40 +264,26 @@ export async function sendBookingConfirmation(booking, mode = 'new') {
       ? `Вы записаны на пробный урок — ${when}`.trim()
       : 'Заявка принята — подберём время для пробного урока');
 
-  const body = {
-    from: MAIL_FROM(),
-    to: [booking.email],
+  const msg = {
+    from: parseFrom(MAIL_FROM()),
+    to: booking.email,
+    replyTo: MAIL_REPLY_TO(),
     subject,
-    html: confirmationHtml(booking, mode)
+    html: confirmationHtml(booking, mode),
+    ics: hasSlot ? buildIcs(booking.slot, booking.id) : null
   };
-  if (MAIL_REPLY_TO()) body.reply_to = MAIL_REPLY_TO();
-
-  const ics = hasSlot ? buildIcs(booking.slot, booking.id) : null;
-  if (ics) {
-    body.attachments = [{
-      filename: 'say-yes-probny-urok.ics',
-      content: Buffer.from(ics, 'utf-8').toString('base64')
-    }];
-  }
 
   try {
-    const resp = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${key}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(body)
-    });
-    const data = await resp.json().catch(() => ({}));
+    const resp = await ADAPTERS[which](msg);
     if (!resp.ok) {
-      console.error('Resend error:', resp.status, data);
-      return { ok: false, status: resp.status, data };
+      const text = await resp.text().catch(() => '');
+      console.error(`Mail (${which}) error:`, resp.status, text.slice(0, 400));
+      return { ok: false, provider: which, status: resp.status };
     }
-    return { ok: true, id: data.id };
+    return { ok: true, provider: which };
   } catch (e) {
-    console.error('Resend request failed:', e);
-    return { ok: false, error: String(e) };
+    console.error(`Mail (${which}) request failed:`, e);
+    return { ok: false, provider: which, error: String(e) };
   }
 }
 
