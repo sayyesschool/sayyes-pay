@@ -84,6 +84,9 @@ export async function POST(request) {
       reminded1h: false,
       quizAnswers: quizAnswers || {},
       attribution: attribution || {},
+      // Пояс клиента дублируем на верхний уровень: по нему все сообщения
+      // пересчитывают время слота, в том числе после переноса из бота
+      tz: (attribution && attribution.tz) || '',
       createdAt: new Date().toISOString()
     };
 
