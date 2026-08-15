@@ -5,6 +5,7 @@ import {
 } from '@/lib/redis';
 import { sendMessage, formatBookingForManager, managerActionsKeyboard, bookingActionsKeyboard } from '@/lib/telegram';
 import { sendRescheduleConfirmation } from '@/lib/email';
+import { clientTimeLine, clientDateLine } from '@/lib/time';
 
 export async function POST(request) {
   try {
@@ -56,13 +57,12 @@ export async function POST(request) {
 
     // Notify client in Telegram (if they linked the bot)
     if (booking.chatId) {
-      const clientTime = slotLocal || slotMsk || '—';
-      const timeLabel = slotLocal ? 'Время' : 'Время (МСК)';
+      const forMessage = updated || { ...booking, slot, slotMsk, slotDate, slotLocal };
       await sendMessage(
         booking.chatId,
         `🔄 <b>Запись перенесена!</b>\n\n` +
-        `📅 Дата: <b>${slotDate || '—'}</b>\n` +
-        `🕐 ${timeLabel}: <b>${clientTime}</b>\n` +
+        `📅 ${clientDateLine(forMessage)}\n` +
+        `🕐 ${clientTimeLine(forMessage)}\n` +
         `📹 Формат: Пробный урок · 30 мин · Zoom\n\n` +
         `Ссылку на Zoom пришлём за час до начала.`,
         bookingActionsKeyboard(bookingId)
