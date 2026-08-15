@@ -12,7 +12,7 @@
 // Приоритет: POSTMARK_TOKEN → ZEPTOMAIL_TOKEN → SENDGRID_API_KEY → RESEND_API_KEY.
 // Не задан ни один — модуль молча ничего не делает и никогда не роняет запись.
 
-import { localSlot, tzLabel } from '@/lib/time';
+import { localSlot, tzNoteFor } from '@/lib/time';
 
 const BOT_LINK_BASE = 'https://t.me/SY_school_bot';
 
@@ -39,7 +39,7 @@ function parseFrom(value) {
 }
 
 // --- .ics ---
-// Ключ слота — «2026-08-28_19:00» по Москве. МСК = UTC+3, поэтому в UTC минус 3 часа.
+// Ключ слота — «2026-08-28_19:00» в базовом поясе расписания (UTC+3) → в UTC минус 3 часа.
 export function buildIcs(slotKey, bookingId) {
   if (!slotKey || slotKey === 'no_time') return null;
   const [datePart, timePart] = String(slotKey).split('_');
@@ -55,7 +55,7 @@ export function buildIcs(slotKey, bookingId) {
   return [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//SAY YES English School//learn_easy//RU',
+    'PRODID:-//SAY YES English School//learn_easy//EN',
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
     'BEGIN:VEVENT',
@@ -99,12 +99,12 @@ function confirmationHtml(booking, mode) {
   const hasSlot = booking.slot && booking.slot !== 'no_time';
   const name = booking.name ? String(booking.name).split(' ')[0] : '';
   const greeting = name ? `, ${esc(name)}` : '';
-  // Время всегда в поясе клиента. «(МСК)» — только если пояс неизвестен.
+  // Время всегда в поясе клиента. Пояс неизвестен — считаем по CET и помечаем это.
   const local = localSlot(booking);
-  const clientTime = (local && local.time) || booking.slotLocal || booking.slotMsk || '';
+  const clientTime = (local && local.time) || booking.slotLocal || '';
   const clientDate = (local && local.date) || booking.slotDate || '—';
-  const timeLabel = (local || booking.slotLocal) ? 'Время' : 'Время (МСК)';
-  const tzNote = tzLabel(booking);
+  const timeLabel = (local && local.assumed) ? 'Время (CET)' : 'Время';
+  const tzNote = tzNoteFor(booking);
   const botLink = `${BOT_LINK_BASE}?start=${encodeURIComponent(booking.id || '')}`;
 
   const when = hasSlot
@@ -114,7 +114,7 @@ function confirmationHtml(booking, mode) {
 <b>Дата:</b> ${esc(clientDate)}<br>
 <b>${timeLabel}:</b> ${esc(clientTime || '—')}<br>
 <b>Формат:</b> пробный урок · 30 минут · Zoom${tzNote ? `<br>
-<span style="color:#6b4b8a">Время указано ${esc(tzNote.indexOf('Москв') >= 0 ? tzNote : 'для вашего пояса: ' + tzNote)}</span>` : ''}
+<span style="color:#6b4b8a">Время указано ${esc(tzNote)}</span>` : ''}
 </td></tr></table></td></tr>`
     : `<tr><td style="padding-bottom:18px;font-size:14px;line-height:1.6;color:#444">
 Мы подберём удобное время и напишем вам в течение рабочего дня.</td></tr>`;
@@ -267,7 +267,7 @@ export async function sendBookingConfirmation(booking, mode = 'new') {
   const localForSubject = localSlot(booking);
   const when = localForSubject
     ? `${localForSubject.date} ${localForSubject.time}`
-    : `${booking.slotDate || ''} ${booking.slotLocal || booking.slotMsk || ''}`.trim();
+    : `${booking.slotDate || ''} ${booking.slotLocal || ''}`.trim();
   const subject = mode === 'reschedule'
     ? `Запись перенесена — ${when}`.trim()
     : (hasSlot
