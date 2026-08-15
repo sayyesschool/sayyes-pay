@@ -1,6 +1,6 @@
 // Telegram Bot API helpers
 
-import { clientTimeLine, clientDateLine, localSlot, tzLabel } from '@/lib/time';
+import { clientTimeLine, clientDateLine, localSlot, tzLabel, tzNoteFor } from '@/lib/time';
 
 const BOT_TOKEN = () => process.env.TELEGRAM_BOT_TOKEN;
 const BOT_USERNAME = 'SY_school_bot';
@@ -151,13 +151,12 @@ export function formatBookingConfirmation(booking) {
   const firstName = booking.name ? booking.name.split(' ')[0] : '';
   const greeting = firstName ? `, ${firstName}` : '';
 
-  // Время всегда в поясе клиента: он бронировал в своём, а не в московском.
-  // Пояс берётся из заявки; «(МСК)» остаётся только когда пояс неизвестен.
-  const tz = tzLabel(booking);
+  // Время всегда в поясе клиента: он бронировал в своём, а не в базовом.
+  // Пояса нет — считаем по CET и помечаем; базовый пояс школы клиенту не показываем.
   const timeInfo = (!booking.slot || booking.slot === 'no_time')
     ? '📅 Время: уточним с вами в ближайшее время'
     : `📅 ${clientDateLine(booking)}\n🕐 ${clientTimeLine(booking)}` +
-      (tz ? `\n🌍 Время указано ${tz.indexOf('Москв') >= 0 ? tz : 'для вашего пояса: ' + tz}` : '');
+      `\n🌍 Время указано ${tzNoteFor(booking)}`;
 
   return `✅ <b>Запись подтверждена${greeting}!</b>\n\n` +
     `${timeInfo}\n` +
@@ -169,13 +168,13 @@ export function formatBookingConfirmation(booking) {
 }
 
 export function formatBookingForManager(booking, action = 'new') {
-  // Менеджеру нужен МСК — расписание преподавателей московское.
-  // Рядом показываем время клиента, чтобы не пересчитывать в уме перед звонком.
+  // Это сообщение видит только менеджер, поэтому здесь базовое время расписания.
+  // Рядом — время клиента, чтобы не пересчитывать в уме перед звонком.
   const local = localSlot(booking);
   const timeInfo = booking.slot === 'no_time'
     ? 'Время: не выбрано'
     : `Дата: ${booking.slotDate}\nВремя (МСК): ${booking.slotMsk}` +
-      (local ? ` · у клиента ${local.time} (${tzLabel(booking)})` : '');
+      (local && !local.assumed ? ` · у клиента ${local.time} (${tzLabel(booking)})` : '');
 
   const icons = { new: 'Новая заявка', cancel: 'Отмена записи', reschedule: 'Перенос записи' };
   const emoji = { new: '📝', cancel: '❌', reschedule: '🔄' };
