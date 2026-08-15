@@ -1,5 +1,7 @@
 // Telegram Bot API helpers
 
+import { clientTimeLine, clientDateLine, localSlot, tzLabel } from '@/lib/time';
+
 const BOT_TOKEN = () => process.env.TELEGRAM_BOT_TOKEN;
 const BOT_USERNAME = 'SY_school_bot';
 const MANAGER_USERNAME = process.env.MANAGER_TG_USERNAME || 'sayesstephanie';
@@ -149,12 +151,13 @@ export function formatBookingConfirmation(booking) {
   const firstName = booking.name ? booking.name.split(' ')[0] : '';
   const greeting = firstName ? `, ${firstName}` : '';
 
-  // Show local time to client; fall back to MSK if slotLocal not saved yet
-  const clientTime = booking.slotLocal || booking.slotMsk || '—';
-  const timeLabel = booking.slotLocal ? 'Время' : 'Время (МСК)';
+  // Время всегда в поясе клиента: он бронировал в своём, а не в московском.
+  // Пояс берётся из заявки; «(МСК)» остаётся только когда пояс неизвестен.
+  const tz = tzLabel(booking);
   const timeInfo = (!booking.slot || booking.slot === 'no_time')
     ? '📅 Время: уточним с вами в ближайшее время'
-    : `📅 Дата: <b>${booking.slotDate || '—'}</b>\n🕐 ${timeLabel}: <b>${clientTime}</b>`;
+    : `📅 ${clientDateLine(booking)}\n🕐 ${clientTimeLine(booking)}` +
+      (tz ? `\n🌍 Время указано ${tz.indexOf('Москв') >= 0 ? tz : 'для вашего пояса: ' + tz}` : '');
 
   return `✅ <b>Запись подтверждена${greeting}!</b>\n\n` +
     `${timeInfo}\n` +
@@ -166,9 +169,13 @@ export function formatBookingConfirmation(booking) {
 }
 
 export function formatBookingForManager(booking, action = 'new') {
+  // Менеджеру нужен МСК — расписание преподавателей московское.
+  // Рядом показываем время клиента, чтобы не пересчитывать в уме перед звонком.
+  const local = localSlot(booking);
   const timeInfo = booking.slot === 'no_time'
     ? 'Время: не выбрано'
-    : `Дата: ${booking.slotDate}\nВремя (МСК): ${booking.slotMsk}`;
+    : `Дата: ${booking.slotDate}\nВремя (МСК): ${booking.slotMsk}` +
+      (local ? ` · у клиента ${local.time} (${tzLabel(booking)})` : '');
 
   const icons = { new: 'Новая заявка', cancel: 'Отмена записи', reschedule: 'Перенос записи' };
   const emoji = { new: '📝', cancel: '❌', reschedule: '🔄' };
@@ -194,13 +201,9 @@ export function formatReminder(booking, hoursLeft) {
   const timeLabel = hoursLeft === 24 ? 'завтра' : 'через 1 час';
   // Показываем время в поясе клиента — он выбирал слот именно в нём.
   // Раньше здесь был slotMsk, из-за чего человек видел час, отличный от забронированного.
-  const clientTime = booking.slotLocal || booking.slotMsk || '—';
-  const timeLine = booking.slotLocal
-    ? `Время: ${clientTime}`
-    : `Время (МСК): ${clientTime}`;
   return `Напоминание: ваш пробный урок ${timeLabel}!\n\n` +
-    `Дата: ${booking.slotDate}\n` +
-    `${timeLine}\n` +
+    `${clientDateLine(booking)}\n` +
+    `${clientTimeLine(booking)}\n` +
     `Формат: Zoom · 30 мин\n\n` +
     `Если нужно перенести или отменить, нажмите кнопку ниже.`;
 }
