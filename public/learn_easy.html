@@ -582,7 +582,7 @@ h2{font-size:21px;font-weight:700;color:var(--dark);line-height:1.3;margin-botto
     <div style="font-size:13px;font-weight:700;color:var(--dark);margin:4px 0 8px">Куда удобнее — Telegram или почта?</div>
     <div class="field">
       <label>Telegram или телефон</label>
-      <input type="text" id="uTg" placeholder="@username или +7 999 123 45 67">
+      <input type="text" id="uTg" placeholder="@username или телефон с кодом страны">
     </div>
     <div class="field">
       <label>Email</label>
@@ -979,7 +979,7 @@ function pick(el, next) {
 let selectedSlot = null;
 let bookedSlots = [];
 let TZ_LABEL = '';
-const MSK_OFFSET = 3; // Moscow is UTC+3
+const MSK_OFFSET = 3; // базовый пояс расписания школы, UTC+3
 const DAYS_RU = ['Вс','Пн','Вт','Ср','Чт','Пт','Сб'];
 const MONTHS_RU = ['янв','фев','мар','апр','мая','июн','июл','авг','сен','окт','ноя','дек'];
 
@@ -1026,7 +1026,7 @@ function seededRandom(seed) {
 }
 
 function generateSlots(date, count) {
-  // All possible 30-min slots from 10:00 to 19:30 Moscow time (20 slots)
+  // All possible 30-min slots from 10:00 to 19:30 base schedule time (20 slots)
   const allSlots = [];
   for (let h = 10; h < 20; h++) {
     allSlots.push(h * 60);       // :00
@@ -1044,13 +1044,13 @@ function generateSlots(date, count) {
 }
 
 function mskMinutesToLocal(mskMinutes, date) {
-  // Create a Date in Moscow time for this slot
+  // Create a Date in base schedule time for this slot
   const year = date.getFullYear();
   const month = date.getMonth();
   const day = date.getDate();
   const hours = Math.floor(mskMinutes / 60);
   const mins = mskMinutes % 60;
-  // Create UTC date from Moscow time
+  // Create UTC date from base schedule time
   const utcDate = new Date(Date.UTC(year, month, day, hours - MSK_OFFSET, mins));
   return utcDate;
 }
@@ -1116,7 +1116,6 @@ function renderSlotGrid() {
 
   const days = getNextWeekdays(10);
   const userTZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const isMsk = userTZ === 'Europe/Moscow';
   const DAYS_FULL = ['Воскресенье','Понедельник','Вторник','Среда','Четверг','Пятница','Суббота'];
 
   days.forEach(date => {
@@ -1149,7 +1148,7 @@ function renderSlotGrid() {
       const localTime = formatTime(localDate);
       const mskTime = formatMskTime(mskMin);
 
-      // Show local time only — no per-slot MSK note (timezone shown in bar above)
+      // Show local time only — timezone shown in the bar above
       el.innerHTML = '<div class="day" style="display:none">' + dayLabel + '</div><div class="time">' + localTime + '</div>';
 
       if (!isBooked) {
@@ -1209,9 +1208,7 @@ function renderSlotGrid() {
   tzBar.id = 'tzBar';
   tzBar.style.cssText = 'font-size:12px;font-weight:700;color:var(--purple-dark);text-align:center;' +
     'margin-bottom:10px;padding:9px 12px;background:var(--purple-light);border-radius:10px';
-  if (isMsk) {
-    TZ_LABEL = 'по Москве (МСК)';
-  } else {
+  {
     const offsetMin = -new Date().getTimezoneOffset();
     const sign = offsetMin >= 0 ? '+' : '−';
     const h = Math.floor(Math.abs(offsetMin) / 60);
@@ -1220,7 +1217,7 @@ function renderSlotGrid() {
     const city = userTZ.split('/').pop().replace(/_/g, ' ');
     TZ_LABEL = city + ', ' + utcLabel;
   }
-  tzBar.textContent = '🕐 Всё время указано ' + (isMsk ? TZ_LABEL : 'для вашего пояса: ' + TZ_LABEL);
+  tzBar.textContent = '🕐 Всё время указано для вашего пояса: ' + TZ_LABEL;
   grid.parentNode.insertBefore(tzBar, grid);
 
   loading.style.display = 'none';
@@ -1246,7 +1243,7 @@ function selectSlot(el) {
 }
 
 // ===== Файл календаря =====
-// Ключ слота — «2026-08-28_19:00» по Москве. МСК = UTC+3, поэтому в UTC минус 3 часа.
+// Ключ слота — «2026-08-28_19:00» в базовом поясе расписания (UTC+3) → в UTC минус 3 часа.
 function buildIcsDataUrl(slotKey, bookingId) {
   if (!slotKey || slotKey === 'no_time') return null;
   const [datePart, timePart] = slotKey.split('_');
@@ -1260,7 +1257,7 @@ function buildIcsDataUrl(slotKey, bookingId) {
   const lines = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//SAY YES English School//learn_easy//RU',
+    'PRODID:-//SAY YES English School//learn_easy//EN',
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
     'BEGIN:VEVENT',
@@ -1284,7 +1281,7 @@ function buildIcsDataUrl(slotKey, bookingId) {
 
 function fillConfirmation(slot, bookingId) {
   const tzEl = document.getElementById('cTz');
-  if (tzEl) tzEl.textContent = TZ_LABEL ? 'Время указано ' + (TZ_LABEL.indexOf('Москв') >= 0 ? TZ_LABEL : 'для вашего пояса: ' + TZ_LABEL) : '';
+  if (tzEl) tzEl.textContent = TZ_LABEL ? 'Время указано для вашего пояса: ' + TZ_LABEL : '';
   const ics = document.getElementById('icsBtn');
   const url = buildIcsDataUrl(slot, bookingId);
   if (ics) {
