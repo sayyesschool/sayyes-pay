@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { clientTimeLine, clientDateLine, clientWhen, localTimeString, localSlot } from '@/lib/time';
 import {
   getBooking, updateBooking, getBookedSlots, removeBookedSlot, addBookedSlot,
   setUserBooking, getUserBooking, clearUserBooking,
@@ -114,8 +115,8 @@ async function handleStart(chatId, username, args) {
       await sendMessage(chatId,
         `Добро пожаловать в SAY YES! English School!\n\n` +
         `У вас есть активная запись:\n` +
-        `Дата: ${booking.slotDate}\n` +
-        `Время (МСК): ${booking.slotMsk}\n\n` +
+        `${clientDateLine(booking)}\n` +
+        `${clientTimeLine(booking)}\n\n` +
         `Что хотите сделать?`,
         bookingActionsKeyboard(existingBookingId)
       );
@@ -141,7 +142,7 @@ async function handleCancel(chatId, bookingId, callbackQueryId) {
   await answerCallback(callbackQueryId);
   await sendMessage(chatId,
     `Вы уверены, что хотите отменить запись?\n\n` +
-    `Дата: ${booking.slotDate}\nВремя (МСК): ${booking.slotMsk}`,
+    `${clientDateLine(booking)}\n${clientTimeLine(booking)}`,
     confirmCancelKeyboard(bookingId)
   );
 }
@@ -186,7 +187,7 @@ async function handleReschedule(chatId, bookingId, callbackQueryId) {
   const rescheduleUrl = `https://www.sayyestoenglish.com/learn_easy?reschedule=${bookingId}`;
   await sendMessage(chatId,
     `🔄 <b>Перенос записи</b>\n\n` +
-    `Текущее время: ${booking.slotDate || '—'}, ${booking.slotMsk || '—'} (МСК)\n\n` +
+    `Текущее время: ${clientWhen(booking)}\n\n` +
     `Нажмите кнопку ниже, чтобы выбрать новое время в полном календаре:`,
     { reply_markup: { inline_keyboard: [
       [{ text: '📅 Выбрать новое время', url: rescheduleUrl }],
@@ -222,6 +223,7 @@ async function handleNewSlot(chatId, bookingId, newSlotKey, callbackQueryId, mes
     slot: newSlotKey,
     slotMsk: time,
     slotDate: newSlotDate,
+    slotLocal: localTimeString(booking, newSlotKey),
     reminded24h: false,
     reminded1h: false
   });
@@ -229,9 +231,9 @@ async function handleNewSlot(chatId, bookingId, newSlotKey, callbackQueryId, mes
   await answerCallback(callbackQueryId, 'Запись перенесена!');
   await editMessage(chatId, messageId,
     `Запись перенесена!\n\n` +
-    `Новая дата: ${newSlotDate}\n` +
-    `Время (МСК): ${time}\n` +
-    `Формат: Консультация · 30 мин · Zoom`,
+    `Новая дата: ${(localSlot(booking, newSlotKey) || {}).date || newSlotDate}\n` +
+    `${clientTimeLine(booking, newSlotKey)}\n` +
+    `Формат: Пробный урок · 30 мин · Zoom`,
     bookingActionsKeyboard(bookingId)
   );
 
