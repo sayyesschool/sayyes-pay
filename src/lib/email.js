@@ -12,6 +12,8 @@
 // Приоритет: POSTMARK_TOKEN → ZEPTOMAIL_TOKEN → SENDGRID_API_KEY → RESEND_API_KEY.
 // Не задан ни один — модуль молча ничего не делает и никогда не роняет запись.
 
+import { localSlot, tzLabel } from '@/lib/time';
+
 const BOT_LINK_BASE = 'https://t.me/SY_school_bot';
 
 const MAIL_FROM = () => process.env.MAIL_FROM || 'SAY YES <hello@sayyestoenglish.com>';
@@ -97,17 +99,22 @@ function confirmationHtml(booking, mode) {
   const hasSlot = booking.slot && booking.slot !== 'no_time';
   const name = booking.name ? String(booking.name).split(' ')[0] : '';
   const greeting = name ? `, ${esc(name)}` : '';
-  const clientTime = booking.slotLocal || booking.slotMsk || '';
-  const timeLabel = booking.slotLocal ? 'Время' : 'Время (МСК)';
+  // Время всегда в поясе клиента. «(МСК)» — только если пояс неизвестен.
+  const local = localSlot(booking);
+  const clientTime = (local && local.time) || booking.slotLocal || booking.slotMsk || '';
+  const clientDate = (local && local.date) || booking.slotDate || '—';
+  const timeLabel = (local || booking.slotLocal) ? 'Время' : 'Время (МСК)';
+  const tzNote = tzLabel(booking);
   const botLink = `${BOT_LINK_BASE}?start=${encodeURIComponent(booking.id || '')}`;
 
   const when = hasSlot
     ? `<tr><td style="padding-bottom:18px">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F3EDFA;border-radius:14px;padding:16px">
 <tr><td style="font-size:13px;color:#3D1B5E;line-height:1.9">
-<b>Дата:</b> ${esc(booking.slotDate || '—')}<br>
+<b>Дата:</b> ${esc(clientDate)}<br>
 <b>${timeLabel}:</b> ${esc(clientTime || '—')}<br>
-<b>Формат:</b> пробный урок · 30 минут · Zoom
+<b>Формат:</b> пробный урок · 30 минут · Zoom${tzNote ? `<br>
+<span style="color:#6b4b8a">Время указано ${esc(tzNote.indexOf('Москв') >= 0 ? tzNote : 'для вашего пояса: ' + tzNote)}</span>` : ''}
 </td></tr></table></td></tr>`
     : `<tr><td style="padding-bottom:18px;font-size:14px;line-height:1.6;color:#444">
 Мы подберём удобное время и напишем вам в течение рабочего дня.</td></tr>`;
@@ -257,7 +264,10 @@ export async function sendBookingConfirmation(booking, mode = 'new') {
   if (!booking || !booking.email) return { skipped: 'no email' };
 
   const hasSlot = booking.slot && booking.slot !== 'no_time';
-  const when = `${booking.slotDate || ''} ${booking.slotLocal || booking.slotMsk || ''}`.trim();
+  const localForSubject = localSlot(booking);
+  const when = localForSubject
+    ? `${localForSubject.date} ${localForSubject.time}`
+    : `${booking.slotDate || ''} ${booking.slotLocal || booking.slotMsk || ''}`.trim();
   const subject = mode === 'reschedule'
     ? `Запись перенесена — ${when}`.trim()
     : (hasSlot
