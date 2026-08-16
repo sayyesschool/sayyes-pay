@@ -112,6 +112,14 @@ async function linkByUsername(chatId, username) {
     const booking = mine[0];
     if (!booking) return null;
 
+    // У повторного клиента чат уже привязан к старой записи. Перепривязываем
+    // только если найденная заявка новее той, что висит на чате.
+    const currentId = await getUserBooking(chatId);
+    if (currentId) {
+      const current = await getBooking(currentId);
+      if (current && current.status === 'confirmed' && String(current.createdAt || '') >= String(booking.createdAt || '')) return null;
+    }
+
     await updateBooking(booking.id, { chatId: String(chatId) });
     await setUserBooking(chatId, booking.id);
     await clearPendingBooking(booking.id);
@@ -175,12 +183,11 @@ async function handleStart(chatId, username, args) {
   }
 
   // Regular /start without deep link
+  // Ссылка открылась в старом чате — payload не пришёл, ищем заявку сами
+  const linkedId = await linkByUsername(chatId, username);
+  if (linkedId) return;
+
   const existingBookingId = await getUserBooking(chatId);
-  if (!existingBookingId) {
-    // Ссылка открылась в старом чате — payload не пришёл, ищем заявку сами
-    const linkedId = await linkByUsername(chatId, username);
-    if (linkedId) return;
-  }
   if (existingBookingId) {
     const booking = await getBooking(existingBookingId);
     if (booking && booking.status === 'confirmed') {
@@ -710,7 +717,7 @@ export async function POST(request) {
       // Запасной путь для тех, у кого чат с ботом уже был: payload диплинка Telegram
       // им не отправляет. Сначала пробуем связать по username, затем принимаем код
       // заявки, отправленный текстом.
-      if (!isManager(username) && !(await getUserBooking(chatId))) {
+      if (!isManager(username)) {
         const autoLinkedId = await linkByUsername(chatId, username);
         if (autoLinkedId) return NextResponse.json({ ok: true });
 
