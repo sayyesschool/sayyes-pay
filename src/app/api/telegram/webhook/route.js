@@ -85,6 +85,50 @@ async function fireSchedule(booking) {
   }
 }
 
+// Телеграм-контакт из заявки и username в чате приводим к одному виду:
+// «@Ivan», «ivan», «t.me/ivan» → «ivan».
+function normHandle(value) {
+  if (!value) return '';
+  let s = String(value).trim().toLowerCase();
+  const cut = s.lastIndexOf('/');
+  if (cut >= 0) s = s.slice(cut + 1);
+  if (s.startsWith('@')) s = s.slice(1);
+  return s;
+}
+
+// Telegram отдаёт payload диплинка только при первом запуске чата: у того, кто
+// когда-то уже писал боту, кнопки «Начать» нет, payload не приходит, и заявка
+// остаётся без chat_id — ни подтверждения, ни напоминаний, ни Schedule.
+// Поэтому при любом обращении непривязанного человека ищем его свежую заявку
+// по username и связываем сами.
+async function linkByUsername(chatId, username) {
+  const handle = normHandle(username);
+  if (!handle) return null;
+  try {
+    const all = await getAllActiveBookings();
+    const mine = all
+      .filter(b => b && b.id && !b.chatId && normHandle(b.telegram) === handle)
+      .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+    const booking = mine[0];
+    if (!booking) return null;
+
+    await updateBooking(booking.id, { chatId: String(chatId) });
+    await setUserBooking(chatId, booking.id);
+    await clearPendingBooking(booking.id);
+    const linked = { ...booking, chatId: String(chatId) };
+
+    await sendMessage(chatId, formatBookingConfirmation(linked), bookingActionsKeyboard(booking.id));
+    await fireSchedule(linked);
+
+    const managerChatId = await getManagerChatId();
+    if (managerChatId) await sendMessage(managerChatId, formatBookingForManager(linked, 'new'));
+    return booking.id;
+  } catch (e) {
+    console.error('linkByUsername error:', e);
+    return null;
+  }
+}
+
 async function handleStart(chatId, username, args) {
   // Check if manager
   if (isManager(username)) {
@@ -132,6 +176,11 @@ async function handleStart(chatId, username, args) {
 
   // Regular /start without deep link
   const existingBookingId = await getUserBooking(chatId);
+  if (!existingBookingId) {
+    // Ссылка открылась в старом чате — payload не пришёл, ищем заявку сами
+    const linkedId = await linkByUsername(chatId, username);
+    if (linkedId) return;
+  }
   if (existingBookingId) {
     const booking = await getBooking(existingBookingId);
     if (booking && booking.status === 'confirmed') {
@@ -656,6 +705,22 @@ export async function POST(request) {
           'Записаться: https://www.sayyestoenglish.com/learn_easy'
         );
         return NextResponse.json({ ok: true });
+      }
+
+      // Запасной путь для тех, у кого чат с ботом уже был: payload диплинка Telegram
+      // им не отправляет. Сначала пробуем связать по username, затем принимаем код
+      // заявки, отправленный текстом.
+      if (!isManager(username) && !(await getUserBooking(chatId))) {
+        const autoLinkedId = await linkByUsername(chatId, username);
+        if (autoLinkedId) return NextResponse.json({ ok: true });
+
+        const typed = (text || '').trim().toLowerCase();
+        const code = typed.startsWith('/') ? typed.slice(1) : typed;
+        const isCode = code.length === 8 && [...code].every(ch => (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9'));
+        if (isCode && await getBooking(code)) {
+          await handleStart(chatId, username, code);
+          return NextResponse.json({ ok: true });
+        }
       }
 
       // Check if this is a relay message from user
