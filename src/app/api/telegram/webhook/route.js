@@ -173,6 +173,53 @@ async function handleStart(chatId, username, args) {
       return;
     }
 
+    // Токен с лендинга: заявки ещё нет, есть только идентификаторы клика. Заводим
+    // запись без времени — время подберёт менеджер, а атрибуция уже привязана к человеку.
+    const landing = await kvGet(`landing:${bookingId}`);
+    if (landing) {
+      const existing = landing.bookingId ? await getBooking(landing.bookingId) : null;
+      if (existing) {
+        // Повторный переход по той же ссылке: связка не одноразовая
+        await updateBooking(existing.id, { chatId: String(chatId) });
+        await setUserBooking(chatId, existing.id);
+        await sendMessage(chatId, formatBookingConfirmation({ ...existing, chatId: String(chatId) }), bookingActionsKeyboard(existing.id));
+        return;
+      }
+
+      const handle = username ? '@' + username : '';
+      const newId = generateBookingId();
+      const landingBooking = {
+        id: newId,
+        name: handle || 'Заявка с лендинга',
+        telegram: handle,
+        email: '',
+        slot: 'no_time',
+        slotMsk: '',
+        slotDate: '',
+        slotLocal: '',
+        chatId: String(chatId),
+        status: 'confirmed',
+        reminded24h: false,
+        reminded1h: false,
+        quizAnswers: {},
+        attribution: landing.attribution || {},
+        leadEventId: landing.leadEventId || '',
+        tz: (landing.attribution && landing.attribution.tz) || '',
+        createdAt: new Date().toISOString()
+      };
+      await createBooking(landingBooking);
+      await setUserBooking(chatId, newId);
+      await kvSet(`landing:${bookingId}`, { ...landing, bookingId: newId }, 90 * 24 * 60 * 60);
+
+      await sendMessage(chatId, 'Здравствуйте! Заявка принята — менеджер школы напишет вам здесь и подберёт время пробного урока.\n\nМожно сразу написать, в какие дни и часы вам удобно.');
+
+      const landingManagerChatId = await getManagerChatId();
+      if (landingManagerChatId) {
+        await sendMessage(landingManagerChatId, formatBookingForManager(landingBooking, 'new'), managerActionsKeyboard(newId));
+      }
+      return;
+    }
+
     // Booking not found - maybe expired
     await sendMessage(chatId,
       'Добро пожаловать в SAY YES! English School!\n\n' +
@@ -318,6 +365,8 @@ async function handleNewSlot(chatId, bookingId, newSlotKey, callbackQueryId, mes
 
   // Notify manager
   const managerChatId = await getManagerChatId();
+  if (updated) await fireSchedule(updated);
+
   if (managerChatId && updated) {
     await sendMessage(managerChatId, formatBookingForManager(updated, 'reschedule'));
   }
