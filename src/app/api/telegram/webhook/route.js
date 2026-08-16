@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { clientTimeLine, clientDateLine, clientWhen, localTimeString, localSlot } from '@/lib/time';
+import { clientTimeLine, clientDateLine, clientWhen, localTimeString, localSlot, slotKeyToDate } from '@/lib/time';
+import { sendSchedule } from '@/lib/meta';
 import {
   getBooking, updateBooking, getBookedSlots, removeBookedSlot, addBookedSlot,
   setUserBooking, getUserBooking, clearUserBooking,
@@ -65,6 +66,25 @@ function generateAvailableSlots(bookedSlots) {
 
 // --- Command handlers ---
 
+// Schedule для Meta — этап 2 оптимизации: человек дошёл до бота по своей ссылке
+// и увидел подтверждение записи. Шлём один раз на заявку: повторный /start по той
+// же ссылке не должен плодить события. Аналитика никогда не роняет обработчик.
+async function fireSchedule(booking) {
+  if (!booking || !booking.id || booking.scheduleSent) return;
+  try {
+    const extra = {};
+    const date = slotKeyToDate(booking.slot);
+    if (date) {
+      extra.slotIso = date.toISOString();
+      extra.hoursToLesson = Math.round((date.getTime() - Date.now()) / 3600000);
+    }
+    const res = await sendSchedule(booking, extra);
+    if (res && res.ok) await updateBooking(booking.id, { scheduleSent: true });
+  } catch (e) {
+    console.error('CAPI schedule error:', e);
+  }
+}
+
 async function handleStart(chatId, username, args) {
   // Check if manager
   if (isManager(username)) {
@@ -88,6 +108,9 @@ async function handleStart(chatId, username, args) {
       await updateBooking(bookingId, { chatId: String(chatId) });
       await setUserBooking(chatId, bookingId);
       await clearPendingBooking(bookingId);
+
+      // Meta: запись подтверждена в боте
+      await fireSchedule({ ...booking, chatId: String(chatId) });
 
       // Send confirmation to user
       await sendMessage(chatId,
