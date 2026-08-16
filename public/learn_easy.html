@@ -716,9 +716,11 @@ const ATTRIBUTION = (function () {
 
   // _fbc собираем СРАЗУ, а не при отправке: в нём зашит таймстамп клика,
   // и если собрать его через полчаса — время будет неверным.
+  // Свежий клик важнее старой куки: если в URL есть fbclid, строим fbc по нему,
+  // иначе атрибуция уедет на прошлую кампанию.
   const cookieFbc = readCookie('_fbc');
-  if (cookieFbc) fresh.fbc = cookieFbc;
-  else if (fbclid && !saved.fbc) fresh.fbc = 'fb.1.' + Date.now() + '.' + fbclid;
+  if (fbclid) fresh.fbc = 'fb.1.' + Date.now() + '.' + fbclid;
+  else if (cookieFbc && !saved.fbc) fresh.fbc = cookieFbc;
 
   const merged = Object.assign({}, saved, fresh);
   merged.savedAt = saved.savedAt || Date.now();
@@ -731,7 +733,8 @@ const ATTRIBUTION = (function () {
       const fbp = readCookie('_fbp');
       const fbc = readCookie('_fbc');
       if (fbp) out.fbp = fbp;
-      if (fbc) out.fbc = fbc;
+      // Собранный при клике fbc не затираем кукой — она может быть от прошлого клика
+      if (fbc && !out.fbc) out.fbc = fbc;
       out.tz = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
       return out;
     }
