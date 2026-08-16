@@ -1,11 +1,12 @@
-// Meta Conversions API — серверный Purchase.
+// Meta Conversions API — серверные события.
 //
-// Оплата приходит вебхуком, то есть в браузере в этот момент никого нет и пиксель
-// сработать не может. Без серверного события Мета не знает, какая реклама принесла
-// деньги, и оптимизирует показы вслепую — по заявкам, а не по оплатам.
+// Цикл сделки 7–30 дней, поэтому оптимизация идёт по событию дня 0 (Lead, дальше
+// Schedule), а Purchase уходит для измерения и аудиторий — он структурно вне
+// семидневного окна атрибуции и доставку не поведёт.
 //
-// Матчинг делается по хешам почты и телефона из заявки, плюс _fbp/_fbc/fbclid,
-// которые воронка сохраняет вместе с заявкой (см. ATTRIBUTION в learn_easy.html).
+// Каждое событие дублируется браузером и сервером с одинаковым event_id:
+// браузерное ловит тех, у кого не режется пиксель, серверное — остальных,
+// Мета склеивает их по event_id и считает один раз.
 //
 // Всё под флагом: без META_CAPI_TOKEN модуль молча ничего не делает.
 
@@ -46,11 +47,32 @@ function hashName(name) {
 }
 
 // _fbc собирается из fbclid по формату Меты, если куки не досталось.
+// Воронка делает это в момент клика — там таймстамп честный; здесь запасной вариант.
 function deriveFbc(attribution) {
   if (!attribution) return null;
   if (attribution.fbc) return attribution.fbc;
   if (!attribution.fbclid) return null;
   return `fb.1.${Date.now()}.${attribution.fbclid}`;
+}
+
+// fbc, fbp, ip и user-agent НЕ хешируются — частая ошибка, из-за которой
+// падает Event Match Quality.
+function buildUserData({ email, phone, name, externalId, attribution }) {
+  const attr = attribution || {};
+  const userData = {};
+  const em = hashEmail(email);
+  const ph = hashPhone(phone);
+  const fn = hashName(name ? String(name).split(' ')[0] : null);
+  if (em) userData.em = [em];
+  if (ph) userData.ph = [ph];
+  if (fn) userData.fn = [fn];
+  if (attr.fbp) userData.fbp = attr.fbp;
+  const fbc = deriveFbc(attr);
+  if (fbc) userData.fbc = fbc;
+  if (externalId) userData.external_id = [sha256(externalId)];
+  if (attr.ip) userData.client_ip_address = attr.ip;
+  if (attr.ua) userData.client_user_agent = attr.ua;
+  return userData;
 }
 
 // Ищем заявку по почте или телефону, чтобы достать идентификаторы клика.
@@ -81,58 +103,41 @@ export async function findAttributionByContact({ email, phone }) {
   }
 }
 
-/**
- * Отправляет Purchase в Conversions API.
- * Никогда не бросает наружу — оплата важнее аналитики.
- *
- * @param {object} p
- * @param {string} p.email        почта плательщика
- * @param {string} [p.phone]      телефон, если известен
- * @param {number} p.value        сумма
- * @param {string} p.currency     валюта, например 'EUR'
- * @param {string} [p.eventId]    для дедупликации с браузерным событием
- * @param {string} [p.sourceUrl]  страница оплаты
- * @param {string} [p.contentName] что купили
- */
-export async function sendPurchase(p = {}) {
+// Единая отправка. Никогда не бросает наружу — аналитика не должна ронять заявку.
+export async function sendCapiEvent({
+  eventName,
+  eventId,
+  eventTime,
+  actionSource = 'website',
+  sourceUrl,
+  email,
+  phone,
+  name,
+  externalId,
+  attribution,
+  customData
+}) {
   const token = CAPI_TOKEN();
   if (!token) return { skipped: 'no META_CAPI_TOKEN' };
 
   try {
-    const found = await findAttributionByContact({ email: p.email, phone: p.phone });
-    const attribution = (found && found.attribution) || {};
-    const booking = (found && found.booking) || null;
-
-    const userData = {};
-    const em = hashEmail(p.email);
-    const ph = hashPhone(p.phone || (booking && booking.telegram));
-    const fn = hashName(booking && booking.name ? String(booking.name).split(' ')[0] : null);
-    if (em) userData.em = [em];
-    if (ph) userData.ph = [ph];
-    if (fn) userData.fn = [fn];
-    if (attribution.fbp) userData.fbp = attribution.fbp;
-    const fbc = deriveFbc(attribution);
-    if (fbc) userData.fbc = fbc;
-    if (booking && booking.id) userData.external_id = [sha256(booking.id)];
+    const userData = buildUserData({ email, phone, name, externalId, attribution });
 
     // Без единого идентификатора событие бесполезно — Мета его не сматчит.
     if (!userData.em && !userData.ph && !userData.fbp && !userData.fbc) {
-      return { skipped: 'no identifiers' };
+      return { skipped: 'no identifiers', eventName };
     }
 
     const event = {
-      event_name: 'Purchase',
-      event_time: Math.floor(Date.now() / 1000),
-      action_source: 'website',
-      event_source_url: p.sourceUrl || 'https://www.sayyestoenglish.com/',
+      event_name: eventName,
+      event_time: eventTime || Math.floor(Date.now() / 1000),
+      action_source: actionSource,
       user_data: userData,
-      custom_data: {
-        value: Number(p.value) || 0,
-        currency: (p.currency || 'EUR').toUpperCase()
-      }
+      custom_data: customData || {}
     };
-    if (p.eventId) event.event_id = String(p.eventId);
-    if (p.contentName) event.custom_data.content_name = String(p.contentName);
+    if (eventId) event.event_id = String(eventId);
+    // Для system_generated страница не обязательна и Мета её игнорирует
+    if (sourceUrl && actionSource !== 'system_generated') event.event_source_url = sourceUrl;
 
     const body = { data: [event] };
     if (TEST_EVENT_CODE()) body.test_event_code = TEST_EVENT_CODE();
@@ -145,12 +150,95 @@ export async function sendPurchase(p = {}) {
     });
     const data = await resp.json().catch(() => ({}));
     if (!resp.ok) {
-      console.error('CAPI Purchase error:', resp.status, data);
-      return { ok: false, status: resp.status, data };
+      console.error(`CAPI ${eventName} error:`, resp.status, data);
+      return { ok: false, eventName, status: resp.status, data };
     }
-    return { ok: true, matched: !!booking, data };
+    return { ok: true, eventName, data };
   } catch (e) {
-    console.error('CAPI Purchase failed:', e);
-    return { ok: false, error: String(e) };
+    console.error(`CAPI ${eventName} failed:`, e);
+    return { ok: false, eventName, error: String(e) };
   }
+}
+
+/**
+ * Lead — запись на пробный урок оформлена. Оптимизация, этап 1.
+ * Браузер шлёт такое же событие с тем же eventId, Мета склеит их в одно.
+ */
+export async function sendLead(booking, extra = {}) {
+  if (!booking) return { skipped: 'no booking' };
+  const answers = booking.quizAnswers || {};
+  return sendCapiEvent({
+    eventName: 'Lead',
+    eventId: booking.leadEventId,
+    externalId: booking.id,
+    email: booking.email,
+    phone: booking.telegram,
+    name: booking.name,
+    attribution: booking.attribution,
+    sourceUrl: extra.sourceUrl || (booking.attribution && booking.attribution.landing_url),
+    customData: {
+      content_name: 'trial_booking',
+      content_category: (booking.attribution && booking.attribution.landing) || 'funnel',
+      lead_level: answers['Уровень'] || '',
+      lead_goal: answers['Цель'] || '',
+      lead_country: answers['Страна'] || '',
+      lead_format: answers['Формат'] || '',
+      value: 0,
+      currency: 'EUR'
+    }
+  });
+}
+
+/**
+ * Schedule — человек подтвердил запись в боте. Оптимизация, этап 2.
+ * hours_to_lesson нужен, чтобы проверить гипотезу «чем ближе слот, тем выше доходимость».
+ */
+export async function sendSchedule(booking, extra = {}) {
+  if (!booking) return { skipped: 'no booking' };
+  const custom = {
+    content_name: 'trial_confirmed',
+    value: 0,
+    currency: 'EUR'
+  };
+  if (extra.slotIso) custom.slot_datetime = extra.slotIso;
+  if (typeof extra.hoursToLesson === 'number') custom.hours_to_lesson = extra.hoursToLesson;
+  return sendCapiEvent({
+    eventName: 'Schedule',
+    eventId: booking.scheduleEventId || (booking.id ? 'sch_' + booking.id : undefined),
+    externalId: booking.id,
+    email: booking.email,
+    phone: booking.telegram,
+    name: booking.name,
+    attribution: booking.attribution,
+    sourceUrl: extra.sourceUrl || 'https://www.sayyestoenglish.com/learn_easy',
+    customData: custom
+  });
+}
+
+/**
+ * Purchase — фактическая оплата, обычно через 7–30 дней после клика.
+ * action_source именно system_generated: отдельный Offline Conversions API
+ * закрыт в мае 2025, серверные события идут через обычный CAPI с этим значением.
+ */
+export async function sendPurchase(p = {}) {
+  const found = await findAttributionByContact({ email: p.email, phone: p.phone });
+  const booking = (found && found.booking) || null;
+  const attribution = (found && found.attribution) || {};
+
+  return sendCapiEvent({
+    eventName: 'Purchase',
+    eventId: p.eventId,
+    actionSource: 'system_generated',
+    email: p.email,
+    phone: p.phone || (booking && booking.telegram),
+    name: booking && booking.name,
+    externalId: booking && booking.id,
+    attribution,
+    customData: {
+      value: Number(p.value) || 0,
+      currency: (p.currency || 'EUR').toUpperCase(),
+      ...(p.contentName ? { content_name: String(p.contentName) } : {}),
+      ...(p.orderId ? { order_id: String(p.orderId) } : {})
+    }
+  });
 }
