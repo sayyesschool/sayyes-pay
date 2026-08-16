@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getAllActiveBookings, kvGet, getManagerChatId } from '@/lib/redis';
 import { sendMessage } from '@/lib/telegram';
+import { slotKeyToDate } from '@/lib/time';
 
 const CRON_SECRET = process.env.CRON_SECRET;
 const BOT_TOKEN = () => process.env.TELEGRAM_BOT_TOKEN;
@@ -39,6 +40,59 @@ async function sendDocument(chatId, csvContent, filename, caption) {
   }
 }
 
+
+// Подписи шагов. Порядок — как в воронке; старые имена оставлены, чтобы читались
+// исторические дни. Ключи, которых здесь нет, всё равно попадут в сводку —
+// именно из-за жёсткого списка расхождение имён однажды спрятало все цифры.
+const STEP_LABELS = [
+  ['landing', 'Лендинг'],
+  ['language', 'Язык общения'],
+  ['country', 'Страна'],
+  ['q_level', 'Уровень'],
+  ['q_goal', 'Цель'],
+  ['social_proof', 'Отзывы и метод'],
+  ['q_time', 'Часы в неделю'],
+  ['q_format', 'Формат'],
+  ['q_readiness', 'Готовность'],
+  ['progress_plan', 'План прогресса'],
+  ['q_age', 'Возраст'],
+  ['differentiation', 'Кому подойдёт'],
+  ['value_reinforcement', 'Что будет на уроке'],
+  ['contacts', 'Контакты'],
+  ['time_slots', 'Выбор времени'],
+  ['confirmation', 'Подтверждение'],
+  ['russian_only', 'Отсев по языку'],
+  ['qualification', 'Квалификация (старое имя)'],
+  ['q1_level', 'Уровень (старое имя)'],
+  ['q2_goal', 'Цель (старое имя)'],
+  ['q3_time', 'Часы (старое имя)'],
+  ['q4_format', 'Формат (старое имя)'],
+  ['q5_readiness', 'Готовность (старое имя)'],
+  ['q6_age', 'Возраст (старое имя)'],
+  ['q7_country', 'Страна (старое имя)'],
+  ['q8_language', 'Язык (старое имя)']
+];
+
+function funnelBlock(trackData) {
+  const data = trackData || {};
+  const keys = Object.keys(data);
+  if (keys.length === 0) {
+    return '<b>Воронка сегодня:</b>\\nсчётчики пусты — за день никто не открывал воронку';
+  }
+  const used = new Set();
+  const lines = [];
+  for (const [key, label] of STEP_LABELS) {
+    if (data[key] === undefined) continue;
+    used.add(key);
+    lines.push(\`• \${label}: \${data[key]}\`);
+  }
+  // Всё, чего нет в списке подписей, показываем как есть — чтобы не потерять
+  for (const key of keys) {
+    if (!used.has(key)) lines.push(\`• \${key}: \${data[key]}\`);
+  }
+  return '<b>Воронка сегодня:</b>\\n' + lines.join('\\n');
+}
+
 export async function GET(request) {
   const authHeader = request.headers.get('authorization');
   if (CRON_SECRET && authHeader !== `Bearer ${CRON_SECRET}`) {
@@ -60,7 +114,16 @@ export async function GET(request) {
       const tg = b.telegram || '';
       return tg.startsWith('+') || /^\d{7,}$/.test(tg.replace(/\s/g, ''));
     }).length;
-    const totalActive = bookings.length;
+    // Раньше здесь было общее число активных записей — в него попадали и давно
+    // прошедшие уроки, и цифра только росла. Считаем то, что реально впереди.
+    const now = Date.now();
+    const upcoming = bookings.filter(b => {
+      if (b.status && b.status !== 'confirmed') return false;
+      const d = slotKeyToDate(b.slot);
+      return d && d.getTime() > now;
+    });
+    const upcomingCount = upcoming.length;
+    const awaitingTime = bookings.filter(b => (!b.slot || b.slot === 'no_time') && (!b.status || b.status === 'confirmed')).length;
     // Ключевые метрики, которых раньше не было в сводке
     const startedBot = todayBookings.filter(b => !!b.chatId).length;
     const noTime = todayBookings.filter(b => !b.slot || b.slot === 'no_time').length;
@@ -77,20 +140,9 @@ export async function GET(request) {
       `<b>Нажали «Нет удобного времени»:</b> ${noTime}\n` +
       `<b>Запустили бота («Начать»):</b> ${startedBot} из ${totalToday}\n` +
       `<b>Из них без Telegram аккаунта:</b> ${withoutTg}\n` +
-      `<b>Всего активных записей:</b> ${totalActive}\n\n` +
-      `<b>Воронка сегодня:</b>\n` +
-      `• Лендинг: ${trackData.landing || 0}\n` +
-      `• Квалификация: ${trackData.qualification || 0}\n` +
-      `• Вопрос 1 (уровень): ${trackData.q1_level || 0}\n` +
-      `• Вопрос 2 (цель): ${trackData.q2_goal || 0}\n` +
-      `• Social proof: ${trackData.social_proof || 0}\n` +
-      `• Вопрос 3 (время): ${trackData.q3_time || 0}\n` +
-      `• Вопрос 4 (формат): ${trackData.q4_format || 0}\n` +
-      `• Вопрос 5 (готовность): ${trackData.q5_readiness || 0}\n` +
-      `• План прогресса: ${trackData.progress_plan || 0}\n` +
-      `• Контакты: ${trackData.contacts || 0}\n` +
-      `• Выбор времени: ${trackData.time_slots || 0}\n` +
-      `• Подтверждение: ${trackData.confirmation || 0}`;
+      `<b>Предстоящих уроков:</b> ${upcomingCount}\n` +
+      `<b>Ждут подбора времени:</b> ${awaitingTime}\n\n` +
+      funnelBlock(trackData);
 
     // Build CSV for today's bookings
     let csvContent = null;
@@ -151,7 +203,7 @@ export async function GET(request) {
       sentCount++;
     }
 
-    return NextResponse.json({ ok: true, totalToday, totalActive, sentTo: sentCount, timestamp: new Date().toISOString() });
+    return NextResponse.json({ ok: true, totalToday, upcoming: upcomingCount, awaitingTime, sentTo: sentCount, timestamp: new Date().toISOString() });
   } catch (e) {
     console.error('Daily summary error:', e);
     return NextResponse.json({ error: e.message }, { status: 500 });
