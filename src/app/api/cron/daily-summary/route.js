@@ -77,20 +77,20 @@ function funnelBlock(trackData) {
   const data = trackData || {};
   const keys = Object.keys(data);
   if (keys.length === 0) {
-    return '<b>Воронка сегодня:</b>\\nсчётчики пусты — за день никто не открывал воронку';
+    return '<b>Воронка сегодня:</b>\nсчётчики пусты — за день никто не открывал воронку';
   }
   const used = new Set();
   const lines = [];
   for (const [key, label] of STEP_LABELS) {
     if (data[key] === undefined) continue;
     used.add(key);
-    lines.push(\`• \${label}: \${data[key]}\`);
+    lines.push(`• ${label}: ${data[key]}`);
   }
   // Всё, чего нет в списке подписей, показываем как есть — чтобы не потерять
   for (const key of keys) {
-    if (!used.has(key)) lines.push(\`• \${key}: \${data[key]}\`);
+    if (!used.has(key)) lines.push(`• ${key}: ${data[key]}`);
   }
-  return '<b>Воронка сегодня:</b>\\n' + lines.join('\\n');
+  return '<b>Воронка сегодня:</b>\n' + lines.join('\n');
 }
 
 export async function GET(request) {
