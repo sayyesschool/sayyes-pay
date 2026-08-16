@@ -76,6 +76,32 @@ export function buildIcs(slotKey, bookingId) {
   ].join('\r\n');
 }
 
+// Ответы из воронки лежат в booking.quizAnswers с теми же ключами, что на экранах.
+// Общая фраза «аптека, врач, школа ребёнка или работа» звучала странно именно потому,
+// что перечисляла всё сразу. Берём цель человека и говорим про неё одну.
+const GOAL_LINES = [
+  [/карьер|работ/i, 'разберём рабочую ситуацию: созвон, письмо или короткая презентация'],
+  [/переезд|за границей/i, 'разберём бытовую ситуацию: приём у врача, аренда, школа ребёнка'],
+  [/свободное общение/i, 'поговорим на бытовые темы — те, что встречаются каждый день'],
+  [/уч[её]б/i, 'разберём учебную ситуацию: лекция, статья или экзамен'],
+  [/закрыть этот вопрос/i, 'начнём с того, что даётся тяжелее всего']
+];
+
+function lessonLine(booking) {
+  const goal = (booking.quizAnswers && booking.quizAnswers['Цель']) || '';
+  for (const [re, line] of GOAL_LINES) {
+    if (re.test(goal)) return line;
+  }
+  return 'разберём ситуацию, которая ближе всего к вашей задаче';
+}
+
+// «Преподаватель заранее знает ваш уровень» — только если уровень действительно есть
+function levelLine(booking) {
+  const level = (booking.quizAnswers && booking.quizAnswers['Уровень']) || '';
+  if (!level) return '';
+  return `Преподаватель заранее увидит ваши ответы — уровень «${esc(level.toLowerCase())}» и цель, — так что вводных вопросов не будет.`;
+}
+
 function esc(s) {
   return String(s == null ? '' : s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -130,8 +156,9 @@ ${when}
 <b>Что дальше</b><br>
 ✔ Ссылку на Zoom пришлём за час до начала<br>
 ✔ Перенести или отменить можно в любой момент<br>
-✔ На уроке разберём вашу реальную ситуацию — аптека, врач, школа ребёнка или работа
+✔ На уроке ${lessonLine(booking)}
 </td></tr>
+${levelLine(booking) ? `<tr><td style="padding-bottom:18px;font-size:13px;color:#666;line-height:1.6">${levelLine(booking)}</td></tr>` : ''}
 ${hasSlot ? `<tr><td style="padding-bottom:18px;font-size:13px;color:#666;line-height:1.6">
 Файл во вложении добавляет урок в календарь с напоминанием за час.</td></tr>` : ''}
 <tr><td style="padding-bottom:6px">
