@@ -6,6 +6,7 @@ import {
 } from '@/lib/redis';
 import { makeDeepLink, sendMessage, formatBookingForManager, managerActionsKeyboard, MANAGER_USERNAME } from '@/lib/telegram';
 import { sendBookingConfirmation } from '@/lib/email';
+import { sendLead } from '@/lib/meta';
 
 // Generate short unique booking ID
 function generateBookingId() {
@@ -39,7 +40,14 @@ async function verifyTurnstile(token) {
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { name, telegram, email, slot, slotMsk, slotDate, slotLocal, turnstileToken, quizAnswers, attribution } = body;
+    const { name, telegram, email, slot, slotMsk, slotDate, slotLocal, turnstileToken, quizAnswers, attribution, leadEventId } = body;
+
+    // IP и User-Agent берём из заголовков запроса: клиент их не знает, а Мете
+    // они нужны как есть, без хеширования — это заметно поднимает матчинг.
+    const headers = request.headers;
+    const forwarded = headers.get('x-forwarded-for') || '';
+    const clientIp = forwarded.split(',')[0].trim() || headers.get('x-real-ip') || '';
+    const clientUa = headers.get('user-agent') || '';
 
     // Validate
     if (!name) {
@@ -83,7 +91,10 @@ export async function POST(request) {
       reminded24h: false,
       reminded1h: false,
       quizAnswers: quizAnswers || {},
-      attribution: attribution || {},
+      attribution: { ...(attribution || {}), ip: clientIp, ua: clientUa },
+      // Один и тот же id уходит с браузерным и серверным Lead — по нему Мета
+      // склеивает два события в одно
+      leadEventId: leadEventId || generateBookingId() + '-' + Date.now(),
       // Пояс клиента дублируем на верхний уровень: по нему все сообщения
       // пересчитывают время слота, в том числе после переноса из бота
       tz: (attribution && attribution.tz) || '',
@@ -92,6 +103,14 @@ export async function POST(request) {
 
     await createBooking(booking);
     await setPendingBooking(bookingId, booking);
+
+    // Lead в Meta — событие дня 0, по нему идёт оптимизация кампаний.
+    // Браузер шлёт такое же с тем же leadEventId, Мета считает их за одно.
+    try {
+      await sendLead(booking);
+    } catch (e) {
+      console.error('CAPI lead error:', e);
+    }
 
     // Письмо с подтверждением. Единственный канал, который не зависит от того,
     // нажал ли человек «Начать» в боте. Без RESEND_API_KEY вызов молча пропускается.
