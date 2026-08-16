@@ -116,7 +116,7 @@ function layout(inner) {
 ${inner}
 <tr><td style="padding-top:22px;border-top:1px solid #eee;font-size:12px;color:#888;line-height:1.6">
 Если письмо пришло по ошибке — просто не отвечайте на него.<br>
-SAY YES English School · <a href="https://sayyes.school" style="color:#5B2D8E">sayyes.school</a>
+SAY YES English School · <a href="https://www.sayyestoenglish.com/" style="color:#5B2D8E">sayyestoenglish.com</a>
 </td></tr>
 </table></td></tr></table></body></html>`;
 }
