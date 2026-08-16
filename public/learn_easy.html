@@ -685,16 +685,21 @@ const STEP_NAMES = {
 
 // ===== Идентификаторы клика для Conversions API =====
 // Без них нельзя передать оплату обратно в Мету и посчитать реальный CAC.
-// Читаем один раз при загрузке и держим в sessionStorage: человек может
-// пройти воронку в несколько заходов, а ?fbclid= остаётся только в первом URL.
+// Читаем один раз при загрузке и держим 90 дней в localStorage: человек может
+// вернуться через недели, а ?fbclid= остаётся только в первом URL.
 const ATTRIBUTION = (function () {
   const KEY = 'sy_attr';
+  const TTL_MS = 90 * 24 * 60 * 60 * 1000;
   function readCookie(name) {
     const m = document.cookie.match(new RegExp('(^|; )' + name + '=([^;]*)'));
     return m ? decodeURIComponent(m[2]) : '';
   }
   let saved = {};
-  try { saved = JSON.parse(sessionStorage.getItem(KEY) || '{}'); } catch (e) { saved = {}; }
+  try {
+    const raw = JSON.parse(localStorage.getItem(KEY) || sessionStorage.getItem(KEY) || '{}');
+    // Просроченное храниться не должно: 90 дней — предел окна атрибуции
+    saved = (raw && raw.savedAt && Date.now() - raw.savedAt > TTL_MS) ? {} : raw;
+  } catch (e) { saved = {}; }
 
   const params = new URLSearchParams(window.location.search);
   const fresh = {};
@@ -707,9 +712,17 @@ const ATTRIBUTION = (function () {
   });
   if (!saved.landing_url) fresh.landing_url = window.location.href.slice(0, 500);
   if (!saved.referrer && document.referrer) fresh.referrer = document.referrer.slice(0, 300);
+  fresh.landing = 'learn_easy';
+
+  // _fbc собираем СРАЗУ, а не при отправке: в нём зашит таймстамп клика,
+  // и если собрать его через полчаса — время будет неверным.
+  const cookieFbc = readCookie('_fbc');
+  if (cookieFbc) fresh.fbc = cookieFbc;
+  else if (fbclid && !saved.fbc) fresh.fbc = 'fb.1.' + Date.now() + '.' + fbclid;
 
   const merged = Object.assign({}, saved, fresh);
-  try { sessionStorage.setItem(KEY, JSON.stringify(merged)); } catch (e) {}
+  merged.savedAt = saved.savedAt || Date.now();
+  try { localStorage.setItem(KEY, JSON.stringify(merged)); } catch (e) {}
 
   // _fbp и _fbc ставит сам пиксель — читаем при отправке, не при загрузке
   return {
@@ -724,6 +737,16 @@ const ATTRIBUTION = (function () {
     }
   };
 })();
+
+// Один и тот же id уходит с браузерным и серверным Lead — по нему Мета
+// склеивает два события в одно и не считает лид дважды.
+function makeEventId() {
+  if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+    const r = Math.random() * 16 | 0;
+    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+  });
+}
 
 // Reschedule mode (from bot link: ?reschedule=BOOKING_ID)
 const _urlParams = new URLSearchParams(window.location.search);
@@ -926,15 +949,28 @@ function updateProgressChart() {
   }
 }
 
+// Порядок экранов для step_number: по нему считается отвал
+const STEP_ORDER = ['landing','language','country','q_level','q_goal','social_proof',
+  'q_time','q_format','q_readiness','progress_plan','q_age','differentiation',
+  'value_reinforcement','contacts','time_slots','confirmation'];
+const FUNNEL_VERSION = 'v2';
+
 function trackStep(stepId) {
   const stepName = STEP_NAMES[stepId] || ('step_' + stepId);
+  const stepNumber = STEP_ORDER.indexOf(stepName) + 1;
   // Meta Pixel
   if (typeof fbq === 'function') {
-    fbq('trackCustom', 'FunnelStep', { step: stepName, step_id: stepId });
+    fbq('trackCustom', 'FunnelStep', {
+      step: stepName, step_id: stepId,
+      step_name: stepName, step_number: stepNumber, funnel_version: FUNNEL_VERSION
+    });
   }
   // GA4
   if (typeof gtag === 'function') {
-    gtag('event', 'funnel_step', { step_name: stepName, step_id: String(stepId) });
+    gtag('event', 'funnel_step', {
+      step_name: stepName, step_id: String(stepId),
+      step_number: stepNumber, funnel_version: FUNNEL_VERSION
+    });
   }
   // Own tracker
   fetch('/api/track', {
@@ -1354,6 +1390,9 @@ async function submitBooking() {
   btn.classList.add('disabled');
 
   // Get Turnstile token (only if real sitekey is configured)
+  // Один id на попытку записи: уйдёт и в браузерный Lead, и на сервер
+  const leadEventId = makeEventId();
+
   let turnstileToken = '';
   try {
     if (typeof turnstile !== 'undefined' && window.TURNSTILE_SITE_KEY) {
@@ -1384,7 +1423,8 @@ async function submitBooking() {
         slotLocal: selectedSlot.localTime || '',
         turnstileToken,
         quizAnswers,
-        attribution: ATTRIBUTION.snapshot()
+        attribution: ATTRIBUTION.snapshot(),
+        leadEventId
       })
     });
 
@@ -1419,7 +1459,20 @@ async function submitBooking() {
         fillConfirmation(selectedSlot.key, data.bookingId);
       }
       go(14);
-      if (typeof fbq === 'function') fbq('track', 'CompleteRegistration');
+      // Lead — событие дня 0, по нему оптимизируются кампании.
+      // Тот же leadEventId ушёл на сервер, Мета склеит браузерное и серверное.
+      if (typeof fbq === 'function') {
+        fbq('track', 'Lead', {
+          content_name: 'trial_booking',
+          content_category: 'funnel',
+          lead_level: quizAnswers['Уровень'] || '',
+          lead_goal: quizAnswers['Цель'] || '',
+          lead_country: quizAnswers['Страна'] || '',
+          lead_format: quizAnswers['Формат'] || '',
+          value: 0,
+          currency: 'EUR'
+        }, { eventID: leadEventId });
+      }
     } else {
       const data = await resp.json().catch(() => ({}));
       alert(data.error || 'Произошла ошибка. Попробуйте ещё раз.');
