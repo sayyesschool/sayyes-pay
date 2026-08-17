@@ -99,7 +99,7 @@ function lessonLine(booking) {
 function levelLine(booking) {
   const level = (booking.quizAnswers && booking.quizAnswers['Уровень']) || '';
   if (!level) return '';
-  return `Преподаватель заранее увидит ваши ответы — уровень «${esc(level.toLowerCase())}» и цель, — так что вводных вопросов не будет.`;
+  return `Ваши ответы мы передадим преподавателю — на уроке он определит ваш текущий уровень и цели.`;
 }
 
 function esc(s) {
@@ -155,8 +155,7 @@ ${when}
 <tr><td style="font-size:14px;line-height:1.7;color:#444;padding-bottom:18px">
 <b>Что дальше</b><br>
 ✔ Ссылку на Zoom пришлём за час до начала<br>
-✔ Перенести или отменить можно в любой момент<br>
-✔ На уроке ${lessonLine(booking)}
+✔ Перенести или отменить можно в любой момент
 </td></tr>
 ${levelLine(booking) ? `<tr><td style="padding-bottom:18px;font-size:13px;color:#666;line-height:1.6">${levelLine(booking)}</td></tr>` : ''}
 ${hasSlot ? `<tr><td style="padding-bottom:18px;font-size:13px;color:#666;line-height:1.6">
