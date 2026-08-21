@@ -1,6 +1,6 @@
 // Telegram Bot API helpers
 
-import { clientTimeLine, clientDateLine, localSlot, tzLabel, tzNoteFor } from '@/lib/time';
+import { clientTimeLine, clientDateLine, clientWhen, localSlot, tzLabel, tzNoteFor } from '@/lib/time';
 
 const BOT_TOKEN = () => process.env.TELEGRAM_BOT_TOKEN;
 const BOT_USERNAME = 'SY_school_bot';
@@ -204,7 +204,24 @@ export function formatReminder(booking, hoursLeft) {
     `${clientDateLine(booking)}\n` +
     `${clientTimeLine(booking)}\n` +
     `Формат: Zoom · 30 мин\n\n` +
+    (hoursLeft === 1 ? `В конце урока преподаватель отдаст вам памятку «Как заговорить без стеснения».\n\n` : '') +
     `Если нужно перенести или отменить, нажмите кнопку ниже.`;
+}
+
+// Памятка «Как заговорить без стеснения» — отдельное касание перед уроком.
+// Строкой внутри подтверждения она терялась среди дат и кнопок, поэтому уходит
+// своим сообщением. Задача у него одна: довести человека до бесплатного урока.
+export function formatHandout(booking) {
+  const first = booking && booking.name ? String(booking.name).trim().split(' ')[0] : '';
+  const opening = first ? first + ', ещё одно' : 'Ещё одно';
+  return opening + ` — отдельным сообщением, чтобы не потерялось среди подтверждений.\n\n` +
+    `Кроме разбора вашего уровня вы унесёте с урока памятку «Как заговорить без стеснения». Внутри:\n` +
+    `— 5 приёмов, которые снимают языковой барьер\n` +
+    `— 8 фраз, которые не дают разговору оборваться\n` +
+    `— план на неделю: 10 минут в день, чтобы приёмы вошли в привычку\n\n` +
+    `Всего 4 страницы — первое упражнение можно сделать в тот же вечер.\n\n` +
+    `Отдельно мы её не рассылаем — памятку получают те, кто был на уроке. И преподаватель отметит прямо в ней, с каких приёмов начинать именно вам: после урока он уже будет знать, что именно мешает вам говорить.\n\n` +
+    `Ваш урок: ${clientWhen(booking)}. Если планы поменялись — напишите сюда, перенесём на другое время.`;
 }
 
 // --- Deep link ---
