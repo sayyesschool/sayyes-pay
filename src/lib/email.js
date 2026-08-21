@@ -323,6 +323,68 @@ export async function sendBookingConfirmation(booking, mode = 'new') {
   }
 }
 
+// Отдельное письмо про памятку. Не строка в подтверждении: там его не замечали.
+// Единственная задача касания — довести человека до бесплатного урока.
+function handoutHtml(booking) {
+  const first = booking.name ? esc(String(booking.name).trim().split(' ')[0]) : '';
+  const hello = first ? `Здравствуйте, ${first}!` : `Здравствуйте!`;
+  const local = localSlot(booking);
+  const when = local ? `${local.date}, ${local.time}` : `${booking.slotDate || ''} ${booking.slotLocal || ''}`.trim();
+  const botLink = `${BOT_LINK_BASE}?start=${encodeURIComponent(booking.id || '')}`;
+  return layout(`
+<tr><td style="display:none;font-size:0;line-height:0;max-height:0;overflow:hidden;color:transparent">Памятку получают только те, кто дошёл до урока.</td></tr>
+<tr><td style="font-size:22px;font-weight:800;line-height:1.3;padding-bottom:14px">${hello}</td></tr>
+<tr><td style="font-size:14px;line-height:1.7;color:#444;padding-bottom:16px">
+Ваш пробный урок — <b>${esc(when)}</b>. Пишу отдельным письмом, потому что в подтверждении записи это точно затерялось бы.
+</td></tr>
+<tr><td style="font-size:14px;line-height:1.7;color:#444;padding-bottom:10px">
+На уроке вы получите не только разбор уровня и слабых мест. В конце преподаватель отдаст вам памятку <b>«Как заговорить без стеснения»</b> — 4 страницы без воды:
+</td></tr>
+<tr><td style="font-size:14px;line-height:1.7;color:#444;padding-bottom:16px">
+• 5 приёмов, которые снимают языковой барьер (барьер — это не про уровень английского, а про страх ошибиться)<br>
+• 8 фраз, которые держат разговор, когда слово вылетело из головы<br>
+• упражнения на 5 минут в день и готовый план на неделю<br><br>
+Первое из них можно сделать в тот же вечер.
+</td></tr>
+<tr><td style="font-size:13px;line-height:1.7;color:#666;padding-bottom:18px">
+Почему не высылаем заранее: половина ценности — в пометках преподавателя. После урока он уже знает, что именно мешает вам говорить свободно, и отметит, с каких приёмов начинать вам.
+</td></tr>
+<tr><td style="padding-bottom:8px">
+<a href="${botLink}" style="display:inline-block;padding:13px 22px;background:#5B2D8E;color:#fff;border-radius:100px;font-size:14px;font-weight:700;text-decoration:none">Перенести урок</a>
+</td></tr>
+<tr><td style="font-size:12px;color:#888;line-height:1.6">
+P.S. Не получается прийти — перенесите в один клик. Так место достанется тому, кто ждёт очереди.
+</td></tr>`);
+}
+
+export async function sendHandoutEmail(booking) {
+  const which = provider();
+  if (!which) return { skipped: 'no mail provider configured' };
+  if (!booking || !booking.email) return { skipped: 'no email' };
+
+  const msg = {
+    from: parseFrom(MAIL_FROM()),
+    to: booking.email,
+    replyTo: MAIL_REPLY_TO(),
+    subject: 'Что вы унесёте с пробного урока, кроме разбора уровня',
+    html: handoutHtml(booking),
+    ics: null
+  };
+
+  try {
+    const resp = await ADAPTERS[which](msg);
+    if (!resp.ok) {
+      const text = await resp.text().catch(() => '');
+      console.error(`Mail handout (${which}) error:`, resp.status, text.slice(0, 400));
+      return { ok: false, provider: which, status: resp.status };
+    }
+    return { ok: true, provider: which };
+  } catch (e) {
+    console.error(`Mail handout (${which}) request failed:`, e);
+    return { ok: false, provider: which, error: String(e) };
+  }
+}
+
 // Письмо о переносе — то же подтверждение, другой заголовок и тема.
 export async function sendRescheduleConfirmation(booking) {
   return sendBookingConfirmation(booking, 'reschedule');
