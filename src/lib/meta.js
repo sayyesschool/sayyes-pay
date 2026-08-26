@@ -15,6 +15,12 @@ import { kvGet, kvKeys } from '@/lib/redis';
 
 const PIXEL_ID = () => process.env.META_PIXEL_ID || '1405840230688968';
 const CAPI_TOKEN = () => process.env.META_CAPI_TOKEN;
+// Второй датасет — в портфеле школы. Основной пиксель принадлежит чужому бизнесу,
+// поэтому каждое событие дублируется в свой: там копится история и аудитории
+// на случай, если доступ к основному однажды заберут.
+const PIXEL_ID_2 = () => process.env.META_PIXEL_ID_2 || '';
+const CAPI_TOKEN_2 = () => process.env.META_CAPI_TOKEN_2 || '';
+
 const TEST_EVENT_CODE = () => process.env.META_TEST_EVENT_CODE || '';
 const GRAPH_VERSION = 'v21.0';
 
@@ -103,6 +109,19 @@ export async function findAttributionByContact({ email, phone }) {
   }
 }
 
+// Одна отправка в один датасет. Вынесено, чтобы то же тело ушло и в зеркало.
+async function postToDataset(pixelId, token, body) {
+  const url = `https://graph.facebook.com/${GRAPH_VERSION}/${pixelId}/events?` +
+    new URLSearchParams({ access_token: token }).toString();
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  const data = await resp.json().catch(() => ({}));
+  return { resp, data };
+}
+
 // Единая отправка. Никогда не бросает наружу — аналитика не должна ронять заявку.
 export async function sendCapiEvent({
   eventName,
@@ -142,13 +161,17 @@ export async function sendCapiEvent({
     const body = { data: [event] };
     if (TEST_EVENT_CODE()) body.test_event_code = TEST_EVENT_CODE();
 
-    const url = `https://graph.facebook.com/${GRAPH_VERSION}/${PIXEL_ID()}/events?access_token=${encodeURIComponent(token)}`;
-    const resp = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
-    });
-    const data = await resp.json().catch(() => ({}));
+    const { resp, data } = await postToDataset(PIXEL_ID(), token, body);
+
+    // Зеркало в свой датасет. Его ошибки не влияют на результат основного события.
+    if (PIXEL_ID_2() && CAPI_TOKEN_2()) {
+      try {
+        const mirror = await postToDataset(PIXEL_ID_2(), CAPI_TOKEN_2(), body);
+        if (!mirror.resp.ok) console.error(`CAPI mirror ${eventName} error:`, mirror.resp.status, mirror.data);
+      } catch (e) {
+        console.error(`CAPI mirror ${eventName} failed:`, e);
+      }
+    }
     if (!resp.ok) {
       console.error(`CAPI ${eventName} error:`, resp.status, data);
       return { ok: false, eventName, status: resp.status, data };
