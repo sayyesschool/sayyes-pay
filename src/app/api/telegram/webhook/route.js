@@ -85,6 +85,15 @@ async function fireSchedule(booking) {
   }
 }
 
+// Короткий статус вместо повторного «Запись подтверждена!». Полное подтверждение
+// человек уже получал при первой привязке, второе читается как новая запись.
+function bookingStatusText(booking) {
+  return `📋 <b>Ваша запись на месте</b>\n\n` +
+    `${clientDateLine(booking)}\n${clientTimeLine(booking)}\n` +
+    `📹 Формат: Пробный урок · 30 мин · Zoom\n\n` +
+    `Ничего делать не нужно — ссылку на Zoom пришлём за час до начала.`;
+}
+
 // Телеграм-контакт из заявки и username в чате приводим к одному виду:
 // «@Ivan», «ivan», «t.me/ivan» → «ivan».
 function normHandle(value) {
@@ -156,6 +165,9 @@ async function handleStart(chatId, username, args) {
     const booking = await getBooking(bookingId);
 
     if (booking) {
+      // Уже привязан к этому же чату — значит человек просто зашёл по ссылке снова
+      const alreadyLinked = String(booking.chatId || '') === String(chatId);
+
       // Link chat to booking
       await updateBooking(bookingId, { chatId: String(chatId) });
       await setUserBooking(chatId, bookingId);
@@ -166,7 +178,7 @@ async function handleStart(chatId, username, args) {
 
       // Send confirmation to user
       await sendMessage(chatId,
-        formatBookingConfirmation(booking),
+        alreadyLinked ? bookingStatusText(booking) : formatBookingConfirmation(booking),
         bookingActionsKeyboard(bookingId)
       );
       // Note: manager notification is already sent by /api/book/route.js at booking time
@@ -182,7 +194,7 @@ async function handleStart(chatId, username, args) {
         // Повторный переход по той же ссылке: связка не одноразовая
         await updateBooking(existing.id, { chatId: String(chatId) });
         await setUserBooking(chatId, existing.id);
-        await sendMessage(chatId, formatBookingConfirmation({ ...existing, chatId: String(chatId) }), bookingActionsKeyboard(existing.id));
+        await sendMessage(chatId, bookingStatusText({ ...existing, chatId: String(chatId) }), bookingActionsKeyboard(existing.id));
         return;
       }
 
