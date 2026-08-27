@@ -39,20 +39,9 @@ h1, h2, h3, .section__title, .hero__title, .card__title {
 .header__container { padding-top: 14px; padding-bottom: 14px; }
 
 /* Первый экран */
-.hero {
-  position: relative;
-  overflow: hidden;
-  background: linear-gradient(180deg, #F7F1FF 0%, var(--sy-bg) 100%);
-  padding-block: clamp(40px, 7vw, 96px);
-}
-.hero::after {
-  content: "";
-  position: absolute;
-  width: 520px; height: 520px;
-  right: -180px; top: -220px;
-  background: radial-gradient(circle at center, rgba(228, 86, 154, .18), transparent 70%);
-  pointer-events: none;
-}
+/* Фон первого экрана не трогаем: под него подобран цвет текста,
+   и любая подмена делает заголовок нечитаемым. Меняем только ритм и типографику. */
+.hero { padding-block: clamp(32px, 5vw, 72px); }
 .hero__title {
   font-size: clamp(32px, 5vw, 60px);
   font-weight: 800;
