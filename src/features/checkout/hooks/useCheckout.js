@@ -8,7 +8,7 @@ export function useCheckout() {
         const res = await fetch("/api/stripe/create-checkout-session", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email, price_id })
+            body: JSON.stringify({ email, price_id, booking_id: (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('b')) || undefined })
         });
         const data = await res.json();
         setLoading(false);
