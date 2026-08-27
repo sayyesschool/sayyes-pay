@@ -221,6 +221,29 @@ export function formatHandout(booking) {
     `See you soon! Школа английского языка Say Yes! 💜`;
 }
 
+// Спросить менеджера, состоялся ли урок. Ответ становится событием TrialAttended:
+// оптимизация на «записался» приводит тех, кто легко записывается и не доходит,
+// поэтому Мете нужно знать именно про приход.
+export function formatAttendanceAsk(booking) {
+  return `❓ <b>Урок закончился</b>\n\n` +
+    `Ученик: ${booking.name || '—'} (${booking.telegram || booking.email || '—'})\n` +
+    `${clientDateLine(booking)}, ${clientTimeLine(booking)}\n\n` +
+    `Отметьте, что произошло — это влияет на то, каких людей будет приводить реклама.`;
+}
+
+export function attendanceKeyboard(bookingId) {
+  return {
+    reply_markup: {
+      inline_keyboard: [
+        [
+          { text: '✅ Урок состоялся', callback_data: `attended:${bookingId}` },
+          { text: '🚫 Не пришёл', callback_data: `noshow:${bookingId}` }
+        ]
+      ]
+    }
+  };
+}
+
 // --- Deep link ---
 
 export function makeDeepLink(bookingId) {
