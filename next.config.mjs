@@ -9,6 +9,9 @@ export default withMDX({
     reactStrictMode: true,
         async rewrites() {
                     return [
+      // Картинки старого сайта отдаются только по своему домену (защита от хотлинка),
+      // поэтому тянем их через себя: браузер видит только sayyestoenglish.com.
+      { source: '/wp/:path*', destination: 'https://sayyes.school/wp-content/:path*' },
                         {
                                             source: '/learn_easy',
                                             destination: '/learn_easy.html'
