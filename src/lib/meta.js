@@ -239,7 +239,9 @@ export async function sendSchedule(booking, extra = {}) {
 }
 
 /**
- * TrialAttended — человек действительно пришёл на пробный урок. Отмечает менеджер в боте.
+ * StartTrial — человек действительно пришёл на пробный урок. Отмечает менеджер в боте.
+ * Имя стандартное намеренно: кастомное событие нельзя выбрать целью оптимизации
+ * без отдельной custom conversion, а StartTrial доступен в кампании сразу.
  * Ради этого события всё и затевалось: запись и приход — разные аудитории, и оптимизация
  * на запись приносит тех, кто легко записывается и не доходит.
  */
@@ -252,7 +254,7 @@ export async function sendTrialAttended(booking, extra = {}) {
   };
   if (typeof extra.hoursToLesson === 'number') custom.hours_to_lesson = extra.hoursToLesson;
   return sendCapiEvent({
-    eventName: 'TrialAttended',
+    eventName: 'StartTrial',
     eventId: booking.id ? 'att_' + booking.id : undefined,
     externalId: booking.id,
     email: booking.email,
