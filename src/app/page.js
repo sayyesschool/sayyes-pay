@@ -50,12 +50,12 @@ export default function Home() {
 				image={<img className="image" src="/images/hero.png" alt="Команда мечты" />}
 			>
 				<div className="hero__actions mt-xxl mb-xxl">
-					<Button color="yellow" onClick={scrollToRequest}>
-						Записаться на пробный урок
-					</Button>
-
 					<Button color="yellow" onClick={scrollToProducts}>
 						Выбрать курс и оплатить
+					</Button>
+
+					<Button color="yellow" onClick={scrollToRequest}>
+						Записаться на пробный урок
 					</Button>
 				</div>
 			</Hero>
