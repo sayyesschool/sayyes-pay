@@ -269,3 +269,40 @@ h1, h2, h3, .section__title, .hero__title, .card__title {
   .hero__actions { flex-direction: column; align-items: stretch; }
   .hero__actions .btn { width: 100%; }
 }
+
+/* Уточнения по блоку преподавателей: у темы правила специфичнее, поэтому адресуем точнее.
+   И цифра в кружке была того же цвета, что фон, — её просто не было видно. */
+.dream-team .dream-team__content { display: block; }
+.dream-team .dream-team__info { max-width: 70ch; margin-bottom: clamp(20px, 3vw, 32px); }
+.dream-team .dream-team__details {
+  display: grid;
+  grid-template-columns: minmax(240px, 320px) 1fr;
+  gap: clamp(20px, 3vw, 40px);
+  align-items: start;
+}
+.dream-team .dream-team__list .item {
+  display: grid;
+  grid-template-columns: minmax(150px, auto) 1fr;
+  column-gap: 20px;
+  align-items: center;
+}
+.dream-team .dream-team__list .item__heading {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.dream-team .dream-team__list .item__number {
+  width: auto;
+  height: auto;
+  min-width: 0;
+  padding: 0;
+  background: none;
+  border-radius: 0;
+  color: var(--sy-purple);
+  font-size: clamp(30px, 3.4vw, 42px);
+  font-weight: 800;
+  line-height: 1;
+}
+.dream-team .dream-team__list .item__text { font-size: 17px; font-weight: 700; color: inherit; }
+.dream-team .dream-team__list .item__description { margin: 0; color: var(--sy-muted); }
