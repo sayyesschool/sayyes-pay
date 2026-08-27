@@ -356,3 +356,8 @@ h1, h2, h3, .section__title, .hero__title, .card__title {
   #products .grid { grid-template-columns: 1fr !important; }
   #products .pay-btn { width: 100%; }
 }
+
+@media (max-width: 600px) {
+  /* На телефоне кнопка оплаты должна быть во всю карточку. */
+  #products .pay-btn { width: 100% !important; justify-content: center; }
+}
