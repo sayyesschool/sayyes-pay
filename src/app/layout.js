@@ -1,4 +1,6 @@
 import '@/styles/global.scss';
+// Новая тема главной: подключается последней, чтобы перекрывать базовые стили
+import './redesign.scss';
 
 export const metadata = {
   title: {
