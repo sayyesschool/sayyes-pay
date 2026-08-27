@@ -41,7 +41,7 @@ export default function Home() {
 		<Page>
 			<Hero
 				title="Английский — твой путь к успеху!"
-				description="Более 12 лет опыта. Более 5 000 историй успеха!"
+				description="Более 13 лет опыта. Более 5 000 историй успеха!"
 				image={<img className="image" src="/images/hero.png" alt="Команда мечты" />}
 			>
 				<div className="mt-xxl mb-xxl">
@@ -80,7 +80,7 @@ export default function Home() {
 						</div>
 
 						<div className="picture">
-							<img className="image" src="https://sayyes.school/wp-content/themes/sayyes/static/images/pictures/practice.jpg" alt="Практика" />
+							<img className="image" src="/wp/themes/sayyes/static/images/pictures/practice.jpg" alt="Практика" />
 						</div>
 					</div>
 				</div>
@@ -145,7 +145,7 @@ export default function Home() {
 					</div>
 
 					<div className="platform__content section__content">
-						<img className="image" src="https://sayyes.school/wp-content/themes/sayyes/static/images/platform/platform-desktop.jpg" alt="Онлайн платформа" />
+						<img className="image" src="/wp/themes/sayyes/static/images/platform/platform-desktop.jpg" alt="Онлайн платформа" />
 
 						<ul className="list list--check gap-s">
 							<li className="list-item">
