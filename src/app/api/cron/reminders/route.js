@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { getAllActiveBookings, updateBooking } from '@/lib/redis';
-import { sendMessage, formatReminder, formatHandout, bookingActionsKeyboard } from '@/lib/telegram';
+import { getAllActiveBookings, updateBooking, getManagerChatId } from '@/lib/redis';
+import { sendMessage, formatReminder, formatHandout, bookingActionsKeyboard, formatAttendanceAsk, attendanceKeyboard } from '@/lib/telegram';
 import { sendHandoutEmail } from '@/lib/email';
 
 // Protect cron endpoint
@@ -19,6 +19,7 @@ export async function GET(request) {
     let sent24h = 0;
     let sent1h = 0;
     let sentHandout = 0;
+    let askedAttendance = 0;
 
     for (const booking of bookings) {
       if (!booking.slot || booking.slot === 'no_time') continue;
@@ -80,6 +81,18 @@ export async function GET(request) {
           sentHandout++;
         }
       }
+
+      // Через час после урока спрашиваем менеджера, состоялся ли он. Ответ уходит
+      // в Мету событием TrialAttended — иначе реклама так и будет приводить тех,
+      // кто записывается и не доходит.
+      if (!booking.attendanceAsked && hoursUntil < -1 && hoursUntil > -72) {
+        const managerChatId = await getManagerChatId();
+        if (managerChatId) {
+          await sendMessage(managerChatId, formatAttendanceAsk(booking), attendanceKeyboard(booking.id));
+          await updateBooking(booking.id, { attendanceAsked: true });
+          askedAttendance++;
+        }
+      }
     }
 
     return NextResponse.json({
@@ -88,6 +101,7 @@ export async function GET(request) {
       sent24h,
       sent1h,
       sentHandout,
+      askedAttendance,
       timestamp: now.toISOString()
     });
   } catch (e) {
