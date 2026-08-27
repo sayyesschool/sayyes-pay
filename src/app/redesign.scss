@@ -194,7 +194,7 @@ h1, h2, h3, .section__title, .hero__title, .card__title {
 .practice,
 .dream-team,
 .platform {
-  padding-block: clamp(36px, 4.5vw, 64px) !important;
+  padding-block: clamp(26px, 3.4vw, 48px) !important;
   margin-block: 0 !important;
 }
 
@@ -330,3 +330,8 @@ h1, h2, h3, .section__title, .hero__title, .card__title {
 @media (max-width: 960px) {
   .dream-team .dream-team__image img { min-height: 0; aspect-ratio: 3 / 2; }
 }
+
+/* Внутри секций колонки разъезжались на сто пикселей — сводим ближе. */
+.practice__content,
+.platform__content,
+.section--horizontal .section__container { gap: clamp(24px, 3.5vw, 56px) !important; }
