@@ -44,7 +44,7 @@ h1, h2, h3, .section__title, .hero__title, .card__title {
 .hero {
   /* Фоновая картинка первого экрана грузится с чужого хоста. Если она не отдаётся,
      белый заголовок остаётся на светлом и исчезает. Тёмная подложка страхует этот случай. */
-  background-color: #2C1150;
+  background-color: #2C1150 !important;
   padding-block: clamp(32px, 5vw, 72px);
 }
 .hero__title {
