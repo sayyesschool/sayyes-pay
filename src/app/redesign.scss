@@ -306,3 +306,18 @@ h1, h2, h3, .section__title, .hero__title, .card__title {
 }
 .dream-team .dream-team__list .item__text { font-size: 17px; font-weight: 700; color: inherit; }
 .dream-team .dream-team__list .item__description { margin: 0; color: var(--sy-muted); }
+
+/* Карточки фактов были раздутыми, а подпись переносилась под цифру. */
+.dream-team .dream-team__list { gap: 12px; }
+.dream-team .dream-team__list .item {
+  grid-template-columns: minmax(200px, 230px) 1fr;
+  padding: 16px 22px !important;
+  min-height: 0 !important;
+}
+.dream-team .dream-team__list .item__heading { gap: 10px; flex-wrap: nowrap; }
+.dream-team .dream-team__list .item__text { font-size: 16px; white-space: nowrap; }
+.dream-team .dream-team__list .item__description { font-size: 16px; }
+@media (max-width: 700px) {
+  .dream-team .dream-team__list .item { grid-template-columns: 1fr; row-gap: 4px; }
+  .dream-team .dream-team__list .item__text { white-space: normal; }
+}
