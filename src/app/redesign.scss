@@ -32,7 +32,7 @@ h1, h2, h3, .section__title, .hero__title, .card__title {
   position: sticky;
   top: 0;
   z-index: 40;
-  background: rgba(251, 249, 255, .82);
+  background: #FBF9FF;
   backdrop-filter: saturate(140%) blur(12px);
   border-bottom: 1px solid var(--sy-line);
 }
