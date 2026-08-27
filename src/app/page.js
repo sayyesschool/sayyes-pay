@@ -26,6 +26,11 @@ export default function Home() {
 		block: 'center'
 	});
 
+	// Многие приходят на страницу ради оплаты — даём им короткий путь к курсам.
+	const scrollToProducts = useScrollTo('#products', {
+		block: 'start'
+	});
+
 	const [groupId, setGroupId] = useState(defaultGroupId);
 	const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
 
@@ -44,9 +49,13 @@ export default function Home() {
 				description="Более 13 лет опыта. Более 5 000 историй успеха!"
 				image={<img className="image" src="/images/hero.png" alt="Команда мечты" />}
 			>
-				<div className="mt-xxl mb-xxl">
+				<div className="hero__actions mt-xxl mb-xxl">
 					<Button color="yellow" onClick={scrollToRequest}>
 						Записаться на пробный урок
+					</Button>
+
+					<Button color="yellow" onClick={scrollToProducts}>
+						Выбрать курс и оплатить
 					</Button>
 				</div>
 			</Hero>
