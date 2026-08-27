@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { clientTimeLine, clientDateLine, clientWhen, localTimeString, localSlot, slotKeyToDate } from '@/lib/time';
-import { sendSchedule } from '@/lib/meta';
+import { sendSchedule, sendTrialAttended } from '@/lib/meta';
 import {
   getBooking, updateBooking, getBookedSlots, removeBookedSlot, addBookedSlot,
   setUserBooking, getUserBooking, clearUserBooking,
@@ -13,7 +13,7 @@ import {
   sendMessage, editMessage, answerCallback, forwardMessage,
   bookingActionsKeyboard, confirmCancelKeyboard, slotsKeyboard,
   managerActionsKeyboard, formatBookingConfirmation, formatBookingForManager,
-  formatReminder, isManager, makeDeepLink, MANAGER_USERNAME
+  formatReminder, isManager, attendanceKeyboard, makeDeepLink, MANAGER_USERNAME
 } from '@/lib/telegram';
 
 // Verify webhook secret (optional extra security)
@@ -565,6 +565,33 @@ async function handleManagerBookingState(chatId, text) {
   return false;
 }
 
+// Менеджер отмечает, состоялся ли урок. Приход — то событие, на которое имеет смысл
+// оптимизировать рекламу: запись без прихода алгоритму знать бесполезно.
+async function handleAttendance(chatId, bookingId, attended, callbackQueryId, messageId) {
+  const booking = await getBooking(bookingId);
+  if (!booking) {
+    await answerCallback(callbackQueryId, 'Запись не найдена');
+    return;
+  }
+
+  await updateBooking(bookingId, { attended, attendanceMarkedAt: new Date().toISOString() });
+
+  if (attended && !booking.attendedSent) {
+    try {
+      const res = await sendTrialAttended({ ...booking, attended: true });
+      if (res && res.ok) await updateBooking(bookingId, { attendedSent: true });
+    } catch (e) {
+      console.error('CAPI attended error:', e);
+    }
+  }
+
+  await answerCallback(callbackQueryId, attended ? 'Отмечено: урок состоялся' : 'Отмечено: не пришёл');
+  await editMessage(chatId, messageId,
+    (attended ? '✅ Урок состоялся\n\n' : '🚫 Не пришёл\n\n') +
+    `${booking.name || '—'} (${booking.telegram || booking.email || '—'})`
+  );
+}
+
 // --- Relay messages ---
 
 async function handleRelayFromUser(chatId, message) {
@@ -672,6 +699,12 @@ export async function POST(request) {
           await handleContact(chatId, bookingId, callbackId);
           break;
         case 'keep':
+        case 'attended':
+          await handleAttendance(chatId, bookingId, true, callbackId, messageId);
+          break;
+        case 'noshow':
+          await handleAttendance(chatId, bookingId, false, callbackId, messageId);
+          break;
           await handleKeep(chatId, bookingId, callbackId, messageId);
           break;
         case 'pricing':
