@@ -11,7 +11,7 @@
 // Всё под флагом: без META_CAPI_TOKEN модуль молча ничего не делает.
 
 import crypto from 'crypto';
-import { kvGet, kvKeys } from '@/lib/redis';
+import { kvGet, kvKeys, getBooking } from '@/lib/redis';
 
 const PIXEL_ID = () => process.env.META_PIXEL_ID || '1405840230688968';
 const CAPI_TOKEN = () => process.env.META_CAPI_TOKEN;
@@ -239,14 +239,51 @@ export async function sendSchedule(booking, extra = {}) {
 }
 
 /**
+ * TrialAttended — человек действительно пришёл на пробный урок. Отмечает менеджер в боте.
+ * Ради этого события всё и затевалось: запись и приход — разные аудитории, и оптимизация
+ * на запись приносит тех, кто легко записывается и не доходит.
+ */
+export async function sendTrialAttended(booking, extra = {}) {
+  if (!booking) return { skipped: 'no booking' };
+  const custom = {
+    content_name: 'trial_attended',
+    value: 0,
+    currency: 'EUR'
+  };
+  if (typeof extra.hoursToLesson === 'number') custom.hours_to_lesson = extra.hoursToLesson;
+  return sendCapiEvent({
+    eventName: 'TrialAttended',
+    eventId: booking.id ? 'att_' + booking.id : undefined,
+    externalId: booking.id,
+    email: booking.email,
+    phone: booking.telegram,
+    name: booking.name,
+    attribution: booking.attribution,
+    customData: custom
+  });
+}
+
+/**
  * Purchase — фактическая оплата, обычно через 7–30 дней после клика.
  * action_source именно system_generated: отдельный Offline Conversions API
  * закрыт в мае 2025, серверные события идут через обычный CAPI с этим значением.
  */
 export async function sendPurchase(p = {}) {
-  const found = await findAttributionByContact({ email: p.email, phone: p.phone });
-  const booking = (found && found.booking) || null;
-  const attribution = (found && found.attribution) || {};
+  // Идентификатор заявки приходит из метаданных платежа — это точная связка.
+  // Поиск по контакту остаётся запасным путём: человек мог платить с другой почты.
+  let booking = null;
+  if (p.bookingId) {
+    try {
+      booking = await getBooking(p.bookingId);
+    } catch (e) {
+      console.error('Purchase booking lookup error:', e);
+    }
+  }
+  if (!booking) {
+    const found = await findAttributionByContact({ email: p.email, phone: p.phone });
+    booking = (found && found.booking) || null;
+  }
+  const attribution = (booking && booking.attribution) || {};
 
   return sendCapiEvent({
     eventName: 'Purchase',
