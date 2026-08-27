@@ -18,6 +18,9 @@ export async function POST(request) {
       // Без META_CAPI_TOKEN вызов молча пропускается.
       try {
         await sendPurchase({
+        // Точная связка с заявкой: id приезжает из метаданных сессии Stripe.
+        // Если его нет (старая ссылка), meta.js найдёт заявку по почте.
+        bookingId: purchaseData.metadata && purchaseData.metadata.booking_id,
           email: purchaseData.email,
           value: Number(purchaseData.amount || 0) / 100,
           currency: purchaseData.currency,
