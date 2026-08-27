@@ -1,5 +1,16 @@
 import { useEffect } from 'react';
 
+// Если сессия не создалась, data.url пустой. Раньше переход происходил всё равно —
+// и человек попадал на /undefined с 404 вместо страницы оплаты.
+function handleSession(data) {
+  if (data && data.url) {
+    window.location.assign(data.url);
+    return;
+  }
+  console.error('Checkout session failed:', data && data.error ? String(data.error) : 'unknown');
+  alert('Не удалось открыть оплату. Попробуйте ещё раз или напишите нам — мы поможем.');
+}
+
 export default function Payment({
     data,
 }) {
@@ -11,7 +22,7 @@ export default function Payment({
         })
             .then((res) => res.json())
             .then((data) => {
-                window.location.assign(data.url);
+                handleSession(data);
             });
     }, []);
 
