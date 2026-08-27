@@ -8,7 +8,7 @@ export default function Checkbox({
     return (
         <div className="checkbox">
             <input
-                id={id}
+                id={id || name}
                 className="checkbox__input"
                 type="checkbox"
                 name={name}
@@ -19,7 +19,7 @@ export default function Checkbox({
             <span className="checkbox__checkmark" />
 
             {label &&
-                <label className="checkbox__label" htmlFor={id}>
+                <label className="checkbox__label" htmlFor={id || name}>
                     {label}
                 </label>
             }
