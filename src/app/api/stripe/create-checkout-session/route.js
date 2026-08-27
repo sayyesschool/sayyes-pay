@@ -4,7 +4,7 @@ import { createCheckoutSession } from '@/services/stripe';
 
 export async function POST(request) {
   try {
-    const { email, price_id } = await request.json();
+    const { email, price_id, booking_id } = await request.json();
 
     if (!email) {
       return NextResponse.json({
@@ -27,7 +27,7 @@ export async function POST(request) {
       email,
       price_id,
       baseUrl: origin
-    });
+    }, booking_id);
 
     return NextResponse.json({
       url,
