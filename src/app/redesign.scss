@@ -321,3 +321,12 @@ h1, h2, h3, .section__title, .hero__title, .card__title {
   .dream-team .dream-team__list .item { grid-template-columns: 1fr; row-gap: 4px; }
   .dream-team .dream-team__list .item__text { white-space: normal; }
 }
+
+/* Цифра и подпись слипались; фото тянем по высоте карточек. */
+.dream-team .dream-team__list .item__number { margin: 0 10px 0 0 !important; }
+.dream-team .dream-team__details { align-items: stretch; }
+.dream-team .dream-team__image { height: 100%; }
+.dream-team .dream-team__image img { height: 100%; aspect-ratio: auto; min-height: 280px; }
+@media (max-width: 960px) {
+  .dream-team .dream-team__image img { min-height: 0; aspect-ratio: 3 / 2; }
+}
