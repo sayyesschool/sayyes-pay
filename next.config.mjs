@@ -12,6 +12,8 @@ export default withMDX({
       // Картинки старого сайта отдаются только по своему домену (защита от хотлинка),
       // поэтому тянем их через себя: браузер видит только sayyestoenglish.com.
       { source: '/wp/:path*', destination: 'https://sayyes.school/wp-content/:path*' },
+      // Шрифты и общие стили старого сайта — тоже через себя.
+      { source: '/static/:path*', destination: 'https://s3.regru.cloud/sayyes-static/:path*' },
                         {
                                             source: '/learn_easy',
                                             destination: '/learn_easy.html'
