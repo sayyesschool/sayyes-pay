@@ -361,3 +361,28 @@ h1, h2, h3, .section__title, .hero__title, .card__title {
   /* На телефоне кнопка оплаты должна быть во всю карточку. */
   #products .pay-btn { width: 100% !important; justify-content: center; }
 }
+
+/* ===== Правки по комментариям на превью ===== */
+
+/* Между первым экраном и следующим блоком было 100px внешнего поля плюс отступ секции. */
+.hero { margin-bottom: 24px !important; }
+
+/* Заголовки и текст были зажаты чужими max-width — распускаем на ширину бокса. */
+.practice .practice__header,
+.practice .practice__title,
+.platform .platform__header,
+.platform .platform__title,
+.dream-team .dream-team__info { max-width: none; }
+
+/* Цифры разной ширины сдвигали подписи — фиксируем колонку под число. */
+.dream-team .dream-team__list .item__number {
+  min-width: 46px;
+  text-align: left;
+}
+
+@media (min-width: 961px) {
+  /* На большом экране заголовки и пояснения должны идти в одну строку. */
+  .practice .practice__title,
+  .platform .platform__title { white-space: nowrap; }
+  .dream-team .dream-team__list .item__description { max-width: none; white-space: nowrap; }
+}
