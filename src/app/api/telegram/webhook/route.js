@@ -6,14 +6,15 @@ import {
   setUserBooking, getUserBooking, clearUserBooking,
   getPendingBooking, clearPendingBooking,
   setManagerChatId, getManagerChatId,
-  getAllActiveBookings, kvSet, kvGet, kvDel,
+  getAllActiveBookings, kvSet, kvGet, kvDel, kvKeys,
   createBooking, setPendingBooking
 } from '@/lib/redis';
 import {
   sendMessage, editMessage, answerCallback, forwardMessage,
   bookingActionsKeyboard, confirmCancelKeyboard, slotsKeyboard,
   managerActionsKeyboard, formatBookingConfirmation, formatBookingForManager,
-  formatReminder, isManager, attendanceKeyboard, makeDeepLink, MANAGER_USERNAME
+  formatReminder, isManager, attendanceKeyboard, makeDeepLink, MANAGER_USERNAME,
+  formatManagerCard
 } from '@/lib/telegram';
 import { notifyManagers, isManagerChat, getManagerChatIds } from '@/lib/managers';
 
@@ -328,29 +329,24 @@ async function handleReschedule(chatId, bookingId, callbackQueryId) {
   );
 }
 
-async function handleNewSlot(chatId, bookingId, newSlotKey, callbackQueryId, messageId) {
+// Перенос: одна механика для ученика и для менеджера, чтобы они не разъезжались.
+async function applyNewSlot(bookingId, newSlotKey) {
   const booking = await getBooking(bookingId);
-  if (!booking) {
-    await answerCallback(callbackQueryId, 'Запись не найдена');
-    return;
-  }
+  if (!booking) return null;
 
   // Free old slot
   if (booking.slot && booking.slot !== 'no_time') {
     await removeBookedSlot(booking.slot);
   }
 
-  // Book new slot
   await addBookedSlot(newSlotKey);
 
-  // Parse new slot info
   const [dateStr, time] = newSlotKey.split('_');
   const slotDateObj = new Date(dateStr + 'T00:00:00');
   const dayNames = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
   const monthNames = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
   const newSlotDate = `${dayNames[slotDateObj.getDay()]}, ${slotDateObj.getDate()} ${monthNames[slotDateObj.getMonth()]}`;
 
-  // Update booking
   const updated = await updateBooking(bookingId, {
     slot: newSlotKey,
     slotMsk: time,
@@ -360,17 +356,50 @@ async function handleNewSlot(chatId, bookingId, newSlotKey, callbackQueryId, mes
     reminded1h: false
   });
 
-  await answerCallback(callbackQueryId, 'Запись перенесена!');
-  await editMessage(chatId, messageId,
-    `Запись перенесена!\n\n` +
+  if (updated) await fireSchedule(updated);
+
+  return { booking, updated, newSlotDate };
+}
+
+function clientRescheduledText(booking, newSlotKey, newSlotDate) {
+  return `Запись перенесена!\n\n` +
     `Новая дата: ${(localSlot(booking, newSlotKey) || {}).date || newSlotDate}\n` +
     `${clientTimeLine(booking, newSlotKey)}\n` +
-    `Формат: Пробный урок · 30 мин · Zoom`,
-    bookingActionsKeyboard(bookingId)
-  );
+    `Формат: Пробный урок · 30 мин · Zoom`;
+}
 
-  // Notify manager
-  if (updated) await fireSchedule(updated);
+async function handleNewSlot(chatId, bookingId, newSlotKey, callbackQueryId, messageId) {
+  const result = await applyNewSlot(bookingId, newSlotKey);
+  if (!result) {
+    await answerCallback(callbackQueryId, 'Запись не найдена');
+    return;
+  }
+
+  const { booking, updated, newSlotDate } = result;
+  await answerCallback(callbackQueryId, 'Запись перенесена!');
+
+  // Кто нажал: сам ученик или менеджер за него. Во втором случае ученик
+  // обязан узнать о новом времени — иначе он придёт к старому.
+  const byManager = String(chatId) !== String(booking.chatId || '');
+
+  if (byManager) {
+    await editMessage(chatId, messageId,
+      `🔄 Перенесено за ученика.\n\n` + formatManagerCard(updated || booking),
+      managerActionsKeyboard(bookingId)
+    );
+
+    if (booking.chatId) {
+      await sendMessage(booking.chatId,
+        clientRescheduledText(booking, newSlotKey, newSlotDate),
+        bookingActionsKeyboard(bookingId)
+      );
+    }
+  } else {
+    await editMessage(chatId, messageId,
+      clientRescheduledText(booking, newSlotKey, newSlotDate),
+      bookingActionsKeyboard(bookingId)
+    );
+  }
 
   if (updated) {
     await notifyManagers(formatBookingForManager(updated, 'reschedule'));
@@ -394,7 +423,7 @@ async function handleMgrCancel(chatId, bookingId, callbackQueryId, messageId) {
 
   await answerCallback(callbackQueryId, 'Запись отменена');
   await editMessage(chatId, messageId,
-    `❌ Запись отменена менеджерои.\n\n` +
+    `❌ Запись отменена менеджером.\n\n` +
     `Ученик: ${booking.name} (${booking.telegram || '—'})\n` +
     `Дата: ${booking.slotDate || '—'}, ${booking.slotMsk || '—'} (МСК)`
   );
@@ -424,11 +453,15 @@ async function handleMgrReschedule(chatId, bookingId, callbackQueryId) {
   }
 
   await answerCallback(callbackQueryId);
+  // К сетке добавляем ручной ввод: договорённости бывают вне расписания.
+  const keyboard = slotsKeyboard(available, bookingId);
+  keyboard.reply_markup.inline_keyboard.push([{ text: '✏️ Другое время', callback_data: `mgr_time:${bookingId}` }]);
+
   await sendMessage(chatId,
     `Перенос записи для: ${booking.name}\n` +
     `Текущее время: ${booking.slotDate || '—'}, ${booking.slotMsk || '—'} (МСК)\n\n` +
     `Выберите новое время:`,
-    slotsKeyboard(available, bookingId)
+    keyboard
   );
 }
 
@@ -585,6 +618,206 @@ async function handleAttendance(chatId, bookingId, attended, callbackQueryId, me
   );
 }
 
+// --- Пульт менеджера ---
+
+// Расписание живёт в UTC+3, поэтому и «сегодня» считаем в нём:
+// иначе вечерние уроки уезжают на другую дату.
+function scheduleDayKey(daysAhead) {
+  const shifted = new Date(Date.now() + 3 * 60 * 60 * 1000 + (daysAhead || 0) * 24 * 60 * 60 * 1000);
+  return shifted.toISOString().slice(0, 10);
+}
+
+async function sendBookingCards(chatId, bookings, title) {
+  if (!bookings.length) {
+    await sendMessage(chatId, `${title}: пусто.`);
+    return;
+  }
+
+  await sendMessage(chatId, `<b>${title}</b> — ${bookings.length}`);
+
+  for (const booking of bookings.slice(0, 20)) {
+    await sendMessage(chatId, formatManagerCard(booking), managerActionsKeyboard(booking.id));
+  }
+
+  if (bookings.length > 20) {
+    await sendMessage(chatId, `Показал первые 20 из ${bookings.length}.`);
+  }
+}
+
+function bySlot(a, b) {
+  return String(a.slot || '').localeCompare(String(b.slot || ''));
+}
+
+async function handleTodayCommand(chatId) {
+  const today = scheduleDayKey(0);
+  const all = await getAllActiveBookings();
+  const list = all.filter(b => String(b.slot || '').slice(0, 10) === today).sort(bySlot);
+  await sendBookingCards(chatId, list, 'Уроки сегодня');
+}
+
+async function handleBookingsCommand(chatId) {
+  const from = scheduleDayKey(0);
+  const to = scheduleDayKey(7);
+  const all = await getAllActiveBookings();
+  const list = all.filter(b => {
+    const day = String(b.slot || '').slice(0, 10);
+    return day >= from && day <= to;
+  }).sort(bySlot);
+  await sendBookingCards(chatId, list, 'Записи на ближайшую неделю');
+}
+
+// Поиск идёт по всем записям, включая отменённые: менеджеру часто нужна именно та,
+// которую отменили по ошибке.
+async function handleFindCommand(chatId, query) {
+  const needle = String(query || '').trim().toLowerCase();
+
+  if (needle.length < 2) {
+    await sendMessage(chatId, 'Что искать? Например: /find оля или /find fkpvscvn');
+    return;
+  }
+
+  const keys = await kvKeys('booking:*');
+  const found = [];
+
+  for (const key of keys) {
+    const booking = await kvGet(key);
+    if (!booking) continue;
+
+    const haystack = [booking.id, booking.name, booking.telegram, booking.phone, booking.email]
+      .filter(Boolean).join(' ').toLowerCase();
+
+    if (haystack.includes(needle)) found.push(booking);
+  }
+
+  await sendBookingCards(chatId, found.sort(bySlot), `Найдено по «${needle}»`);
+}
+
+async function handleMgrWrite(chatId, bookingId, callbackQueryId) {
+  const booking = await getBooking(bookingId);
+
+  if (!booking) {
+    await answerCallback(callbackQueryId, 'Запись не найдена');
+    return;
+  }
+
+  if (!booking.chatId) {
+    await answerCallback(callbackQueryId, 'У ученика нет чата с ботом');
+    return;
+  }
+
+  await answerCallback(callbackQueryId);
+  await kvSet(`mgr_reply:${chatId}`, String(booking.chatId), 86400);
+  await sendMessage(chatId,
+    `Пишите сообщение — отправлю его ученику ${booking.name || ''}.\n` +
+    '/done — закончить диалог.'
+  );
+}
+
+// Менеджеру нужно ставить и время вне сетки: договорённости бывают любые.
+async function handleMgrManualTimeAsk(chatId, bookingId, callbackQueryId) {
+  const booking = await getBooking(bookingId);
+
+  if (!booking) {
+    await answerCallback(callbackQueryId, 'Запись не найдена');
+    return;
+  }
+
+  await answerCallback(callbackQueryId);
+  await kvSet(`mgr_time:${chatId}`, bookingId, 3600);
+  await sendMessage(chatId,
+    `Новое время для: ${booking.name || '—'}\n` +
+    `Сейчас: ${booking.slotDate || '—'}, ${booking.slotMsk || '—'} (МСК)\n\n` +
+    'Пришлите дату и время: 03.09 15:30 — можно любое, вне сетки.\n' +
+    '/cancel — выйти.'
+  );
+}
+
+// Принимаем «03.09 15:30», «3.9.2026 15:30» и «2026-09-03 15:30».
+function parseManualSlot(input) {
+  const value = String(input || '').trim();
+
+  let m = value.match(/^(\d{4})-(\d{2})-(\d{2})[ T]+(\d{1,2})[:.](\d{2})$/);
+  if (m) return buildSlotKey(Number(m[1]), Number(m[2]), Number(m[3]), Number(m[4]), Number(m[5]));
+
+  m = value.match(/^(\d{1,2})[.\/](\d{1,2})(?:[.\/](\d{2,4}))?\s+(\d{1,2})[:.](\d{2})$/);
+  if (!m) return null;
+
+  const day = Number(m[1]);
+  const month = Number(m[2]);
+  let year = m[3] ? Number(m[3]) : new Date().getFullYear();
+  if (year < 100) year += 2000;
+
+  const key = buildSlotKey(year, month, day, Number(m[4]), Number(m[5]));
+  if (!key) return null;
+
+  // Год не назвали, а дата уже прошла — значит имели в виду следующий год.
+  if (!m[3] && new Date(`${key.slice(0, 10)}T00:00:00Z`).getTime() < Date.now() - 24 * 60 * 60 * 1000) {
+    return buildSlotKey(year + 1, month, day, Number(m[4]), Number(m[5]));
+  }
+
+  return key;
+}
+
+function buildSlotKey(year, month, day, hour, minute) {
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+  if (hour > 23 || minute > 59) return null;
+
+  const probe = new Date(Date.UTC(year, month - 1, day));
+  if (probe.getUTCMonth() !== month - 1 || probe.getUTCDate() !== day) return null;
+
+  const pad = n => String(n).padStart(2, '0');
+  return `${year}-${pad(month)}-${pad(day)}_${pad(hour)}:${pad(minute)}`;
+}
+
+async function handleManagerManualTime(chatId, text) {
+  const bookingId = await kvGet(`mgr_time:${chatId}`);
+  if (!bookingId) return false;
+
+  if (text === '/cancel' || text === '/done') {
+    await kvDel(`mgr_time:${chatId}`);
+    await sendMessage(chatId, 'Перенос отменён.');
+    return true;
+  }
+
+  const slotKey = parseManualSlot(text);
+
+  if (!slotKey) {
+    await sendMessage(chatId,
+      'Не разобрал время. Формат: 03.09 15:30 или 2026-09-03 15:30.\n' +
+      '/cancel — выйти.'
+    );
+    return true;
+  }
+
+  await kvDel(`mgr_time:${chatId}`);
+  const result = await applyNewSlot(bookingId, slotKey);
+
+  if (!result) {
+    await sendMessage(chatId, 'Запись не найдена.');
+    return true;
+  }
+
+  const { booking, updated, newSlotDate } = result;
+
+  await sendMessage(chatId,
+    `🔄 Перенесено за ученика.\n\n` + formatManagerCard(updated || booking),
+    managerActionsKeyboard(bookingId)
+  );
+
+  if (booking.chatId) {
+    await sendMessage(booking.chatId,
+      clientRescheduledText(booking, slotKey, newSlotDate),
+      bookingActionsKeyboard(bookingId)
+    );
+  }
+
+  if (updated) {
+    await notifyManagers(formatBookingForManager(updated, 'reschedule'));
+  }
+
+  return true;
+}
+
 // --- Relay messages ---
 
 async function handleRelayFromUser(chatId, message) {
@@ -688,6 +921,12 @@ export async function POST(request) {
         case 'mgr_cancel':
           await handleMgrCancel(chatId, bookingId, callbackId, messageId);
           break;
+        case 'mgr_time':
+          await handleMgrManualTimeAsk(chatId, bookingId, callbackId);
+          break;
+        case 'mgr_write':
+          await handleMgrWrite(chatId, bookingId, callbackId);
+          break;
         case 'mgr_reschedule':
           await handleMgrReschedule(chatId, bookingId, callbackId);
           break;
@@ -695,13 +934,13 @@ export async function POST(request) {
           await handleContact(chatId, bookingId, callbackId);
           break;
         case 'keep':
+          await handleKeep(chatId, bookingId, callbackId, messageId);
+          break;
         case 'attended':
           await handleAttendance(chatId, bookingId, true, callbackId, messageId);
           break;
         case 'noshow':
           await handleAttendance(chatId, bookingId, false, callbackId, messageId);
-          break;
-          await handleKeep(chatId, bookingId, callbackId, messageId);
           break;
         case 'pricing':
           await answerCallback(callbackId);
@@ -745,6 +984,40 @@ export async function POST(request) {
       if (text === '/book') {
         if (await isManagerChat(chatId)) {
           await handleBookCommand(chatId);
+          return NextResponse.json({ ok: true });
+        }
+      }
+
+      // Пульт менеджера: список записей, поиск и ручной ввод времени.
+      if (await isManagerChat(chatId)) {
+        if (await handleManagerManualTime(chatId, text || '')) {
+          return NextResponse.json({ ok: true });
+        }
+
+        if (text === '/today') {
+          await handleTodayCommand(chatId);
+          return NextResponse.json({ ok: true });
+        }
+
+        if (text === '/bookings') {
+          await handleBookingsCommand(chatId);
+          return NextResponse.json({ ok: true });
+        }
+
+        if (text && text.startsWith('/find')) {
+          await handleFindCommand(chatId, text.slice(5));
+          return NextResponse.json({ ok: true });
+        }
+
+        if (text === '/help') {
+          await sendMessage(chatId,
+            '<b>Команды менеджера</b>\n' +
+            '/today — уроки на сегодня\n' +
+            '/bookings — записи на ближайшую неделю\n' +
+            '/find запрос — поиск по имени, телефону, почте или коду\n' +
+            '/book — записать ученика самому\n\n' +
+            'На каждой карточке: перенести, отменить, отметить приход и написать ученику.'
+          );
           return NextResponse.json({ ok: true });
         }
       }
