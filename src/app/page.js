@@ -46,7 +46,7 @@ export default function Home() {
 		<Page>
 			<Hero
 				title="Английский — твой путь к успеху!"
-				description="Более 13 лет опыта. Более 5 000 историй успеха!"
+				description="Более 14 лет опыта. Более 5 000 историй успеха!"
 				image={<img className="image" src="/images/hero.png" alt="Команда мечты" />}
 			>
 				<div className="hero__actions mt-xxl mb-xxl">
