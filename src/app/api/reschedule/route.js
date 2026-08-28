@@ -4,6 +4,7 @@ import {
   getManagerChatId
 } from '@/lib/redis';
 import { sendMessage, formatBookingForManager, managerActionsKeyboard, bookingActionsKeyboard } from '@/lib/telegram';
+import { notifyManagers } from '@/lib/managers';
 import { sendRescheduleConfirmation } from '@/lib/email';
 import { clientTimeLine, clientDateLine } from '@/lib/time';
 
@@ -70,9 +71,8 @@ export async function POST(request) {
     }
 
     // Notify manager
-    const managerChatId = await getManagerChatId();
-    if (managerChatId && updated) {
-      await sendMessage(managerChatId, formatBookingForManager(updated, 'reschedule'), managerActionsKeyboard(bookingId));
+    if (updated) {
+      await notifyManagers(formatBookingForManager(updated, 'reschedule'), managerActionsKeyboard(bookingId));
     }
 
     return NextResponse.json({ success: true });
