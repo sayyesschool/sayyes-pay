@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getAllActiveBookings, updateBooking, getManagerChatId } from '@/lib/redis';
 import { sendMessage, formatReminder, formatHandout, bookingActionsKeyboard, formatAttendanceAsk, attendanceKeyboard } from '@/lib/telegram';
+import { notifyManagers } from '@/lib/managers';
 import { sendHandoutEmail } from '@/lib/email';
 
 // Protect cron endpoint
@@ -86,9 +87,8 @@ export async function GET(request) {
       // в Мету событием TrialAttended — иначе реклама так и будет приводить тех,
       // кто записывается и не доходит.
       if (!booking.attendanceAsked && hoursUntil < -1 && hoursUntil > -72) {
-        const managerChatId = await getManagerChatId();
-        if (managerChatId) {
-          await sendMessage(managerChatId, formatAttendanceAsk(booking), attendanceKeyboard(booking.id));
+        const asked = await notifyManagers(formatAttendanceAsk(booking), attendanceKeyboard(booking.id));
+        if (asked) {
           await updateBooking(booking.id, { attendanceAsked: true });
           askedAttendance++;
         }
