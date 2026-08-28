@@ -15,6 +15,7 @@ import {
   managerActionsKeyboard, formatBookingConfirmation, formatBookingForManager,
   formatReminder, isManager, attendanceKeyboard, makeDeepLink, MANAGER_USERNAME
 } from '@/lib/telegram';
+import { notifyManagers, isManagerChat, getManagerChatIds } from '@/lib/managers';
 
 // Verify webhook secret (optional extra security)
 const WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET;
@@ -137,8 +138,7 @@ async function linkByUsername(chatId, username) {
     await sendMessage(chatId, formatBookingConfirmation(linked), bookingActionsKeyboard(booking.id));
     await fireSchedule(linked);
 
-    const managerChatId = await getManagerChatId();
-    if (managerChatId) await sendMessage(managerChatId, formatBookingForManager(linked, 'new'));
+    await notifyManagers(formatBookingForManager(linked, 'new'));
     return booking.id;
   } catch (e) {
     console.error('linkByUsername error:', e);
@@ -225,10 +225,7 @@ async function handleStart(chatId, username, args) {
 
       await sendMessage(chatId, 'Здравствуйте! Заявка принята — менеджер школы напишет вам здесь и подберёт время пробного урока.\n\nМожно сразу написать, в какие дни и часы вам удобно.');
 
-      const landingManagerChatId = await getManagerChatId();
-      if (landingManagerChatId) {
-        await sendMessage(landingManagerChatId, formatBookingForManager(landingBooking, 'new'), managerActionsKeyboard(newId));
-      }
+      await notifyManagers(formatBookingForManager(landingBooking, 'new'), managerActionsKeyboard(newId));
       return;
     }
 
@@ -308,10 +305,7 @@ async function handleConfirmCancel(chatId, bookingId, callbackQueryId, messageId
   );
 
   // Notify manager
-  const managerChatId = await getManagerChatId();
-  if (managerChatId) {
-    await sendMessage(managerChatId, formatBookingForManager(booking, 'cancel'));
-  }
+  await notifyManagers(formatBookingForManager(booking, 'cancel'));
 }
 
 async function handleReschedule(chatId, bookingId, callbackQueryId) {
@@ -376,11 +370,10 @@ async function handleNewSlot(chatId, bookingId, newSlotKey, callbackQueryId, mes
   );
 
   // Notify manager
-  const managerChatId = await getManagerChatId();
   if (updated) await fireSchedule(updated);
 
-  if (managerChatId && updated) {
-    await sendMessage(managerChatId, formatBookingForManager(updated, 'reschedule'));
+  if (updated) {
+    await notifyManagers(formatBookingForManager(updated, 'reschedule'));
   }
 }
 
@@ -599,9 +592,9 @@ async function handleRelayFromUser(chatId, message) {
   if (!relayBookingId) return false;
 
   const booking = await getBooking(relayBookingId);
-  const managerChatId = await getManagerChatId();
+  const managerChatIds = await getManagerChatIds();
 
-  if (!managerChatId) {
+  if (!managerChatIds.length) {
     await sendMessage(chatId, 'Напишите менеджеру напрямую: @sayesstephanie');
     return true;
   }
@@ -611,16 +604,19 @@ async function handleRelayFromUser(chatId, message) {
     `Запись: ${booking?.slotDate || '—'}, ${booking?.slotMsk || '—'} МСК\n` +
     `────────────────`;
 
-  if (message.text) {
-    await sendMessage(managerChatId, `${header}\n\n${message.text}`);
-  } else {
-    // Forward non-text messages directly
-    await forwardMessage(managerChatId, chatId, message.message_id);
-    await sendMessage(managerChatId, header);
-  }
+  // Оба менеджера видят обращение, ответить может любой из них.
+  for (const managerChatId of managerChatIds) {
+    if (message.text) {
+      await sendMessage(managerChatId, `${header}\n\n${message.text}`);
+    } else {
+      // Forward non-text messages directly
+      await forwardMessage(managerChatId, chatId, message.message_id);
+      await sendMessage(managerChatId, header);
+    }
 
-  // Store mapping for manager reply
-  await kvSet(`mgr_reply:${managerChatId}`, String(chatId), 86400);
+    // Store mapping for manager reply
+    await kvSet(`mgr_reply:${managerChatId}`, String(chatId), 86400);
+  }
 
   await sendMessage(chatId,
     'Сообщение отправлено менеджеру. Ожидайте ответа.\n\n' +
@@ -747,8 +743,7 @@ export async function POST(request) {
 
       // Command: /book (manager only)
       if (text === '/book') {
-        const mgrChatId = await getManagerChatId();
-        if (String(chatId) === String(mgrChatId)) {
+        if (await isManagerChat(chatId)) {
           await handleBookCommand(chatId);
           return NextResponse.json({ ok: true });
         }
@@ -827,8 +822,7 @@ export async function POST(request) {
       if (relayHandled) return NextResponse.json({ ok: true });
 
       // Check if manager is in booking flow or replying
-      const managerChatIdStored = await getManagerChatId();
-      if (String(chatId) === String(managerChatIdStored)) {
+      if (await isManagerChat(chatId)) {
         const bookingHandled = await handleManagerBookingState(chatId, text || '');
         if (bookingHandled) return NextResponse.json({ ok: true });
 
