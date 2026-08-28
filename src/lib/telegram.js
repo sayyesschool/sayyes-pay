@@ -4,7 +4,16 @@ import { clientTimeLine, clientDateLine, clientWhen, localSlot, tzLabel, tzNoteF
 
 const BOT_TOKEN = () => process.env.TELEGRAM_BOT_TOKEN;
 const BOT_USERNAME = 'SY_school_bot';
-const MANAGER_USERNAME = process.env.MANAGER_TG_USERNAME || 'sayesstephanie';
+// Менеджеры: первый в списке — основной, остальные получают те же уведомления.
+const MANAGER_USERNAMES = (
+  process.env.MANAGER_TG_USERNAMES ||
+  process.env.MANAGER_TG_USERNAME ||
+  'sayesstephanie,sayyes_kristina'
+)
+  .split(',')
+  .map(name => name.trim().replace(/^@/, '').toLowerCase())
+  .filter(Boolean);
+const MANAGER_USERNAME = MANAGER_USERNAMES[0];
 
 function apiUrl(method) {
   return `https://api.telegram.org/bot${BOT_TOKEN()}/${method}`;
@@ -254,7 +263,7 @@ export function makeDeepLink(bookingId) {
 
 export function isManager(username) {
   if (!username) return false;
-  return username.toLowerCase() === MANAGER_USERNAME.toLowerCase();
+  return MANAGER_USERNAMES.includes(username.toLowerCase());
 }
 
-export { BOT_USERNAME, MANAGER_USERNAME };
+export { BOT_USERNAME, MANAGER_USERNAME, MANAGER_USERNAMES };
