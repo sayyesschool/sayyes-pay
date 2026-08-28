@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getAllActiveBookings, kvGet, getManagerChatId } from '@/lib/redis';
 import { sendMessage } from '@/lib/telegram';
+import { getManagerChatIds } from '@/lib/managers';
 import { slotKeyToDate } from '@/lib/time';
 
 const CRON_SECRET = process.env.CRON_SECRET;
@@ -189,8 +190,7 @@ export async function GET(request) {
       const id = await getChatIdByUsername(username);
       if (id) chatIds.add(String(id));
     }
-    const managerChatId = await getManagerChatId();
-    if (managerChatId) chatIds.add(String(managerChatId));
+    for (const id of await getManagerChatIds()) chatIds.add(String(id));
 
     let sentCount = 0;
     for (const chatId of chatIds) {
