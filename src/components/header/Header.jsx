@@ -6,7 +6,7 @@ export default function Header({ user }) {
             <div className="header__main">
                 <div className="header__container">
                     <a className="header__logo logo" href="/">
-                        <img src="https://s3.regru.cloud/sayyes-static/images/logos/sayyes-english-school_purple.svg" alt="Логотип Say Yes" />
+                        <img src="/static/images/logos/sayyes-english-school_purple.svg" alt="Логотип Say Yes" />
                     </a>
                     {/* 
                     <nav className="header__buttons">
