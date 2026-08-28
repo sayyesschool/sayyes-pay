@@ -128,17 +128,47 @@ export function confirmCancelKeyboard(bookingId) {
   };
 }
 
+// Кнопки живут на каждой карточке записи: менеджеру нужен весь набор действий сразу,
+// а не только в момент, когда пришло уведомление.
 export function managerActionsKeyboard(bookingId) {
   return {
     reply_markup: {
       inline_keyboard: [
         [
-          { text: '🔄 Перенести за ученика', callback_data: `mgr_reschedule:${bookingId}` },
-          { text: '❌ Отменить за ученика', callback_data: `mgr_cancel:${bookingId}` }
+          { text: '🔄 Перенести', callback_data: `mgr_reschedule:${bookingId}` },
+          { text: '❌ Отменить', callback_data: `mgr_cancel:${bookingId}` }
+        ],
+        [
+          { text: '✅ Пришёл', callback_data: `attended:${bookingId}` },
+          { text: '🚫 Не пришёл', callback_data: `noshow:${bookingId}` }
+        ],
+        [
+          { text: '✍️ Написать ученику', callback_data: `mgr_write:${bookingId}` }
         ]
       ]
     }
   };
+}
+
+// Карточка записи для менеджера: всё, что нужно для решения, в одном сообщении.
+export function formatManagerCard(booking) {
+  if (!booking) return "Запись не найдена";
+
+  const when = booking.slot && booking.slot !== 'no_time'
+    ? `${booking.slotDate || '—'}, ${booking.slotMsk || '—'} (МСК)`
+    : 'время не выбрано';
+
+  const marks = [];
+  if (booking.status === 'cancelled') marks.push('❌ запись отменена');
+  if (booking.attended === true) marks.push('✅ урок состоялся');
+  if (booking.attended === false) marks.push('🚫 не пришёл');
+
+  return `<b>${booking.name || 'Без имени'}</b>\n` +
+    `${when}\n` +
+    `TG: ${booking.telegram || '—'} · тел.: ${booking.phone || '—'}\n` +
+    `${booking.email || '—'}\n` +
+    `Код: <code>${booking.id}</code>` +
+    (marks.length ? `\n${marks.join(', ')}` : '');
 }
 
 export function slotsKeyboard(slots, bookingId) {
