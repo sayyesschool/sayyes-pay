@@ -1,3 +1,4 @@
+import { ZOOM_JOIN_URL, ZOOM_MEETING_ID, ZOOM_PASSCODE } from '@/lib/zoom';
 // Письмо с подтверждением записи.
 //
 // Раньше подтверждение существовало только двумя способами: экран после записи и
@@ -40,6 +41,15 @@ function parseFrom(value) {
 
 // --- .ics ---
 // Ключ слота — «2026-08-28_19:00» в базовом поясе расписания (UTC+3) → в UTC минус 3 часа.
+// В ICS запятая, точка с запятой и перевод строки — служебные символы, их экранируем.
+function icsEscape(value) {
+  return String(value)
+    .replace(/\\/g, '\\\\')
+    .replace(/;/g, '\\;')
+    .replace(/,/g, '\\,')
+    .replace(/\n/g, '\\n');
+}
+
 export function buildIcs(slotKey, bookingId) {
   if (!slotKey || slotKey === 'no_time') return null;
   const [datePart, timePart] = String(slotKey).split('_');
@@ -64,8 +74,14 @@ export function buildIcs(slotKey, bookingId) {
     'DTSTART:' + stamp(startUtc),
     'DTEND:' + stamp(endUtc),
     'SUMMARY:Пробный урок английского — SAY YES',
-    'DESCRIPTION:Пробный урок 30 минут в Zoom. Ссылку пришлём за час до начала.',
-    'LOCATION:Zoom',
+    'DESCRIPTION:' + icsEscape(
+      'Пробный урок 30 минут в Zoom.\n' +
+      'Подключиться: ' + ZOOM_JOIN_URL + '\n' +
+      'Идентификатор конференции: ' + ZOOM_MEETING_ID + '\n' +
+      'Код доступа: ' + ZOOM_PASSCODE
+    ),
+    'LOCATION:' + icsEscape(ZOOM_JOIN_URL),
+    'URL:' + ZOOM_JOIN_URL,
     'BEGIN:VALARM',
     'TRIGGER:-PT1H',
     'ACTION:DISPLAY',
@@ -154,7 +170,8 @@ function confirmationHtml(booking, mode) {
 ${when}
 <tr><td style="font-size:14px;line-height:1.7;color:#444;padding-bottom:18px">
 <b>Что дальше</b><br>
-✔ Ссылку на Zoom пришлём за час до начала<br>
+✔ Ссылка на урок: <a href="${ZOOM_JOIN_URL}" style="color:#5B2D8E;font-weight:700">подключиться в Zoom</a><br>
+<span style="color:#6b4b8a">Идентификатор ${ZOOM_MEETING_ID}, код доступа ${ZOOM_PASSCODE} — если заходите из приложения</span><br>
 ✔ Перенести или отменить можно в любой момент
 </td></tr>
 ${levelLine(booking) ? `<tr><td style="padding-bottom:18px;font-size:13px;color:#666;line-height:1.6">${levelLine(booking)}</td></tr>` : ''}
@@ -164,7 +181,7 @@ ${hasSlot ? `<tr><td style="padding-bottom:18px;font-size:13px;color:#666;line-h
 <a href="${botLink}" style="display:inline-block;padding:13px 22px;background:#5B2D8E;color:#fff;border-radius:100px;font-size:14px;font-weight:700;text-decoration:none">Открыть чат с нами в Telegram</a>
 </td></tr>
 <tr><td style="font-size:12px;color:#888;line-height:1.6;padding-bottom:4px">
-Необязательно — запись уже подтверждена. В боте удобно перенести урок и получить ссылку на Zoom.
+Необязательно — запись уже подтверждена. В боте удобно перенести урок и напомнить себе ссылку.
 </td></tr>`);
 }
 
@@ -344,6 +361,10 @@ function handoutHtml(booking) {
 • определит ваш уровень и обозначит сильные стороны и области для развития<br>
 • познакомит вас с полезными разговорными конструкциями, которые вы сможете сразу использовать в речи<br>
 • составит план обучения под вашу цель: что подтянуть в первую очередь и в каком темпе двигаться
+</td></tr>
+<tr><td style="font-size:14px;line-height:1.7;color:#444;padding-bottom:18px">
+Ссылка на урок: <a href="${ZOOM_JOIN_URL}" style="color:#5B2D8E;font-weight:700">подключиться в Zoom</a><br>
+<span style="color:#6b4b8a">Идентификатор ${ZOOM_MEETING_ID}, код доступа ${ZOOM_PASSCODE}</span>
 </td></tr>
 <tr><td style="font-size:14px;line-height:1.7;color:#1a1a1a;font-weight:700;background:#f5f0fb;border-radius:12px;padding:14px 16px">
 💡 Бонус: после урока — подборка ресурсов под ваши цели: что смотреть, слушать и читать именно на вашем уровне. Преподаватель соберёт её лично для вас.
