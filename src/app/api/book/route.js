@@ -5,6 +5,7 @@ import {
   getManagerChatId, kvGet
 } from '@/lib/redis';
 import { makeDeepLink, sendMessage, formatBookingForManager, managerActionsKeyboard, MANAGER_USERNAME } from '@/lib/telegram';
+import { notifyManagers } from '@/lib/managers';
 import { sendBookingConfirmation } from '@/lib/email';
 import { sendLead } from '@/lib/meta';
 
@@ -125,14 +126,8 @@ export async function POST(request) {
 
     // Notify manager immediately (even before user opens bot)
     try {
-      let managerChatId = await getManagerChatId();
-      // Fallback: look up by username in case manager hasn't re-sent /start
-      if (!managerChatId) {
-        managerChatId = await kvGet(`user_chat:${MANAGER_USERNAME.toLowerCase()}`);
-      }
-      if (managerChatId) {
-        await sendMessage(managerChatId, formatBookingForManager(booking, 'new'), managerActionsKeyboard(bookingId));
-      } else {
+      const sent = await notifyManagers(formatBookingForManager(booking, 'new'), managerActionsKeyboard(bookingId));
+      if (!sent) {
         console.warn('Manager chat ID not found — manager will not receive notification');
       }
     } catch (e) {
