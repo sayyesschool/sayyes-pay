@@ -623,6 +623,16 @@ async function handleAttendance(chatId, bookingId, attended, callbackQueryId, me
 
 // Сводка по заявкам считается по базе, а не по событиям Меты: в пикселе Lead
 // дублируется браузером и сервером, поэтому как счётчик людей он не годится.
+// Заявки без выбранного времени не попадают ни в /today, ни в /bookings —
+// там фильтр по дате слота. Без отдельной команды они просто теряются.
+async function handlePendingCommand(chatId) {
+  const all = await getAllActiveBookings();
+  const list = all.filter(b => !b.slot || b.slot === 'no_time');
+
+  list.sort((a, b) => String(b.createdAt || 0).localeCompare(String(a.createdAt || 0)));
+  await sendBookingCards(chatId, list, 'Ждут подбора времени');
+}
+
 async function handleStatsCommand(chatId, text) {
   const parts = String(text || '').trim().split(/\s+/);
   const days = Math.min(Math.max(parseInt(parts[1], 10) || 7, 1), 90);
@@ -1067,6 +1077,11 @@ export async function POST(request) {
           return NextResponse.json({ ok: true });
         }
 
+        if (text === '/pending') {
+          await handlePendingCommand(chatId);
+          return NextResponse.json({ ok: true });
+        }
+
         if (text && text.startsWith('/stats')) {
           await handleStatsCommand(chatId, text);
           return NextResponse.json({ ok: true });
@@ -1084,6 +1099,7 @@ export async function POST(request) {
             '/bookings — записи на ближайшую неделю\n' +
             '/find запрос — поиск по имени, телефону, почте или коду\n' +
             '/stats — сводка по заявкам за 7 дней, /stats 30 — за месяц\n' +
+            '/pending — заявки без выбранного времени\n' +
             '/book — записать ученика самому\n\n' +
             'На каждой карточке: перенести, отменить, отметить приход и написать ученику.'
           );
