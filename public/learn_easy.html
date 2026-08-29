@@ -1171,7 +1171,9 @@ function renderSlotGrid() {
   cta.classList.add('disabled');
   cta.textContent = 'Выберите время выше';
 
-  const days = getNextWeekdays(10);
+  // Три рабочие недели вперёд: часть людей планирует заранее,
+        // а двух недель им не хватало.
+        const days = getNextWeekdays(15);
   const userTZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const DAYS_FULL = ['Воскресенье','Понедельник','Вторник','Среда','Четверг','Пятница','Суббота'];
 
