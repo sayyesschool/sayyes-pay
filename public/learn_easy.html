@@ -1186,7 +1186,9 @@ function renderSlotGrid() {
     col.appendChild(header);
 
     const nowTs = Date.now();
-    const slots = generateSlots(date, 7);
+    // Слотов в сетке вдвое больше: при 7 в день расписание упиралось в потолок
+        // раньше, чем реклама — люди приходили, а свободного времени уже не было.
+        const slots = generateSlots(date, 14);
     slots.forEach(mskMin => {
       const localDate = mskMinutesToLocal(mskMin, date);
       // Слот должен начинаться минимум через 3 часа — иначе преподаватель не успеет
