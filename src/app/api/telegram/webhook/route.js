@@ -27,8 +27,9 @@ function generateAvailableSlots(bookedSlots) {
   const now = new Date();
   const mskOffset = 3 * 60; // UTC+3
 
-  // Generate slots for next 14 days
-  for (let dayOffset = 0; dayOffset < 14; dayOffset++) {
+  // Горизонт записи три недели — столько же показывает воронка,
+  // иначе при переносе человек видел бы меньше вариантов, чем при записи.
+  for (let dayOffset = 0; dayOffset < 21; dayOffset++) {
     const date = new Date(now);
     date.setDate(date.getDate() + dayOffset);
 
