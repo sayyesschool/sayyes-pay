@@ -9,7 +9,7 @@ const BOT_USERNAME = 'SY_school_bot';
 const MANAGER_USERNAMES = (
   process.env.MANAGER_TG_USERNAMES ||
   process.env.MANAGER_TG_USERNAME ||
-  'sayesstephanie,sayyes_kristina'
+  'sayesstephanie,sayyes_kristina,dp_1988,olia_pi'
 )
   .split(',')
   .map(name => name.trim().replace(/^@/, '').toLowerCase())
