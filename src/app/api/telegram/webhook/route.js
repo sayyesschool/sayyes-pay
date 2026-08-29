@@ -621,6 +621,68 @@ async function handleAttendance(chatId, bookingId, attended, callbackQueryId, me
 
 // --- Пульт менеджера ---
 
+// Сводка по заявкам считается по базе, а не по событиям Меты: в пикселе Lead
+// дублируется браузером и сервером, поэтому как счётчик людей он не годится.
+async function handleStatsCommand(chatId, text) {
+  const parts = String(text || '').trim().split(/\s+/);
+  const days = Math.min(Math.max(parseInt(parts[1], 10) || 7, 1), 90);
+  const since = Date.now() - days * 24 * 60 * 60 * 1000;
+
+  const keys = await kvKeys('booking:*');
+  const bookings = [];
+
+  for (const key of keys) {
+    const booking = await kvGet(key);
+    if (!booking || !booking.createdAt) continue;
+    if (new Date(booking.createdAt).getTime() < since) continue;
+    bookings.push(booking);
+  }
+
+  if (!bookings.length) {
+    await sendMessage(chatId, `За ${days} дн. заявок нет.`);
+    return;
+  }
+
+  const hasSlot = b => b.slot && b.slot !== 'no_time';
+  const gaps = [];
+
+  for (const booking of bookings) {
+    if (!hasSlot(booking)) continue;
+    const [dateStr, time] = String(booking.slot).split('_');
+    const [h, m] = String(time).split(':').map(Number);
+    // Ключ слота — в базовом поясе расписания (UTC+3), поэтому минус три часа.
+    const slotUtc = new Date(`${dateStr}T${String(h - 3).padStart(2, '0')}:${String(m).padStart(2, '0')}:00Z`);
+    const gap = (slotUtc.getTime() - new Date(booking.createdAt).getTime()) / 3600000;
+    if (Number.isFinite(gap) && gap > 0) gaps.push(gap);
+  }
+
+  const total = bookings.length;
+  const openedBot = bookings.filter(b => b.chatId).length;
+  const cancelled = bookings.filter(b => b.status === 'cancelled').length;
+  const noTime = bookings.filter(b => !hasSlot(b)).length;
+  const attended = bookings.filter(b => b.attended === true).length;
+  const noShow = bookings.filter(b => b.attended === false).length;
+  const marked = attended + noShow;
+  const share = n => Math.round((n / total) * 100);
+  const avgGap = gaps.length ? Math.round((gaps.reduce((a, b) => a + b, 0) / gaps.length) * 10) / 10 : null;
+
+  await sendMessage(chatId,
+    `<b>Заявки за ${days} дн.</b>\n\n` +
+    `Всего: ${total}\n` +
+    `Открыли бота: ${openedBot} (${share(openedBot)}%)\n` +
+    `Без бота: ${total - openedBot}\n` +
+    `Без выбранного времени: ${noTime}\n` +
+    `Отменено: ${cancelled}\n\n` +
+    `Пришли: ${attended}\n` +
+    `Не пришли: ${noShow}\n` +
+    `Не отмечено: ${total - marked}\n\n` +
+    (avgGap === null ? '' : `Средний разрыв заявка → урок: ${avgGap} ч\n`) +
+    `<i>Считается по базе записей.</i>`
+  );
+}
+
+
+
 // Расписание живёт в UTC+3, поэтому и «сегодня» считаем в нём:
 // иначе вечерние уроки уезжают на другую дату.
 function scheduleDayKey(daysAhead) {
@@ -1005,6 +1067,11 @@ export async function POST(request) {
           return NextResponse.json({ ok: true });
         }
 
+        if (text && text.startsWith('/stats')) {
+          await handleStatsCommand(chatId, text);
+          return NextResponse.json({ ok: true });
+        }
+
         if (text && text.startsWith('/find')) {
           await handleFindCommand(chatId, text.slice(5));
           return NextResponse.json({ ok: true });
@@ -1016,6 +1083,7 @@ export async function POST(request) {
             '/today — уроки на сегодня\n' +
             '/bookings — записи на ближайшую неделю\n' +
             '/find запрос — поиск по имени, телефону, почте или коду\n' +
+            '/stats — сводка по заявкам за 7 дней, /stats 30 — за месяц\n' +
             '/book — записать ученика самому\n\n' +
             'На каждой карточке: перенести, отменить, отметить приход и написать ученику.'
           );
