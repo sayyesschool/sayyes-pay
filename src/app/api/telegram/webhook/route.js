@@ -633,10 +633,29 @@ async function handlePendingCommand(chatId) {
   await sendBookingCards(chatId, list, 'Ждут подбора времени');
 }
 
-async function handleStatsCommand(chatId, text) {
+// Границы суток считаем в базовом поясе расписания (UTC+3) — том же,
+// в котором живёт «сегодня» у /today. Иначе вечерние заявки уезжают в соседний день.
+function statsWindow(text) {
   const parts = String(text || '').trim().split(/\s+/);
+  const command = parts[0].toLowerCase();
+  const day = 24 * 60 * 60 * 1000;
+  const shift = 3 * 60 * 60 * 1000;
+  const startOfToday = Math.floor((Date.now() + shift) / day) * day - shift;
+
+  if (command === '/stats_today') {
+    return { from: startOfToday, to: Date.now(), label: 'сегодня' };
+  }
+
+  if (command === '/stats_yesterday') {
+    return { from: startOfToday - day, to: startOfToday, label: 'вчера' };
+  }
+
   const days = Math.min(Math.max(parseInt(parts[1], 10) || 7, 1), 90);
-  const since = Date.now() - days * 24 * 60 * 60 * 1000;
+  return { from: Date.now() - days * day, to: Date.now(), label: `за ${days} дн.` };
+}
+
+async function handleStatsCommand(chatId, text) {
+  const { from, to, label } = statsWindow(text);
 
   const keys = await kvKeys('booking:*');
   const bookings = [];
@@ -644,12 +663,13 @@ async function handleStatsCommand(chatId, text) {
   for (const key of keys) {
     const booking = await kvGet(key);
     if (!booking || !booking.createdAt) continue;
-    if (new Date(booking.createdAt).getTime() < since) continue;
+    const created = new Date(booking.createdAt).getTime();
+    if (created < from || created >= to) continue;
     bookings.push(booking);
   }
 
   if (!bookings.length) {
-    await sendMessage(chatId, `За ${days} дн. заявок нет.`);
+    await sendMessage(chatId, `Заявок ${label} нет.`);
     return;
   }
 
@@ -677,7 +697,7 @@ async function handleStatsCommand(chatId, text) {
   const avgGap = gaps.length ? Math.round((gaps.reduce((a, b) => a + b, 0) / gaps.length) * 10) / 10 : null;
 
   await sendMessage(chatId,
-    `<b>Заявки за ${days} дн.</b>\n\n` +
+    `<b>Заявки ${label}</b>\n\n` +
     `Всего: ${total}\n` +
     `Открыли бота: ${openedBot} (${share(openedBot)}%)\n` +
     `Без бота: ${total - openedBot}\n` +
@@ -1099,6 +1119,7 @@ export async function POST(request) {
             '/bookings — записи на ближайшую неделю\n' +
             '/find запрос — поиск по имени, телефону, почте или коду\n' +
             '/stats — сводка по заявкам за 7 дней, /stats 30 — за месяц\n' +
+            '/stats_today и /stats_yesterday — за сегодня и за вчера\n' +
             '/pending — заявки без выбранного времени\n' +
             '/book — записать ученика самому\n\n' +
             'На каждой карточке: перенести, отменить, отметить приход и написать ученику.'
