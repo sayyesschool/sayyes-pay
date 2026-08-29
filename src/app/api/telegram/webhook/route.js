@@ -1162,6 +1162,26 @@ export async function POST(request) {
       // Запасной путь для тех, у кого чат с ботом уже был: payload диплинка Telegram
       // им не отправляет. Сначала пробуем связать по username, затем принимаем код
       // заявки, отправленный текстом.
+      // Команда со слешем, до которой мы дошли сюда, — либо незнакомая, либо
+      // менеджерская от обычного человека. Раньше она проваливалась дальше и
+      // превращалась в чужой ответ: «/stats» отдавал карточку собственной записи.
+      if (text && text.startsWith('/')) {
+        const command = text.split(/\s+/)[0].toLowerCase();
+        const managerCommands = ['/book', '/today', '/bookings', '/find', '/stats', '/pending', '/help'];
+
+        if (managerCommands.includes(command)) {
+          await sendMessage(chatId, 'Эта команда доступна только менеджерам школы.');
+        } else {
+          await sendMessage(chatId,
+            'Такой команды нет.\n\n' +
+            '/myrecord — показать вашу запись\n' +
+            'Записаться: https://www.sayyestoenglish.com/learn_easy'
+          );
+        }
+
+        return NextResponse.json({ ok: true });
+      }
+
       if (!isManager(username)) {
         const autoLinkedId = await linkByUsername(chatId, username);
         if (autoLinkedId) return NextResponse.json({ ok: true });
