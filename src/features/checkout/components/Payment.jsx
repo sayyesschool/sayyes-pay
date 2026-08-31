@@ -8,7 +8,12 @@ function handleSession(data) {
     return;
   }
   console.error('Checkout session failed:', data && data.error ? String(data.error) : 'unknown');
-  alert('Не удалось открыть оплату. Попробуйте ещё раз или напишите нам — мы поможем.');
+
+  // notice — это текст, написанный для человека (например, что спецпредложение
+  // истекло). Всё остальное показывать нельзя: там внутренние ошибки Stripe.
+  const notice = data && typeof data.notice === 'string' ? data.notice : null;
+
+  alert(notice || 'Не удалось открыть оплату. Попробуйте ещё раз или напишите нам — мы поможем.');
 }
 
 export default function Payment({
