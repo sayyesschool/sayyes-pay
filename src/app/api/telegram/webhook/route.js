@@ -840,6 +840,51 @@ async function handleStatsCommand(chatId, text) {
   }
 }
 
+// Разовая расчистка расписания: просим подтвердить всех, кто записан вперёд.
+// Записи набирались до того, как на воронке появилась цена, и заняли неделю вперёд.
+async function handleConfirmAllCommand(chatId) {
+  const all = await getAllActiveBookings();
+  const now = Date.now();
+
+  const list = all.filter(booking => {
+    if (!booking.chatId || booking.confirmed) return false;
+    if (!booking.slot || booking.slot === 'no_time') return false;
+
+    const [dateStr, time] = String(booking.slot).split('_');
+    const [h, m] = String(time).split(':').map(Number);
+    const at = new Date(`${dateStr}T00:00:00Z`);
+
+    if (Number.isNaN(at.getTime())) return false;
+
+    at.setTime(at.getTime() + ((h - 3) * 60 + m) * 60 * 1000);
+
+    return at.getTime() > now;
+  });
+
+  if (!list.length) {
+    await sendMessage(chatId, 'Все будущие записи уже подтверждены или без чата с ботом.');
+    return;
+  }
+
+  let sent = 0;
+
+  for (const booking of list) {
+    try {
+      await sendMessage(
+        booking.chatId,
+        `Здравствуйте! Подтвердите, пожалуйста, что будете на пробном уроке ${booking.slotDate || ''} в ${booking.slotLocal || booking.slotMsk || ''}.\n\n` +
+        'Преподаватель готовится к каждому уроку лично, поэтому неподтверждённые времена мы освобождаем за 6 часов до начала.',
+        bookingActionsKeyboard(booking.id, booking)
+      );
+      sent++;
+    } catch (e) {
+      console.error('Confirm sweep error:', booking.id, e);
+    }
+  }
+
+  await sendMessage(chatId, `Просьба подтвердить отправлена: ${sent} из ${list.length}.\nНеподтверждённые слоты освободятся автоматически за 6 часов до урока.`);
+}
+
 // Расписание живёт в UTC+3, поэтому и «сегодня» считаем в нём:
 // иначе вечерние уроки уезжают на другую дату.
 function scheduleDayKey(daysAhead) {
@@ -1538,6 +1583,11 @@ export async function POST(request) {
           return NextResponse.json({ ok: true });
         }
 
+        if (text === '/confirmall') {
+          await handleConfirmAllCommand(chatId);
+          return NextResponse.json({ ok: true });
+        }
+
         if (text && text.startsWith('/find')) {
           await handleFindCommand(chatId, text.slice(5));
           return NextResponse.json({ ok: true });
@@ -1630,7 +1680,7 @@ export async function POST(request) {
       // превращалась в чужой ответ: «/stats» отдавал карточку собственной записи.
       if (text && text.startsWith('/')) {
         const command = text.split(/\s+/)[0].toLowerCase();
-        const managerCommands = ['/book', '/today', '/bookings', '/find', '/stats', '/pending', '/who', '/cleanup', '/help'];
+        const managerCommands = ['/book', '/today', '/bookings', '/find', '/stats', '/pending', '/who', '/cleanup', '/confirmall', '/help'];
 
         if (managerCommands.includes(command)) {
           await sendMessage(chatId, 'Эта команда доступна только менеджерам школы.');
