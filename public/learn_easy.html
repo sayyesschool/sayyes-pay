@@ -210,7 +210,7 @@ h2{font-size:21px;font-weight:700;color:var(--dark);line-height:1.3;margin-botto
     </ul>
 
     <div class="spacer"></div>
-    <button class="cta" onclick="go(11)">Продолжить →</button>
+    <button class="cta" onclick="go('2b')">Продолжить →</button>
   </div>
 </div>
 
@@ -557,6 +557,23 @@ h2{font-size:21px;font-weight:700;color:var(--dark);line-height:1.3;margin-botto
   </div>
 </div>
 
+<!-- ======= S2b: BUDGET ======= -->
+<!-- Вопрос про деньги стоит до записи: он готовит человека к цене
+     и даёт ведущей пробного понятный ориентир ещё до звонка. -->
+<div class="screen" id="s2b">
+  <div class="nav"><button class="back-btn" onclick="go(2)">← Назад</button></div>
+  <div class="content">
+    <h2>Сколько готовы вкладывать в английский в месяц?</h2>
+    <p class="sub">Занятия в евро. Стартовый пакет после пробного — 30 €.</p>
+    <div class="options" style="margin-top:12px">
+      <div class="opt" onclick="pick(this,11)"><span class="opt-icon">🌱</span>До 50 € — начну с малого</div>
+      <div class="opt" onclick="pick(this,11)"><span class="opt-icon">📚</span>50–150 € — готов(а) заниматься регулярно</div>
+      <div class="opt" onclick="pick(this,11)"><span class="opt-icon">🚀</span>Больше 150 € — нужен быстрый результат</div>
+      <div class="opt" onclick="pick(this,11)"><span class="opt-icon">🤔</span>Пока не решил(а)</div>
+    </div>
+  </div>
+</div>
+
 <!-- ======= S11: VALUE REINFORCEMENT ======= -->
 <div class="screen" id="s11">
   <div class="nav"><button class="back-btn" onclick="go(2)">← Назад</button></div>
@@ -574,8 +591,12 @@ h2{font-size:21px;font-weight:700;color:var(--dark);line-height:1.3;margin-botto
     <div class="spacer"></div>
     <!-- Отсев должен случиться до ввода контактов, иначе мы собираем заявки
          от людей, для которых 30 € — неподъёмная сумма. -->
-    <div style="font-size:12px;color:var(--gray);text-align:center;margin-bottom:10px;line-height:1.6">
-      Пробный урок бесплатный. Продолжение, если понравится, — <b>от 30 €</b>.
+    <div style="background:var(--purple-light);border-radius:14px;padding:12px 14px;margin-bottom:12px">
+      <div style="font-size:13px;font-weight:700;color:var(--purple-dark);margin-bottom:4px">После урока откроется стартовый пакет</div>
+      <div style="font-size:12px;color:var(--purple-dark);line-height:1.65">
+        2 индивидуальных занятия или пробная неделя в группе — <b>30 €</b>.<br>
+        Предложение доступно только тем, кто пришёл на урок, и действует 3 дня.
+      </div>
     </div>
     <button class="cta" onclick="go(12)" style="animation:pulse 2s infinite">Записаться на пробный урок →</button>
   </div>
@@ -641,7 +662,7 @@ h2{font-size:21px;font-weight:700;color:var(--dark);line-height:1.3;margin-botto
       <div style="font-size:14px;font-weight:700;color:var(--purple-dark);margin-bottom:4px">Пробный урок — бесплатно</div>
       <div style="font-size:12px;color:var(--purple-dark);line-height:1.65">
         Если понравится, следующий шаг — <b>30 €</b>: 2 индивидуальных занятия или пробная неделя в группе.<br>
-        Решаете после урока — платить заранее ничего не нужно.
+        Пакет открывается после урока и действует 3 дня. Платить заранее ничего не нужно.
       </div>
     </div>
 
@@ -1030,7 +1051,8 @@ function go(id) {
 const quizAnswers = {};
 const QUIZ_LABELS = {
   '3': 'Уровень', '4': 'Цель', '5': 'Время в неделю',
-  '6': 'Формат', '7': 'Готовность', '8': 'Возраст', '9': 'Страна', '10': 'Язык'
+  '6': 'Формат', '7': 'Готовность', '8': 'Возраст', '9': 'Страна', '10': 'Язык',
+  '2b': 'Бюджет'
 };
 
 function pick(el, next) {
@@ -1188,7 +1210,7 @@ function renderSlotGrid() {
 
   // Три рабочие недели вперёд: часть людей планирует заранее,
         // а двух недель им не хватало.
-        const days = getNextWeekdays(15);
+        const days = getNextWeekdays(7);
   const userTZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const DAYS_FULL = ['Воскресенье','Понедельник','Вторник','Среда','Четверг','Пятница','Суббота'];
 
