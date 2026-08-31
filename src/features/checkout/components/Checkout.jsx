@@ -48,6 +48,16 @@ export default function Checkout({ products, groupId, packId }) {
         <div className="checkout flex-column gap-l">
             {groupName && <h3 className="heading-5">{groupName}</h3>}
 
+            {/* Пакет выбрал менеджер — показываем клиенту, за что он платит,
+                до того как он введёт почту. */}
+            {preselected &&
+                <p className="text">
+                    {preselected.description} — <strong className="text text--bold">
+                        {(preselected.price / 100).toFixed(2)} {preselected.currency?.toUpperCase()}
+                    </strong>
+                </p>
+            }
+
             <Tabs color="violet" pills>
                 <Tab
                     content="Пакет"
