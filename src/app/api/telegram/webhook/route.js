@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getProducts } from '@/services/stripe';
 import { getIntroProducts, getIntroProduct, introActive, introExpiry, nextIntroExpiry } from '@/services/intro';
 import { clientTimeLine, clientDateLine, clientWhen, localTimeString, localSlot, slotKeyToDate } from '@/lib/time';
-import { sendSchedule, sendTrialAttended } from '@/lib/meta';
+import { sendSchedule, sendTrialAttended, sendTrialConfirmed } from '@/lib/meta';
 import {
   getBooking, updateBooking, getBookedSlots, removeBookedSlot, addBookedSlot,
   setUserBooking, getUserBooking, clearUserBooking,
@@ -601,6 +601,36 @@ async function handleManagerBookingState(chatId, text) {
 
 // Менеджер отмечает, состоялся ли урок. Приход — то событие, на которое имеет смысл
 // оптимизировать рекламу: запись без прихода алгоритму знать бесполезно.
+// Подтверждение от самого ученика. Это первое действие, которое чего-то стоит:
+// заявку оставляют между делом, а «буду» жмёт тот, кто действительно собирается прийти.
+async function handleConfirmAttendance(chatId, bookingId, callbackQueryId, messageId) {
+  const booking = await getBooking(bookingId);
+
+  if (!booking) {
+    await answerCallback(callbackQueryId, 'Запись не найдена');
+    return;
+  }
+
+  if (!booking.confirmed) {
+    await updateBooking(bookingId, {
+      confirmed: true,
+      confirmedAt: new Date().toISOString()
+    });
+
+    try {
+      await sendTrialConfirmed(booking);
+    } catch (e) {
+      console.error('CAPI confirm error:', e);
+    }
+  }
+
+  await answerCallback(callbackQueryId, 'Спасибо! Ждём вас');
+  await sendMessage(chatId,
+    'Спасибо, ждём вас на уроке! Пришлём ссылку ещё раз за час до начала.\n\n' +
+    'Если планы поменяются — перенесите запись, это нормально.'
+  );
+}
+
 async function handleAttendance(chatId, bookingId, attended, callbackQueryId, messageId, from) {
   const booking = await getBooking(bookingId);
   if (!booking) {
@@ -830,6 +860,9 @@ async function sendBookingCards(chatId, bookings, title) {
   const waiting = bookings.length - came - missed;
   const parts = [];
 
+  const confirmed = bookings.filter(b => b.confirmed).length;
+
+  if (confirmed) parts.push(`🙋 подтвердили: ${confirmed}`);
   if (came) parts.push(`✅ пришли: ${came}`);
   if (missed) parts.push(`🚫 не пришли: ${missed}`);
   if (waiting) parts.push(`⏳ без отметки: ${waiting}`);
@@ -1413,6 +1446,9 @@ export async function POST(request) {
           break;
         case 'keep':
           await handleKeep(chatId, bookingId, callbackId, messageId);
+          break;
+        case 'confirm':
+          await handleConfirmAttendance(chatId, bookingId, callbackId, messageId);
           break;
         case 'attended':
           await handleAttendance(chatId, bookingId, true, callbackId, messageId, from);
