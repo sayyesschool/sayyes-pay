@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getAllActiveBookings, updateBooking, getManagerChatId } from '@/lib/redis';
-import { sendMessage, formatReminder, formatHandout, bookingActionsKeyboard, formatAttendanceAsk, attendanceKeyboard } from '@/lib/telegram';
-import { notifyManagers } from '@/lib/managers';
+import { sendMessage, formatReminder, formatHandout, bookingActionsKeyboard, formatAttendanceAsk, attendanceKeyboard, formatManagerCard, managerActionsKeyboard } from '@/lib/telegram';
+import { notifyManagers, notifyHost } from '@/lib/managers';
 import { sendHandoutEmail } from '@/lib/email';
 
 // Protect cron endpoint
@@ -21,6 +21,7 @@ export async function GET(request) {
     let sent1h = 0;
     let sentHandout = 0;
     let askedAttendance = 0;
+    let briefedHost = 0;
 
     for (const booking of bookings) {
       if (!booking.slot || booking.slot === 'no_time') continue;
@@ -83,6 +84,21 @@ export async function GET(request) {
         }
       }
 
+      // Бриф ведущей за 15 минут до звонка: карточка с ответами из воронки,
+      // чтобы на урок не заходили вслепую. Окно широкое (5–40 минут), потому что
+      // крон дёргается раз в 15 минут и GitHub Actions регулярно опаздывает.
+      const minutesUntil = hoursUntil * 60;
+      if (!booking.hostBriefed && minutesUntil > 5 && minutesUntil < 40) {
+        const briefed = await notifyHost(
+          `⏰ <b>Пробный урок через ${Math.round(minutesUntil)} мин</b>\n\n` + formatManagerCard(booking),
+          managerActionsKeyboard(booking.id)
+        );
+        if (briefed) {
+          await updateBooking(booking.id, { hostBriefed: true });
+          briefedHost++;
+        }
+      }
+
       // Через час после урока спрашиваем менеджера, состоялся ли он. Ответ уходит
       // в Мету событием TrialAttended — иначе реклама так и будет приводить тех,
       // кто записывается и не доходит.
@@ -102,6 +118,7 @@ export async function GET(request) {
       sent1h,
       sentHandout,
       askedAttendance,
+      briefedHost,
       timestamp: now.toISOString()
     });
   } catch (e) {
