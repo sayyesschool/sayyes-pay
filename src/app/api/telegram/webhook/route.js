@@ -803,6 +803,33 @@ async function handleFindCommand(chatId, query) {
   await sendBookingCards(chatId, found.sort(bySlot), `Найдено по «${needle}»`);
 }
 
+// Ссылка на оплату с кодом записи. Без кода оплата искалась по совпадению почты
+// и терялась, если человек платил с другого адреса.
+async function handleMgrPayLink(chatId, bookingId, callbackQueryId) {
+  const booking = await getBooking(bookingId);
+
+  if (!booking) {
+    await answerCallback(callbackQueryId, 'Запись не найдена');
+    return;
+  }
+
+  if (!booking.chatId) {
+    await answerCallback(callbackQueryId, 'У ученика нет чата с ботом');
+    return;
+  }
+
+  const link = `https://www.sayyestoenglish.com/?b=${encodeURIComponent(booking.id)}`;
+
+  await answerCallback(callbackQueryId);
+  await sendMessage(booking.chatId,
+    '💳 <b>Оплата обучения</b>\n\n' +
+    `<a href="${link}">Выбрать формат и оплатить</a>\n\n` +
+    'На странице выберите подходящий пакет. После оплаты с вами свяжется менеджер и подберёт группу или преподавателя.'
+  );
+
+  await sendMessage(chatId, `Ссылка на оплату отправлена: ${booking.name || 'ученик'}, код ${booking.id}.`);
+}
+
 async function handleMgrWrite(chatId, bookingId, callbackQueryId) {
   const booking = await getBooking(bookingId);
 
@@ -1034,6 +1061,9 @@ export async function POST(request) {
           break;
         case 'mgr_time':
           await handleMgrManualTimeAsk(chatId, bookingId, callbackId);
+          break;
+        case 'mgr_pay':
+          await handleMgrPayLink(chatId, bookingId, callbackId);
           break;
         case 'mgr_write':
           await handleMgrWrite(chatId, bookingId, callbackId);
