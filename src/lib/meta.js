@@ -239,6 +239,35 @@ export async function sendSchedule(booking, extra = {}) {
 }
 
 /**
+ * SubmitApplication — человек подтвердил, что придёт на урок (кнопка в боте).
+ * Имя стандартное и раньше не использовалось: у него чистая история,
+ * и оптимизация на нём не будет отравлена прежними дешёвыми лидами.
+ */
+export async function sendTrialConfirmed(booking, extra = {}) {
+  if (!booking) return { skipped: 'no booking' };
+
+  const custom = {
+    content_name: 'trial_will_attend',
+    value: 0,
+    currency: 'EUR'
+  };
+
+  if (extra.slotIso) custom.slot_datetime = extra.slotIso;
+
+  return sendCapiEvent({
+    eventName: 'SubmitApplication',
+    eventId: booking.id ? 'cfm_' + booking.id : undefined,
+    externalId: booking.id,
+    email: booking.email,
+    phone: booking.telegram,
+    name: booking.name,
+    attribution: booking.attribution,
+    sourceUrl: 'https://www.sayyestoenglish.com/learn_easy',
+    customData: custom
+  });
+}
+
+/**
  * StartTrial — человек действительно пришёл на пробный урок. Отмечает менеджер в боте.
  * Имя стандартное намеренно: кастомное событие нельзя выбрать целью оптимизации
  * без отдельной custom conversion, а StartTrial доступен в кампании сразу.
