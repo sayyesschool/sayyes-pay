@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import {
   getBookedSlots, addBookedSlot,
-  createBooking, setPendingBooking,
+  createBooking, setPendingBooking, updateBooking,
   getManagerChatId, kvGet
 } from '@/lib/redis';
 import { makeDeepLink, sendMessage, formatBookingForManager, managerActionsKeyboard, MANAGER_USERNAME } from '@/lib/telegram';
@@ -127,7 +127,11 @@ export async function POST(request) {
       booking.emailNote = String(e).slice(0, 200);
     }
 
-    await createBooking(booking);
+    // Именно update, а не повторный create: запись уже создана выше.
+    await updateBooking(bookingId, {
+      emailOk: booking.emailOk,
+      emailNote: booking.emailNote
+    });
 
     // Generate deep link
     const botLink = makeDeepLink(bookingId);
