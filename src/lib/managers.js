@@ -35,6 +35,33 @@ export async function getManagerChatIds() {
   return ids;
 }
 
+// Ведущая пробных уроков. Ей одной уходит карточка перед звонком:
+// остальным этот шум не нужен. Меняется переменной окружения.
+export const TRIAL_HOST_USERNAME = (process.env.TRIAL_HOST_USERNAME || 'sayyes_kristina')
+  .trim()
+  .replace(/^@/, '')
+  .toLowerCase();
+
+// Сообщение ведущей. Если её чат боту неизвестен (не нажимала «Начать»),
+// молчать нельзя — так уже терялись уведомления. Шлём всем менеджерам.
+export async function notifyHost(text, keyboard) {
+  const map = await getManagerChatMap();
+  const id = map[TRIAL_HOST_USERNAME];
+
+  if (!id) {
+    console.warn('Trial host chat unknown:', TRIAL_HOST_USERNAME);
+    return notifyManagers(text, keyboard);
+  }
+
+  try {
+    await sendMessage(id, text, keyboard);
+    return 1;
+  } catch (e) {
+    console.error('Trial host notification failed', e);
+    return 0;
+  }
+}
+
 export async function isManagerChat(chatId) {
   if (!chatId) return false;
   const ids = await getManagerChatIds();
