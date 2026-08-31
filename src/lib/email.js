@@ -14,6 +14,7 @@ import { ZOOM_JOIN_URL, ZOOM_MEETING_ID, ZOOM_PASSCODE } from '@/lib/zoom';
 // Не задан ни один — модуль молча ничего не делает и никогда не роняет запись.
 
 import { localSlot, tzNoteFor } from '@/lib/time';
+import { kvSet } from '@/lib/redis';
 
 const BOT_LINK_BASE = 'https://t.me/SY_school_bot';
 
@@ -306,6 +307,16 @@ const ADAPTERS = {
 };
 
 // Отправка. Никогда не бросает наружу: запись важнее письма.
+// Последняя ошибка почты хранится неделю: без неё молчаливый отказ провайдера
+// обнаруживается только жалобой клиента «письмо не пришло».
+async function storeMailError(info) {
+  try {
+    await kvSet('last_mail_error', JSON.stringify({ ...info, at: new Date().toISOString() }), 604800);
+  } catch (e) {
+    console.error('Cannot store mail error:', e);
+  }
+}
+
 export async function sendBookingConfirmation(booking, mode = 'new') {
   const which = provider();
   if (!which) return { skipped: 'no mail provider configured' };
@@ -336,11 +347,15 @@ export async function sendBookingConfirmation(booking, mode = 'new') {
     if (!resp.ok) {
       const text = await resp.text().catch(() => '');
       console.error(`Mail (${which}) error:`, resp.status, text.slice(0, 400));
+      // Ошибка отправки раньше видна была только в логах Vercel, то есть практически
+      // никому. Кладём последнюю в базу — её видно через /api/health/email.
+      await storeMailError({ provider: which, status: resp.status, text: text.slice(0, 300) });
       return { ok: false, provider: which, status: resp.status };
     }
     return { ok: true, provider: which };
   } catch (e) {
     console.error(`Mail (${which}) request failed:`, e);
+    await storeMailError({ provider: which, error: String(e).slice(0, 300) });
     return { ok: false, provider: which, error: String(e) };
   }
 }
