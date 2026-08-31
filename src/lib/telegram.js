@@ -130,7 +130,14 @@ export function confirmCancelKeyboard(bookingId) {
 
 // Кнопки живут на каждой карточке записи: менеджеру нужен весь набор действий сразу,
 // а не только в момент, когда пришло уведомление.
-export function managerActionsKeyboard(bookingId) {
+// Второй аргумент необязательный: без него клавиатура ведёт себя как раньше.
+// С ним кнопки показывают, какая отметка уже стоит — иначе по кнопкам не понять,
+// отмечали урок или нет.
+export function managerActionsKeyboard(bookingId, booking) {
+  const attended = booking && booking.attended;
+  const cameText = attended === true ? '✅ Пришёл ✓' : '✅ Пришёл';
+  const missedText = attended === false ? '🚫 Не пришёл ✓' : '🚫 Не пришёл';
+
   return {
     reply_markup: {
       inline_keyboard: [
@@ -139,8 +146,8 @@ export function managerActionsKeyboard(bookingId) {
           { text: '❌ Отменить', callback_data: `mgr_cancel:${bookingId}` }
         ],
         [
-          { text: '✅ Пришёл', callback_data: `attended:${bookingId}` },
-          { text: '🚫 Не пришёл', callback_data: `noshow:${bookingId}` }
+          { text: cameText, callback_data: `attended:${bookingId}` },
+          { text: missedText, callback_data: `noshow:${bookingId}` }
         ],
         [
           { text: '💳 Ссылка на оплату', callback_data: `mgr_pay:${bookingId}` }
@@ -166,8 +173,6 @@ export function formatManagerCard(booking) {
   // Кто поставил отметку — чтобы не выяснять это по чатам.
   const by = booking.attendedBy ? ` (отметил(а) ${booking.attendedBy})` : '';
   if (booking.archived) marks.push('🗃 архив (до запуска рекламы)');
-  if (booking.attended === true) marks.push('✅ урок состоялся' + by);
-  if (booking.attended === false) marks.push('🚫 не пришёл' + by);
   // Оплата видна прямо в карточке: раньше о ней знала только почта,
   // и менеджер не мог понять, кто уже заплатил.
   if (booking.paid) {
@@ -184,7 +189,16 @@ export function formatManagerCard(booking) {
     .filter(Boolean)
     .join(' · ');
 
-  return `<b>${booking.name || 'Без имени'}</b>\n` +
+  // Статус — первой строкой. Внизу, в общем списке пометок, его не замечали:
+  // отмеченная запись выглядела так же, как та, где никто ничего не ставил.
+  const status = booking.attended === true
+    ? `✅ <b>ПРИШЁЛ</b>${by}`
+    : booking.attended === false
+      ? `🚫 <b>НЕ ПРИШЁЛ</b>${by}`
+      : '⏳ отметки нет';
+
+  return `${status}\n` +
+    `<b>${booking.name || 'Без имени'}</b>\n` +
     `${when}\n` +
     `TG: ${booking.telegram || '—'} · тел.: ${booking.phone || '—'}\n` +
     `${booking.email || '—'}\n` +
