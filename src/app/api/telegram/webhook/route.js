@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getProducts } from '@/services/stripe';
+import { getIntroProducts, getIntroProduct, introActive, introExpiry, nextIntroExpiry } from '@/services/intro';
 import { clientTimeLine, clientDateLine, clientWhen, localTimeString, localSlot, slotKeyToDate } from '@/lib/time';
 import { sendSchedule, sendTrialAttended } from '@/lib/meta';
 import {
@@ -605,7 +606,13 @@ async function handleAttendance(chatId, bookingId, attended, callbackQueryId, me
     return;
   }
 
-  await updateBooking(bookingId, { attended, attendanceMarkedAt: new Date().toISOString() });
+  // Отсчёт спецпредложения начинается здесь: трое суток с момента,
+  // когда урок отметили состоявшимся.
+  await updateBooking(bookingId, {
+    attended,
+    attendanceMarkedAt: new Date().toISOString(),
+    ...(attended ? { introExpiresAt: nextIntroExpiry() } : {})
+  });
 
   if (attended && !booking.attendedSent) {
     try {
@@ -621,6 +628,16 @@ async function handleAttendance(chatId, bookingId, attended, callbackQueryId, me
     (attended ? '✅ Урок состоялся\n\n' : '🚫 Не пришёл\n\n') +
     `${booking.name || '—'} (${booking.telegram || booking.email || '—'})`
   );
+
+  // Напоминание, а не автоотправка: формат выбирает ведущая,
+  // она только что говорила с человеком.
+  if (attended) {
+    await sendMessage(
+      chatId,
+      '🎁 Спецпредложение для этого ученика активно трое суток. Отправить — кнопкой ниже.',
+      { inline_keyboard: [[{ text: '💳 Ссылка на оплату', callback_data: `mgr_pay:${bookingId}` }]] }
+    );
+  }
 }
 
 // --- Пульт менеджера ---
@@ -855,15 +872,17 @@ async function handleMgrPayLink(chatId, bookingId, callbackQueryId) {
     return;
   }
 
+  const intro = await introMenu(booking);
+
   await answerCallback(callbackQueryId);
   await sendMessage(
     chatId,
-    `💳 <b>Что оплачивает ученик</b>\n${booking.name || 'Ученик'}, код <code>${booking.id}</code>\n\nВыберите формат:`,
+    `💳 <b>Что оплачивает ученик</b>\n${booking.name || 'Ученик'}, код <code>${booking.id}</code>${intro.note}\n\nВыберите формат:`,
     {
-      inline_keyboard: groups.map(group => [{
+      inline_keyboard: intro.rows.concat(groups.map(group => [{
         text: group.name,
         callback_data: `mgr_payg:${bookingId}:${group.id}`
-      }])
+      }]))
     }
   );
 }
@@ -943,6 +962,91 @@ async function handleMgrPaySend(chatId, bookingId, packId, callbackQueryId) {
   );
 
   await sendMessage(chatId, `Ссылка отправлена: ${booking.name || 'ученик'} — ${product.name} · ${product.description}, ${price}.`);
+}
+
+// Дедлайн для менеджера: базовый пояс расписания, тот же, в котором работает /today.
+function introDeadlineText(value) {
+  return new Date(value).toLocaleString('ru-RU', {
+    day: 'numeric',
+    month: 'long',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'Europe/Moscow'
+  });
+}
+
+// Спецпредложение показываем только после отметки «Пришёл»: это оффер
+// за состоявшийся урок, а не за запись.
+async function introMenu(booking) {
+  if (!booking.attended) return { rows: [], note: '' };
+
+  let items = [];
+
+  try {
+    items = await getIntroProducts();
+  } catch (e) {
+    console.error('Intro products error:', e);
+    return { rows: [], note: '' };
+  }
+
+  if (!items.length) return { rows: [], note: '' };
+
+  const rows = items.map(item => [{
+    text: `🎁 ${item.name} — ${Math.round(item.price / 100)} €`,
+    callback_data: `mgr_payi:${booking.id}:${item.external_id}`
+  }]);
+
+  const expiry = introExpiry(booking);
+  const note = introActive(booking)
+    ? `\n\n🎁 Спецпредложение действует до ${introDeadlineText(expiry)}.`
+    : '\n\n🎁 Спецпредложение истекло. Отправите снова — отсчёт трёх суток пойдёт заново.';
+
+  return { rows, note };
+}
+
+// Интро-оффер: цена и срок. Отправка запускает отсчёт заново, поэтому этой же
+// кнопкой менеджер продлевает предложение, если человек не успел.
+async function handleMgrPayIntro(chatId, bookingId, packId, callbackQueryId) {
+  const booking = await getBooking(bookingId);
+
+  if (!booking || !booking.chatId) {
+    await answerCallback(callbackQueryId, 'Запись не найдена');
+    return;
+  }
+
+  const product = await getIntroProduct(packId);
+
+  if (!product) {
+    await answerCallback(callbackQueryId, 'Спецпредложение недоступно');
+    return;
+  }
+
+  const expiresAt = introActive(booking)
+    ? introExpiry(booking).toISOString()
+    : nextIntroExpiry();
+
+  await updateBooking(bookingId, {
+    introExpiresAt: expiresAt,
+    introPack: product.external_id,
+    introSentAt: new Date().toISOString()
+  });
+
+  const link = `https://www.sayyestoenglish.com/?b=${encodeURIComponent(booking.id)}&p=${encodeURIComponent(product.external_id)}`;
+  const price = `${Math.round(product.price / 100)} €`;
+
+  await answerCallback(callbackQueryId);
+  await sendMessage(
+    booking.chatId,
+    '🎁 <b>Специальное предложение после пробного урока</b>\n\n' +
+    `${product.name}\n${product.description}\nЦена: <b>${price}</b>\n\n` +
+    `<a href="${link}">Перейти к оплате</a>\n\n` +
+    'Предложение действует трое суток. Заполнять ничего не нужно — чек придёт на почту, которую вы указали при записи.'
+  );
+
+  await sendMessage(
+    chatId,
+    `🎁 Спецпредложение отправлено: ${booking.name || 'ученик'} — ${product.name}, ${price}.\nДействует до ${introDeadlineText(expiresAt)}.`
+  );
 }
 
 async function handleMgrWrite(chatId, bookingId, callbackQueryId) {
@@ -1185,6 +1289,9 @@ export async function POST(request) {
           break;
         case 'mgr_payp':
           await handleMgrPaySend(chatId, bookingId, params[1], callbackId);
+          break;
+        case 'mgr_payi':
+          await handleMgrPayIntro(chatId, bookingId, params[1], callbackId);
           break;
         case 'mgr_write':
           await handleMgrWrite(chatId, bookingId, callbackId);
