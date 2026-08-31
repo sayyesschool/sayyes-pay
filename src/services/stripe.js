@@ -58,7 +58,7 @@ export async function createCheckoutSession({
     email,
     price_id,
     baseUrl
-} = {}, bookingId) {
+} = {}, bookingId, pack) {
     const session = await stripe.checkout.sessions.create({
         mode: "payment",
         ui_mode: "hosted", // or "embedded"
@@ -69,9 +69,14 @@ export async function createCheckoutSession({
         customer_email: email,
         // Идентификатор заявки едет в тех же метаданных: по нему вебхук
         // находит заявку точно, а не по совпадению почты.
-        metadata: bookingId
-            ? { email, price_id, booking_id: String(bookingId) }
-            : { email, price_id }
+        metadata: {
+            email,
+            price_id,
+            ...(bookingId ? { booking_id: String(bookingId) } : {}),
+            // У интро-продуктов нет external_id в Stripe, а платёжной базе школы
+            // идентификатор нужен — везём его отдельным полем.
+            ...(pack ? { pack: String(pack) } : {})
+        }
     });
 
     return session;
