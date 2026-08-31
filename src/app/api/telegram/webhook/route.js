@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getProducts } from '@/services/stripe';
 import { clientTimeLine, clientDateLine, clientWhen, localTimeString, localSlot, slotKeyToDate } from '@/lib/time';
 import { sendSchedule, sendTrialAttended } from '@/lib/meta';
 import {
@@ -805,6 +806,32 @@ async function handleFindCommand(chatId, query) {
 
 // Ссылка на оплату с кодом записи. Без кода оплата искалась по совпадению почты
 // и терялась, если человек платил с другого адреса.
+// Прайс для меню тянется из Stripe — того же источника, что и страница оплаты.
+// Жёсткий список в боте разъехался бы с прайсом при первом же изменении цен.
+async function loadPriceGroups() {
+  const products = await getProducts({ limit: 100, active: true });
+  const groups = [];
+
+  for (const product of products) {
+    let group = groups.find(item => item.id === product.group_id);
+
+    if (!group) {
+      group = { id: product.group_id, name: product.name, items: [] };
+      groups.push(group);
+    }
+
+    group.items.push(product);
+  }
+
+  return groups;
+}
+
+function priceLabel(product) {
+  return `${product.description} — ${Math.round(product.price / 100)} €`;
+}
+
+// Шаг 1: формат. Пакетов полтора десятка, в одну клавиатуру они не лезут,
+// поэтому сначала формат, потом пакет внутри него.
 async function handleMgrPayLink(chatId, bookingId, callbackQueryId) {
   const booking = await getBooking(bookingId);
 
@@ -818,16 +845,104 @@ async function handleMgrPayLink(chatId, bookingId, callbackQueryId) {
     return;
   }
 
-  const link = `https://www.sayyestoenglish.com/?b=${encodeURIComponent(booking.id)}`;
+  let groups;
+
+  try {
+    groups = await loadPriceGroups();
+  } catch (e) {
+    console.error('Price list error:', e);
+    await answerCallback(callbackQueryId, 'Прайс недоступен, попробуйте ещё раз');
+    return;
+  }
 
   await answerCallback(callbackQueryId);
-  await sendMessage(booking.chatId,
+  await sendMessage(
+    chatId,
+    `💳 <b>Что оплачивает ученик</b>\n${booking.name || 'Ученик'}, код <code>${booking.id}</code>\n\nВыберите формат:`,
+    {
+      inline_keyboard: groups.map(group => [{
+        text: group.name,
+        callback_data: `mgr_payg:${bookingId}:${group.id}`
+      }])
+    }
+  );
+}
+
+// Шаг 2: пакет внутри формата.
+async function handleMgrPayGroup(chatId, bookingId, groupId, callbackQueryId) {
+  let groups;
+
+  try {
+    groups = await loadPriceGroups();
+  } catch (e) {
+    console.error('Price list error:', e);
+    await answerCallback(callbackQueryId, 'Прайс недоступен, попробуйте ещё раз');
+    return;
+  }
+
+  const group = groups.find(item => item.id === groupId);
+
+  if (!group) {
+    await answerCallback(callbackQueryId, 'Формат не найден');
+    return;
+  }
+
+  await answerCallback(callbackQueryId);
+  await sendMessage(
+    chatId,
+    `💳 <b>${group.name}</b>\n\nВыберите пакет:`,
+    {
+      inline_keyboard: group.items
+        .map(product => [{
+          text: priceLabel(product),
+          callback_data: `mgr_payp:${bookingId}:${product.external_id}`
+        }])
+        .concat([[{ text: '‹ Назад к форматам', callback_data: `mgr_pay:${bookingId}` }]])
+    }
+  );
+}
+
+// Шаг 3: ссылка ученику. В ней и код записи, и выбранный пакет:
+// клиенту остаётся ввести почту и заплатить.
+async function handleMgrPaySend(chatId, bookingId, packId, callbackQueryId) {
+  const booking = await getBooking(bookingId);
+
+  if (!booking || !booking.chatId) {
+    await answerCallback(callbackQueryId, 'Запись не найдена');
+    return;
+  }
+
+  let product = null;
+
+  try {
+    const groups = await loadPriceGroups();
+
+    for (const group of groups) {
+      const found = group.items.find(item => item.external_id === packId);
+      if (found) product = found;
+    }
+  } catch (e) {
+    console.error('Price list error:', e);
+  }
+
+  if (!product) {
+    await answerCallback(callbackQueryId, 'Пакет не найден');
+    return;
+  }
+
+  const link = `https://www.sayyestoenglish.com/?b=${encodeURIComponent(booking.id)}&p=${encodeURIComponent(product.external_id)}`;
+  const price = `${Math.round(product.price / 100)} €`;
+
+  await answerCallback(callbackQueryId);
+  await sendMessage(
+    booking.chatId,
     '💳 <b>Оплата обучения</b>\n\n' +
-    `<a href="${link}">Выбрать формат и оплатить</a>\n\n` +
-    'На странице выберите подходящий пакет. После оплаты с вами свяжется менеджер и подберёт группу или преподавателя.'
+    `${product.name} · ${product.description}\nСтоимость: <b>${price}</b>\n\n` +
+    `<a href="${link}">Перейти к оплате</a>\n\n` +
+    'Пакет уже выбран — на странице нужно только указать почту и оплатить. После оплаты менеджер подберёт группу или преподавателя.'
   );
 
-  await sendMessage(chatId, `Ссылка на оплату отправлена: ${booking.name || 'ученик'}, код ${booking.id}.`);
+  await sendMessage(chatId, `Ссылка отправлена: ${booking.name || 'ученик'} — ${product.name} · ${product.description}, ${price}.`);
 }
 
 async function handleMgrWrite(chatId, bookingId, callbackQueryId) {
@@ -1064,6 +1179,12 @@ export async function POST(request) {
           break;
         case 'mgr_pay':
           await handleMgrPayLink(chatId, bookingId, callbackId);
+          break;
+        case 'mgr_payg':
+          await handleMgrPayGroup(chatId, bookingId, params[1], callbackId);
+          break;
+        case 'mgr_payp':
+          await handleMgrPaySend(chatId, bookingId, params[1], callbackId);
           break;
         case 'mgr_write':
           await handleMgrWrite(chatId, bookingId, callbackId);
