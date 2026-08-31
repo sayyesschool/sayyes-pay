@@ -163,8 +163,11 @@ export function formatManagerCard(booking) {
 
   const marks = [];
   if (booking.status === 'cancelled') marks.push('❌ запись отменена');
-  if (booking.attended === true) marks.push('✅ урок состоялся');
-  if (booking.attended === false) marks.push('🚫 не пришёл');
+  // Кто поставил отметку — чтобы не выяснять это по чатам.
+  const by = booking.attendedBy ? ` (отметил(а) ${booking.attendedBy})` : '';
+  if (booking.archived) marks.push('🗃 архив (до запуска рекламы)');
+  if (booking.attended === true) marks.push('✅ урок состоялся' + by);
+  if (booking.attended === false) marks.push('🚫 не пришёл' + by);
   // Оплата видна прямо в карточке: раньше о ней знала только почта,
   // и менеджер не мог понять, кто уже заплатил.
   if (booking.paid) {
