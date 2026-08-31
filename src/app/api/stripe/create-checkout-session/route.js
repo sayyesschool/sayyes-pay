@@ -18,18 +18,6 @@ export async function POST(request) {
 
     const booking = booking_id ? await getBooking(booking_id) : null;
 
-    // Почту второй раз не спрашиваем: если человек пришёл по ссылке менеджера,
-    // она уже есть в заявке.
-    const customerEmail = email || booking?.email;
-
-    if (!customerEmail) {
-      return NextResponse.json({
-        error: "Нет email"
-      }, {
-        status: 400
-      });
-    }
-
     // Спецпредложение живёт ограниченное время. Проверка именно здесь, а не только
     // в интерфейсе: ссылка остаётся в переписке и её легко открыть через неделю.
     if (await isIntroPriceId(price_id)) {
@@ -50,6 +38,18 @@ export async function POST(request) {
           status: 403
         });
       }
+    }
+
+    // Почту второй раз не спрашиваем: если человек пришёл по ссылке менеджера,
+    // она уже есть в заявке.
+    const customerEmail = email || booking?.email;
+
+    if (!customerEmail) {
+      return NextResponse.json({
+        error: "Нет email"
+      }, {
+        status: 400
+      });
     }
 
     const origin = request.headers.get('origin') || '';
