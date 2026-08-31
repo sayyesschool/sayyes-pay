@@ -35,7 +35,8 @@ export async function POST(request) {
     if (await isIntroPriceId(price_id)) {
       if (!booking) {
         return NextResponse.json({
-          error: "Спецпредложение доступно только по ссылке от менеджера"
+          error: "Спецпредложение доступно только по ссылке от менеджера",
+          notice: "Это спецпредложение доступно только по персональной ссылке от менеджера. Напишите нам в Telegram, и мы пришлём её."
         }, {
           status: 403
         });
@@ -43,7 +44,8 @@ export async function POST(request) {
 
       if (!introActive(booking)) {
         return NextResponse.json({
-          error: "Срок действия спецпредложения истёк. Напишите менеджеру — он пришлёт новую ссылку."
+          error: "Срок действия спецпредложения истёк. Напишите менеджеру — он пришлёт новую ссылку.",
+          notice: "Срок действия спецпредложения истёк. Напишите менеджеру в Telegram — он пришлёт новую ссылку."
         }, {
           status: 403
         });
