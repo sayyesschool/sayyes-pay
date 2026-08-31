@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { sendBookingConfirmation, mailProvider } from '@/lib/email';
 import { getProducts } from '@/services/stripe';
 import { getIntroProducts, getIntroProduct, introActive, introExpiry, nextIntroExpiry } from '@/services/intro';
 import { clientTimeLine, clientDateLine, clientWhen, localTimeString, localSlot, slotKeyToDate } from '@/lib/time';
@@ -840,6 +841,46 @@ async function handleStatsCommand(chatId, text) {
   }
 }
 
+// Проверка почты. Отказ провайдера раньше был виден только в логах хостинга,
+// поэтому «письмо не пришло» выяснялось только жалобой клиента.
+async function handleTestMailCommand(chatId, text) {
+  const to = String(text || '').trim().split(/\s+/)[1] || '';
+
+  if (!to.includes('@')) {
+    await sendMessage(chatId, 'Напишите так: /testmail адрес@почта.com');
+    return;
+  }
+
+  const provider = mailProvider();
+
+  if (!provider) {
+    await sendMessage(chatId, 'Отправка писем выключена: ни один ключ провайдера не задан.');
+    return;
+  }
+
+  const probe = {
+    id: 'testmail',
+    name: 'Проверка почты',
+    email: to,
+    slot: '',
+    slotDate: '',
+    slotMsk: ''
+  };
+
+  const res = await sendBookingConfirmation(probe);
+
+  if (res && res.ok) {
+    await sendMessage(chatId, `Письмо отправлено через ${provider} на ${to}. Если не пришло — смотрите спам и логи провайдера.`);
+    return;
+  }
+
+  await sendMessage(chatId,
+    `Письмо НЕ ушло.\nПровайдер: ${provider}\n` +
+    `Код ответа: ${(res && res.status) || '—'}\n` +
+    `Ошибка: ${(res && (res.error || res.skipped)) || 'см. /api/health/email'}`
+  );
+}
+
 // Разовая расчистка расписания: просим подтвердить всех, кто записан вперёд.
 // Записи набирались до того, как на воронке появилась цена, и заняли неделю вперёд.
 async function handleConfirmAllCommand(chatId) {
@@ -1596,6 +1637,11 @@ export async function POST(request) {
           return NextResponse.json({ ok: true });
         }
 
+        if (text && text.startsWith('/testmail')) {
+          await handleTestMailCommand(chatId, text);
+          return NextResponse.json({ ok: true });
+        }
+
         if (text && text.startsWith('/find')) {
           await handleFindCommand(chatId, text.slice(5));
           return NextResponse.json({ ok: true });
@@ -1688,7 +1734,7 @@ export async function POST(request) {
       // превращалась в чужой ответ: «/stats» отдавал карточку собственной записи.
       if (text && text.startsWith('/')) {
         const command = text.split(/\s+/)[0].toLowerCase();
-        const managerCommands = ['/book', '/today', '/bookings', '/find', '/stats', '/pending', '/who', '/cleanup', '/confirmall', '/help'];
+        const managerCommands = ['/book', '/today', '/bookings', '/find', '/stats', '/pending', '/who', '/cleanup', '/confirmall', '/testmail', '/help'];
 
         if (managerCommands.includes(command)) {
           await sendMessage(chatId, 'Эта команда доступна только менеджерам школы.');
