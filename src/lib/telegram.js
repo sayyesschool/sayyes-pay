@@ -96,10 +96,16 @@ export async function forwardMessage(chatId, fromChatId, messageId) {
 
 // --- Inline keyboards ---
 
-export function bookingActionsKeyboard(bookingId) {
+// Второй аргумент необязательный. Пока запись не подтверждена, первой кнопкой
+// идёт «Буду на уроке»: без явного «да» мы не знаем, кто реально придёт.
+export function bookingActionsKeyboard(bookingId, booking) {
+  const confirmRow = booking && booking.confirmed
+    ? []
+    : [[{ text: '✅ Буду на уроке', callback_data: `confirm:${bookingId}` }]];
+
   return {
     reply_markup: {
-      inline_keyboard: [
+      inline_keyboard: confirmRow.concat([
         [
           { text: 'Перенести запись', callback_data: `reschedule:${bookingId}` },
           { text: 'Отменить запись', callback_data: `cancel:${bookingId}` }
@@ -110,7 +116,7 @@ export function bookingActionsKeyboard(bookingId) {
         [
           { text: '💰 Посмотреть стоимость обучения', callback_data: `pricing:${bookingId}` }
         ]
-      ]
+      ])
     }
   };
 }
@@ -173,6 +179,7 @@ export function formatManagerCard(booking) {
   // Кто поставил отметку — чтобы не выяснять это по чатам.
   const by = booking.attendedBy ? ` (отметил(а) ${booking.attendedBy})` : '';
   if (booking.archived) marks.push('🗃 архив (до запуска рекламы)');
+  if (booking.confirmed) marks.push('🙋 подтвердил(а), что придёт');
   // Оплата видна прямо в карточке: раньше о ней знала только почта,
   // и менеджер не мог понять, кто уже заплатил.
   if (booking.paid) {
