@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getAllActiveBookings, updateBooking, getManagerChatId } from '@/lib/redis';
+import { getAllActiveBookings, updateBooking, getManagerChatId, removeBookedSlot } from '@/lib/redis';
 import { sendMessage, formatReminder, formatHandout, bookingActionsKeyboard, formatAttendanceAsk, attendanceKeyboard, formatManagerCard, managerActionsKeyboard } from '@/lib/telegram';
 import { notifyManagers, notifyHost } from '@/lib/managers';
 import { sendHandoutEmail } from '@/lib/email';
@@ -22,6 +22,7 @@ export async function GET(request) {
     let sentHandout = 0;
     let askedAttendance = 0;
     let briefedHost = 0;
+    let released = 0;
 
     for (const booking of bookings) {
       if (!booking.slot || booking.slot === 'no_time') continue;
@@ -109,6 +110,38 @@ export async function GET(request) {
         }
       }
 
+      // За 6 часов до урока снимаем неподтверждённые брони: расписание было
+      // забито заявками, по которым никто не приходил, а ведущая ждала в Zoom.
+      // Снимаем только у тех, кого могли предупредить — у кого есть чат с ботом.
+      if (
+        booking.chatId &&
+        !booking.confirmed &&
+        !booking.releasedUnconfirmed &&
+        booking.status !== 'cancelled' &&
+        hoursUntil > 0 &&
+        hoursUntil < 6
+      ) {
+        await removeBookedSlot(booking.slot);
+        await updateBooking(booking.id, {
+          status: 'cancelled',
+          releasedUnconfirmed: true,
+          releasedAt: new Date().toISOString()
+        });
+
+        await sendMessage(
+          booking.chatId,
+          'Мы не получили подтверждения, что вы будете на уроке, и освободили ваше время — оно уйдёт другому ученику.\n\n' +
+          'Если планы в силе, выберите новое время: https://www.sayyestoenglish.com/learn_easy'
+        );
+
+        await notifyManagers(
+          `⏱ Снята неподтверждённая запись: ${booking.name || 'ученик'}, ${booking.slotDate || ''} ${booking.slotMsk || ''}.\nСлот снова свободен.`
+        );
+
+        released++;
+        continue;
+      }
+
       // Через час после урока спрашиваем менеджера, состоялся ли он. Ответ уходит
       // в Мету событием TrialAttended — иначе реклама так и будет приводить тех,
       // кто записывается и не доходит.
@@ -129,6 +162,7 @@ export async function GET(request) {
       sentHandout,
       askedAttendance,
       briefedHost,
+      released,
       timestamp: now.toISOString()
     });
   } catch (e) {
