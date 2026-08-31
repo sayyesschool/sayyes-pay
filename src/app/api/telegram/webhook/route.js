@@ -844,13 +844,7 @@ async function handleStatsCommand(chatId, text) {
 // Проверка почты. Отказ провайдера раньше был виден только в логах хостинга,
 // поэтому «письмо не пришло» выяснялось только жалобой клиента.
 async function handleTestMailCommand(chatId, text) {
-  const to = String(text || '').trim().split(/\s+/)[1] || '';
-
-  if (!to.includes('@')) {
-    await sendMessage(chatId, 'Напишите так: /testmail адрес@почта.com');
-    return;
-  }
-
+  const args = String(text || '').trim().split(/\s+/).slice(1);
   const provider = mailProvider();
 
   if (!provider) {
@@ -858,30 +852,64 @@ async function handleTestMailCommand(chatId, text) {
     return;
   }
 
-  // Слот в пробе нужен обязательно: без него письмо уходит без вложения-календаря,
-  // а именно вложение — единственное отличие настоящего письма от тестового.
-  const day = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  if (!args.length) {
+    await sendMessage(chatId,
+      'Как пользоваться:\n' +
+      '<code>/testmail код</code> — отправить то же самое письмо по настоящей заявке\n' +
+      '<code>/testmail код почта</code> — то же, но на ваш адрес\n' +
+      '<code>/testmail почта</code> — упрощённая проба'
+    );
+    return;
+  }
 
-  const probe = {
+  // Главный режим: берём НАСТОЯЩУЮ заявку и шлём то же письмо, что ушло бы клиенту.
+  // Искусственная проба не доказывала ничего: тема и тело строятся из полей заявки.
+  const booking = await getBooking(args[0]);
+
+  if (booking) {
+    const override = args[1] && args[1].includes('@') ? args[1] : null;
+    const target = override || booking.email;
+
+    if (!target) {
+      await sendMessage(chatId, 'У этой заявки нет почты — поэтому письмо и не уходило.');
+      return;
+    }
+
+    const res = await sendBookingConfirmation({ ...booking, email: target });
+
+    await sendMessage(chatId,
+      (res && res.ok ? 'Письмо по заявке отправлено.' : 'Письмо НЕ ушло.') + '\n' +
+      `Заявка: ${booking.name || '—'}, код ${booking.id}\n` +
+      `Почта в заявке: ${booking.email || 'нет'}\n` +
+      `Куда отправляли: ${target}\n` +
+      `Провайдер: ${provider}\n` +
+      `Код ответа: ${(res && res.status) || '—'}\n` +
+      `Ошибка: ${(res && (res.error || res.skipped)) || 'нет'}`
+    );
+    return;
+  }
+
+  const to = args.find(a => a.includes('@'));
+
+  if (!to) {
+    await sendMessage(chatId, 'Заявка с таким кодом не найдена. Пришлите код заявки или адрес почты.');
+    return;
+  }
+
+  const day = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const res = await sendBookingConfirmation({
     id: 'testmail',
     name: 'Проверка почты',
     email: to,
     slot: `${day}_12:00`,
     slotDate: 'завтра',
     slotMsk: '12:00'
-  };
-
-  const res = await sendBookingConfirmation(probe);
-
-  if (res && res.ok) {
-    await sendMessage(chatId, `Письмо отправлено через ${provider} на ${to}. Если не пришло — смотрите спам и логи провайдера.`);
-    return;
-  }
+  });
 
   await sendMessage(chatId,
-    `Письмо НЕ ушло.\nПровайдер: ${provider}\n` +
-    `Код ответа: ${(res && res.status) || '—'}\n` +
-    `Ошибка: ${(res && (res.error || res.skipped)) || 'см. /api/health/email'}`
+    (res && res.ok ? 'Пробное письмо отправлено.' : 'Письмо НЕ ушло.') + '\n' +
+    `Это упрощённая проба, не равная боевому письму. Для точной проверки: /testmail код_заявки\n` +
+    `Провайдер: ${provider}, код ответа: ${(res && res.status) || '—'}`
   );
 }
 
