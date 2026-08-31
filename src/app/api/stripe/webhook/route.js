@@ -4,6 +4,7 @@ import {
   getCheckoutSessionDataForPurchase
 } from '@/services/stripe';
 import { getBooking, updateBooking } from '@/lib/redis';
+import { notifyManagers } from '@/lib/managers';
 import { sendPurchase } from '@/lib/meta';
 
 export async function POST(request) {
@@ -16,19 +17,46 @@ export async function POST(request) {
       // Человек мог исправить почту на оплате: значит, в заявке была опечатка.
       // Чинить её нужно и в базе, иначе письма школы так и будут уходить в никуда.
       const bookingId = purchaseData.metadata && purchaseData.metadata.booking_id;
+      const pack = (purchaseData.metadata && purchaseData.metadata.pack) || purchaseData.externalId || null;
+      const isIntro = Boolean(pack && String(pack).startsWith('INTRO_'));
 
-      if (bookingId && purchaseData.email) {
+      if (bookingId) {
         try {
           const booking = await getBooking(bookingId);
 
-          if (booking && booking.email !== purchaseData.email) {
+          if (booking) {
+            const emailChanged = purchaseData.email && booking.email !== purchaseData.email;
+
+            // Отметка оплаты в самой заявке: без неё менеджер не видит, кто заплатил,
+            // а клиент может оплатить то же самое второй раз.
             await updateBooking(bookingId, {
-              email: purchaseData.email,
-              emailBeforePayment: booking.email || null
+              paid: true,
+              paidAt: new Date().toISOString(),
+              paidPack: purchaseData.label || pack || null,
+              paidAmount: purchaseData.amount || null,
+              paidCurrency: purchaseData.currency || null,
+              paidSessionId: purchaseData.sessionId || null,
+              ...(isIntro ? { introPaid: true } : {}),
+              ...(emailChanged ? { email: purchaseData.email, emailBeforePayment: booking.email || null } : {})
             });
+
+            // Ссылку могли переслать другому человеку — тогда это не опечатка,
+            // а чужая оплата по чужой заявке. Отличить одно от другого может только человек.
+            try {
+              await notifyManagers(
+                '💰 <b>Оплата</b>\n' +
+                `${booking.name || 'Ученик'}, код <code>${bookingId}</code>\n` +
+                `${purchaseData.label || pack || 'Пакет'} — ${Math.round(Number(purchaseData.amount || 0) / 100)} ${String(purchaseData.currency || '').toUpperCase()}` +
+                (emailChanged && booking.email
+                  ? `\n⚠️ Оплачено с другой почты: было ${booking.email}, стало ${purchaseData.email}. Проверьте, что это тот же человек.`
+                  : '')
+              );
+            } catch (e) {
+              console.error('Payment notification error:', e);
+            }
           }
         } catch (e) {
-          console.error('Booking email update error:', e);
+          console.error('Booking payment update error:', e);
         }
       }
 
@@ -52,27 +80,34 @@ export async function POST(request) {
         console.error('CAPI purchase (stripe) error:', e);
       }
 
-      await fetch('https://api.sayyes.school/payment', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          uuid: purchaseData.externalId,
-          amount: purchaseData.amount,
-          currency: purchaseData.currency,
-          description: purchaseData.label,
-          status: 'succeeded',
-          operator: 'stripe',
-          purpose: 'Оплата обучения',
-          paid: true,
-          metadata: {
-            email: purchaseData.email,
-            sessionId: purchaseData.sessionId,
-            ...purchaseData.metadata
-          }
-        })
-      });
+      // Платёжная база школы может быть недоступна. Раньше её ошибка роняла весь
+      // вебхук, Stripe начинал ретраить — и одна оплата записывалась несколько раз.
+      try {
+        await fetch('https://api.sayyes.school/payment', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            // У интро-продуктов нет external_id в Stripe — берём идентификатор из метаданных сессии.
+            uuid: pack,
+            amount: purchaseData.amount,
+            currency: purchaseData.currency,
+            description: purchaseData.label,
+            status: 'succeeded',
+            operator: 'stripe',
+            purpose: 'Оплата обучения',
+            paid: true,
+            metadata: {
+              email: purchaseData.email,
+              sessionId: purchaseData.sessionId,
+              ...purchaseData.metadata
+            }
+          })
+        });
+      } catch (e) {
+        console.error('School payment API error:', e);
+      }
     }
 
     return new Response('ok', { status: 200 });
