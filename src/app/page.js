@@ -255,6 +255,7 @@ export default function Home() {
 						groupId={groupId}
 						packId={preselectedPackId}
 						knownEmail={Boolean(catalog.booking?.hasEmail)}
+						emailHint={catalog.booking?.emailHint}
 						introExpiresAt={catalog.introExpiresAt}
 					/>
 				}
