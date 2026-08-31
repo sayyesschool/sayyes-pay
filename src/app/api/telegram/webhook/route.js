@@ -918,6 +918,21 @@ async function handleTestMailCommand(chatId, text) {
 // куда она вела. Записи не удаляем — отменяем и освобождаем слот.
 const CLEAN_COUNTRIES = ['Казахстан', 'Друг'];
 
+// Момент урока в UTC. Ключ слота записан в базовом поясе расписания (UTC+3).
+function slotTimestamp(booking) {
+  if (!booking.slot || booking.slot === 'no_time') return null;
+
+  const [dateStr, time] = String(booking.slot).split('_');
+  const [h, m] = String(time).split(':').map(Number);
+  const at = new Date(`${dateStr}T00:00:00Z`);
+
+  if (Number.isNaN(at.getTime())) return null;
+
+  at.setTime(at.getTime() + ((h - 3) * 60 + m) * 60 * 1000);
+
+  return at.getTime();
+}
+
 function isCleanupCountry(booking) {
   const answers = booking.quizAnswers || {};
   const country = String(answers['Страна'] || '');
@@ -957,10 +972,27 @@ async function handleCleanSlotsCommand(chatId, text) {
   );
 
   if (!apply) {
+    // Главный вопрос перед чисткой — сколько живого останется, а не сколько снимем.
+    const doomed = new Set(list.map(b => b.id));
+    const staying = all.filter(booking => {
+      if (doomed.has(booking.id)) return false;
+      if (booking.status === 'cancelled') return false;
+      if (!booking.slot || booking.slot === 'no_time') return false;
+
+      const at = slotTimestamp(booking);
+
+      return at !== null && at > now;
+    });
+
+    const stayingConfirmed = staying.filter(b => b.confirmed).length;
+    const noTime = all.filter(b => b.status !== 'cancelled' && (!b.slot || b.slot === 'no_time')).length;
+
     await sendMessage(chatId,
       `<b>Снимем записей: ${list.length}</b>\nНеподтверждённые, страна — Казахстан/Армения/Грузия или «Другая».\n\n` +
       lines.join('\n') +
       (list.length > 30 ? `\n… и ещё ${list.length - 30}` : '') +
+      `\n\n<b>Останется будущих уроков: ${staying.length}</b>, из них подтверждено ${stayingConfirmed}.` +
+      `\nЗаявок без выбранного времени: ${noTime}.` +
       '\n\nСлоты освободятся, ученикам уйдёт сообщение со ссылкой записаться заново.\nПрименить: /cleanslots yes'
     );
     return;
