@@ -43,10 +43,13 @@ export async function GET(request) {
 
       // Send 24h reminder (between 23-25 hours before)
       if (booking.chatId && !booking.reminded24h && hoursUntil > 23 && hoursUntil < 25) {
+        // За сутки просим явного «буду»: без него мы не знаем, кто придёт,
+        // а человек не делает ни одного действия между заявкой и уроком.
         await sendMessage(
           booking.chatId,
-          formatReminder(booking, 24),
-          bookingActionsKeyboard(booking.id)
+          formatReminder(booking, 24) +
+            (booking.confirmed ? '' : '\n\nНажмите «Буду на уроке» — так мы поймём, что время в силе, и не отдадим его другому.'),
+          bookingActionsKeyboard(booking.id, booking)
         );
         await updateBooking(booking.id, { reminded24h: true });
         sent24h++;
@@ -57,7 +60,7 @@ export async function GET(request) {
         await sendMessage(
           booking.chatId,
           formatReminder(booking, 1),
-          bookingActionsKeyboard(booking.id)
+          bookingActionsKeyboard(booking.id, booking)
         );
         await updateBooking(booking.id, { reminded1h: true });
         sent1h++;
@@ -77,7 +80,7 @@ export async function GET(request) {
 
         if (dueAt && now >= dueAt) {
           if (booking.chatId) {
-            await sendMessage(booking.chatId, formatHandout(booking), bookingActionsKeyboard(booking.id));
+            await sendMessage(booking.chatId, formatHandout(booking), bookingActionsKeyboard(booking.id, booking));
           }
           if (booking.email) {
             try {
