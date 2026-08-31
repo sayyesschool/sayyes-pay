@@ -102,7 +102,8 @@ export async function GET(request) {
 
   try {
     const today = new Date().toISOString().slice(0, 10);
-    const bookings = await getAllActiveBookings();
+    // Архив — заявки до запуска рекламы. В сводке они только портят цифры.
+    const bookings = (await getAllActiveBookings()).filter(b => !b.archived);
 
     // Today's new bookings
     const todayBookings = bookings.filter(b => {
