@@ -24,12 +24,15 @@ async function kvGet(key) {
   }
 }
 
+// Срок жизни ставим отдельной командой EXPIRE, а не параметром к SET.
+// С параметром запись молча не сохранялась: ключи без срока (клиентская пересылка)
+// работали, а все временные — mgr_reply, mgr_time — исчезали сразу после записи.
+// Из-за этого менеджер не мог ответить ученику: бот не помнил, кому отвечать.
 async function kvSet(key, value, exSeconds) {
   if (!KV_URL || !KV_TOKEN) return false;
+
   try {
-    let url = `${KV_URL}/set/${key}`;
-    if (exSeconds) url += `/EX/${exSeconds}`;
-    await fetch(url, {
+    const resp = await fetch(`${KV_URL}/set/${key}`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${KV_TOKEN}`,
@@ -37,6 +40,23 @@ async function kvSet(key, value, exSeconds) {
       },
       body: JSON.stringify(JSON.stringify(value))
     });
+
+    if (!resp.ok) {
+      console.error('KV set failed:', key, resp.status);
+      return false;
+    }
+
+    if (exSeconds) {
+      const exp = await fetch(`${KV_URL}/expire/${key}/${exSeconds}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${KV_TOKEN}` }
+      });
+
+      // Не смогли поставить срок — ключ всё равно записан. Это лучше,
+      // чем потерять его совсем.
+      if (!exp.ok) console.error('KV expire failed:', key, exp.status);
+    }
+
     return true;
   } catch (e) {
     console.error('KV set error:', key, e);
