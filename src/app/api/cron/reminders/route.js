@@ -26,12 +26,19 @@ export async function GET(request) {
     for (const booking of bookings) {
       if (!booking.slot || booking.slot === 'no_time') continue;
 
-      // Parse slot time (MSK)
+      // Время слота в базовом поясе расписания (UTC+3).
       const [dateStr, time] = booking.slot.split('_');
       const [h, m] = time.split(':').map(Number);
 
-      // Create slot datetime in UTC (MSK is UTC+3)
-      const slotDate = new Date(`${dateStr}T${String(h - 3).padStart(2, '0')}:${String(m).padStart(2, '0')}:00Z`);
+      // Вычитать 3 из часа прямо в строке нельзя: у ночных слотов получалось
+      // «T-2:30:00Z», Date выходил невалидным, и по такой записи молча
+      // переставали уходить и напоминания, и вопрос о явке. Считаем в миллисекундах.
+      const slotDate = new Date(`${dateStr}T00:00:00Z`);
+
+      if (Number.isNaN(slotDate.getTime())) continue;
+
+      slotDate.setTime(slotDate.getTime() + ((h - 3) * 60 + m) * 60 * 1000);
+
       const hoursUntil = (slotDate - now) / (1000 * 60 * 60);
 
       // Send 24h reminder (between 23-25 hours before)
