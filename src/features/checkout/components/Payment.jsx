@@ -15,10 +15,17 @@ export default function Payment({
     data,
 }) {
     useEffect(() => {
+        // Код записи из ссылки менеджера (?b=...). С ним оплата привязывается
+        // к конкретной заявке, а не ищется по совпадению почты.
+        let bookingId = '';
+        try {
+            bookingId = new URLSearchParams(window.location.search).get('b') || '';
+        } catch (e) {}
+
         fetch("/api/stripe/create-checkout-session", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(data)
+            body: JSON.stringify(bookingId ? { ...data, booking_id: bookingId } : data)
         })
             .then((res) => res.json())
             .then((data) => {
