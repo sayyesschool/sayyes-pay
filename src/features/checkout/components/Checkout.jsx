@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-import { Tab, Tabs } from '@/ui';
+import { Button, Input, Tab, Tabs } from '@/ui';
 
 import ErrorState from './ErrorState';
 import Pack from './Pack';
@@ -18,6 +18,8 @@ const View = {
     Success: 4
 };
 
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 function formatDeadline(value) {
     try {
         return new Date(value).toLocaleString('ru-RU', {
@@ -31,26 +33,23 @@ function formatDeadline(value) {
     }
 }
 
-export default function Checkout({ products, groupId, packId, knownEmail, introExpiresAt }) {
+export default function Checkout({ products, groupId, packId, knownEmail, emailHint, introExpiresAt }) {
     // Менеджер прислал ссылку на конкретный пакет — открываем оформление
     // сразу на нём: клиенту нечего выбирать и не в чем ошибаться.
     const preselected = packId
         ? products.find(product => product.external_id === packId)
         : null;
 
-    // Почта уже есть в заявке, спрашивать её второй раз незачем: сервер возьмёт
-    // её по коду записи. Поэтому сразу шаг оплаты.
-    const startView = preselected
-        ? (knownEmail ? View.Payment : View.Contact)
-        : View.Pack;
-
-    const [view, setView] = useState(startView);
+    const [view, setView] = useState(preselected ? View.Contact : View.Pack);
     const [priceId, setPriceId] = useState(preselected?.price_id);
     const [amount, setAmount] = useState();
     const [contact, setContact] = useState({
         name: '',
         email: ''
     });
+    // Почта из заявки может быть с опечаткой — тогда чек уйдёт в никуда,
+    // и человек об этом не узнает. Поэтому даём её исправить перед оплатой.
+    const [editingEmail, setEditingEmail] = useState(false);
     const [error, setError] = useState(null);
 
     if (view === 4) return <SuccessState />;
@@ -63,6 +62,7 @@ export default function Checkout({ products, groupId, packId, knownEmail, introE
     const packs = preselected?.intro ? [preselected] : groupProducts;
     const groupName = preselected?.intro ? preselected.name : groupProducts[0]?.name;
     const deadline = preselected?.intro && introExpiresAt ? formatDeadline(introExpiresAt) : null;
+    const emailIsValid = EMAIL_PATTERN.test(contact.email.trim());
 
     if (!packs.length) return null;
 
@@ -82,10 +82,6 @@ export default function Checkout({ products, groupId, packId, knownEmail, introE
 
             {deadline &&
                 <p className="text">Специальная цена действует до {deadline}.</p>
-            }
-
-            {preselected && knownEmail &&
-                <p className="text">Чек и доступ придут на почту, которую вы указали при записи на пробный урок.</p>
             }
 
             <Tabs color="violet" pills>
@@ -116,7 +112,49 @@ export default function Checkout({ products, groupId, packId, knownEmail, introE
                 />
             }
 
-            {view === 2 &&
+            {/* Почта уже есть в заявке: подтвердить в один клик, но с возможностью
+                исправить. Уходить сразу в оплату нельзя — опечатку никто не поймает. */}
+            {view === 2 && knownEmail && !editingEmail &&
+                <div className="flex flex-column align-center gap-s">
+                    <p className="text text--center">
+                        Чек и доступ придут на {emailHint || 'почту, указанную при записи'}
+                    </p>
+
+                    <Button
+                        content="Перейти к оплате"
+                        onClick={() => setView(View.Payment)}
+                    />
+
+                    <button
+                        type="button"
+                        className="link link--primary"
+                        onClick={() => setEditingEmail(true)}
+                    >
+                        Указать другую почту
+                    </button>
+                </div>
+            }
+
+            {view === 2 && knownEmail && editingEmail &&
+                <div className="flex flex-column align-center gap-s">
+                    <p className="text text--center">Куда прислать чек и доступ?</p>
+
+                    <Input
+                        placeholder="Email"
+                        name="email"
+                        value={contact.email}
+                        onInput={event => setContact(prev => ({ ...prev, email: event.target.value }))}
+                    />
+
+                    <Button
+                        content="Перейти к оплате"
+                        disabled={!emailIsValid}
+                        onClick={() => setView(View.Payment)}
+                    />
+                </div>
+            }
+
+            {view === 2 && !knownEmail &&
                 <Contact
                     contact={contact}
                     onChange={setContact}
@@ -127,7 +165,7 @@ export default function Checkout({ products, groupId, packId, knownEmail, introE
             {view === 3 &&
                 <Payment
                     data={{
-                        email: contact.email,
+                        email: contact.email.trim(),
                         price_id: priceId
                     }}
                     onComplete={() => setView(View.Success)}
