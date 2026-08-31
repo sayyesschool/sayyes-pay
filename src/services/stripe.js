@@ -60,9 +60,6 @@ export async function createCheckoutSession({
     baseUrl
 } = {}, bookingId) {
     const session = await stripe.checkout.sessions.create({
-    // Идентификатор заявки едет в метаданные платежа: по нему вебхук находит заявку
-    // точно, не полагаясь на совпадение почты.
-    metadata: bookingId ? { booking_id: String(bookingId) } : undefined,
         mode: "payment",
         ui_mode: "hosted", // or "embedded"
         success_url: `${baseUrl}/thanks`,
@@ -70,7 +67,11 @@ export async function createCheckoutSession({
         // return_url: baseUrl, // for embedded mode
         line_items: [{ price: price_id, quantity: 1 }],
         customer_email: email,
-        metadata: { email, price_id }
+        // Идентификатор заявки едет в тех же метаданных: по нему вебхук
+        // находит заявку точно, а не по совпадению почты.
+        metadata: bookingId
+            ? { email, price_id, booking_id: String(bookingId) }
+            : { email, price_id }
     });
 
     return session;
