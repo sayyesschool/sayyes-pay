@@ -13,10 +13,10 @@ import {
   sendMessage, editMessage, answerCallback, forwardMessage,
   bookingActionsKeyboard, confirmCancelKeyboard, slotsKeyboard,
   managerActionsKeyboard, formatBookingConfirmation, formatBookingForManager,
-  formatReminder, isManager, attendanceKeyboard, makeDeepLink, MANAGER_USERNAME,
+  formatReminder, isManager, attendanceKeyboard, makeDeepLink, MANAGER_USERNAME, MANAGER_USERNAMES,
   formatManagerCard
 } from '@/lib/telegram';
-import { notifyManagers, isManagerChat, getManagerChatIds } from '@/lib/managers';
+import { notifyManagers, isManagerChat, getManagerChatIds, getManagerChatMap } from '@/lib/managers';
 
 // Verify webhook secret (optional extra security)
 const WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET;
@@ -151,6 +151,9 @@ async function linkByUsername(chatId, username) {
 async function handleStart(chatId, username, args) {
   // Check if manager
   if (isManager(username)) {
+    // Персональный ключ: раньше был один общий слот, и каждый новый
+    // менеджер выталкивал из уведомлений предыдущего.
+    await kvSet(`manager_chat:${String(username).toLowerCase()}`, String(chatId));
     await setManagerChatId(chatId);
     await sendMessage(chatId,
       'Вы зарегистрированы как менеджер SAY YES!\n\n' +
@@ -654,6 +657,21 @@ function statsWindow(text) {
   return { from: Date.now() - days * day, to: Date.now(), label: `за ${days} дн.` };
 }
 
+// Кто из менеджеров реально получает уведомления. Без этой команды
+// молчание бота у конкретного человека никак не видно со стороны.
+async function handleWhoCommand(chatId) {
+  const map = await getManagerChatMap();
+  const lines = MANAGER_USERNAMES.map(username => {
+    const id = map[username];
+    return `${id ? '✅' : '⛔️'} @${username}${id ? '' : ' — не нажал «Начать», уведомления не идут'}`;
+  });
+
+  await sendMessage(chatId,
+    '<b>Кому бот шлёт уведомления</b>\n\n' + lines.join('\n') +
+    '\n\nЧтобы появиться в списке, достаточно отправить боту любое сообщение.'
+  );
+}
+
 async function handleStatsCommand(chatId, text) {
   const { from, to, label } = statsWindow(text);
 
@@ -1097,6 +1115,11 @@ export async function POST(request) {
           return NextResponse.json({ ok: true });
         }
 
+        if (text === '/who') {
+          await handleWhoCommand(chatId);
+          return NextResponse.json({ ok: true });
+        }
+
         if (text === '/pending') {
           await handlePendingCommand(chatId);
           return NextResponse.json({ ok: true });
@@ -1121,6 +1144,7 @@ export async function POST(request) {
             '/stats — сводка по заявкам за 7 дней, /stats 30 — за месяц\n' +
             '/stats_today и /stats_yesterday — за сегодня и за вчера\n' +
             '/pending — заявки без выбранного времени\n' +
+            '/who — кто из менеджеров получает уведомления\n' +
             '/book — записать ученика самому\n\n' +
             'На каждой карточке: перенести, отменить, отметить приход и написать ученику.'
           );
