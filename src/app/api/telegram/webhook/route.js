@@ -1240,9 +1240,17 @@ export async function POST(request) {
         }
       }
 
-      // Check if this is a relay message from user
-      const relayHandled = await handleRelayFromUser(chatId, update.message);
-      if (relayHandled) return NextResponse.json({ ok: true });
+      // Кто пишет, выясняем до того, как решать, чей это сценарий. Менеджер со своей
+      // тестовой записью попадал в клиентскую пересылку: его «привет» уходил всем
+      // менеджерам с шапкой «Сообщение от …». Режим пересылки у менеджеров гасим.
+      const senderIsManager = isManager(username) || await isManagerChat(chatId);
+
+      if (senderIsManager) {
+        await kvDel(`relay:${chatId}`);
+      } else {
+        const relayHandled = await handleRelayFromUser(chatId, update.message);
+        if (relayHandled) return NextResponse.json({ ok: true });
+      }
 
       // Check if manager is in booking flow or replying
       if (await isManagerChat(chatId)) {
