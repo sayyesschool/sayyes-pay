@@ -143,6 +143,9 @@ export function managerActionsKeyboard(bookingId) {
           { text: '🚫 Не пришёл', callback_data: `noshow:${bookingId}` }
         ],
         [
+          { text: '💳 Ссылка на оплату', callback_data: `mgr_pay:${bookingId}` }
+        ],
+        [
           { text: '✍️ Написать ученику', callback_data: `mgr_write:${bookingId}` }
         ]
       ]
@@ -163,11 +166,19 @@ export function formatManagerCard(booking) {
   if (booking.attended === true) marks.push('✅ урок состоялся');
   if (booking.attended === false) marks.push('🚫 не пришёл');
 
+  // Ответы из воронки: без них ведущая шла на урок вслепую.
+  const answers = booking.quizAnswers || {};
+  const quizLine = ['Уровень', 'Цель', 'Страна', 'Формат']
+    .map(key => (answers[key] ? `${key}: ${answers[key]}` : null))
+    .filter(Boolean)
+    .join(' · ');
+
   return `<b>${booking.name || 'Без имени'}</b>\n` +
     `${when}\n` +
     `TG: ${booking.telegram || '—'} · тел.: ${booking.phone || '—'}\n` +
     `${booking.email || '—'}\n` +
     `Код: <code>${booking.id}</code>` +
+    (quizLine ? `\n${quizLine}` : '') +
     (marks.length ? `\n${marks.join(', ')}` : '');
 }
 
