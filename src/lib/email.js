@@ -32,6 +32,11 @@ export function emailEnabled() {
   return !!provider();
 }
 
+// Нужно для диагностики: молчаливый отказ отправки иначе никак не виден снаружи.
+export function mailProvider() {
+  return provider();
+}
+
 // «SAY YES <hello@sayyestoenglish.com>» → { name, email }
 function parseFrom(value) {
   const m = String(value).match(/^\s*(.*?)\s*<([^>]+)>\s*$/);
