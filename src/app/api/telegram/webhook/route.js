@@ -859,10 +859,24 @@ async function sendBookingCards(chatId, bookings, title) {
     return;
   }
 
-  await sendMessage(chatId, `<b>${title}</b> — ${bookings.length}`);
+  // Шапка со статусами: без неё приходилось глазами перебирать все карточки,
+  // чтобы понять, по кому отметки уже стоят.
+  const came = bookings.filter(b => b.attended === true).length;
+  const missed = bookings.filter(b => b.attended === false).length;
+  const waiting = bookings.length - came - missed;
+  const parts = [];
+
+  if (came) parts.push(`✅ пришли: ${came}`);
+  if (missed) parts.push(`🚫 не пришли: ${missed}`);
+  if (waiting) parts.push(`⏳ без отметки: ${waiting}`);
+
+  await sendMessage(chatId,
+    `<b>${title}</b> — ${bookings.length}` +
+    (parts.length ? `\n${parts.join(' · ')}` : '')
+  );
 
   for (const booking of bookings.slice(0, 20)) {
-    await sendMessage(chatId, formatManagerCard(booking), managerActionsKeyboard(booking.id));
+    await sendMessage(chatId, formatManagerCard(booking), managerActionsKeyboard(booking.id, booking));
   }
 
   if (bookings.length > 20) {
@@ -878,6 +892,10 @@ async function handleTodayCommand(chatId) {
   const today = scheduleDayKey(0);
   const all = await getAllActiveBookings();
   const list = all.filter(b => String(b.slot || '').slice(0, 10) === today).sort(bySlot);
+
+  // Неотмеченные — наверх: это то, с чем нужно что-то делать.
+  list.sort((a, b) => Number(a.attended !== undefined && a.attended !== null) - Number(b.attended !== undefined && b.attended !== null));
+
   await sendBookingCards(chatId, list, 'Уроки сегодня');
 }
 
