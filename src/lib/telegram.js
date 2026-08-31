@@ -165,6 +165,14 @@ export function formatManagerCard(booking) {
   if (booking.status === 'cancelled') marks.push('❌ запись отменена');
   if (booking.attended === true) marks.push('✅ урок состоялся');
   if (booking.attended === false) marks.push('🚫 не пришёл');
+  // Оплата видна прямо в карточке: раньше о ней знала только почта,
+  // и менеджер не мог понять, кто уже заплатил.
+  if (booking.paid) {
+    const sum = booking.paidAmount
+      ? ` — ${Math.round(Number(booking.paidAmount) / 100)} ${String(booking.paidCurrency || '').toUpperCase()}`
+      : '';
+    marks.push(`💰 оплачено: ${booking.paidPack || 'пакет'}${sum}`);
+  }
 
   // Ответы из воронки: без них ведущая шла на урок вслепую.
   const answers = booking.quizAnswers || {};
