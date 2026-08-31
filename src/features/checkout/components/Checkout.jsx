@@ -18,9 +18,15 @@ const View = {
     Success: 4
 };
 
-export default function Checkout({ products, groupId }) {
-    const [view, setView] = useState(View.Pack);
-    const [priceId, setPriceId] = useState();
+export default function Checkout({ products, groupId, packId }) {
+    // Менеджер прислал ссылку на конкретный пакет — открываем оформление
+    // сразу на нём: клиенту нечего выбирать и не в чем ошибаться.
+    const preselected = packId
+        ? products.find(product => product.external_id === packId)
+        : null;
+
+    const [view, setView] = useState(preselected ? View.Contact : View.Pack);
+    const [priceId, setPriceId] = useState(preselected?.price_id);
     const [amount, setAmount] = useState();
     const [contact, setContact] = useState({
         name: '',
