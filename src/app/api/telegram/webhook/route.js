@@ -601,7 +601,7 @@ async function handleManagerBookingState(chatId, text) {
 
 // Менеджер отмечает, состоялся ли урок. Приход — то событие, на которое имеет смысл
 // оптимизировать рекламу: запись без прихода алгоритму знать бесполезно.
-async function handleAttendance(chatId, bookingId, attended, callbackQueryId, messageId) {
+async function handleAttendance(chatId, bookingId, attended, callbackQueryId, messageId, from) {
   const booking = await getBooking(bookingId);
   if (!booking) {
     await answerCallback(callbackQueryId, 'Запись не найдена');
@@ -616,9 +616,14 @@ async function handleAttendance(chatId, bookingId, attended, callbackQueryId, me
     ? (booking.introExpiresAt ? {} : { introExpiresAt: nextIntroExpiry() })
     : { introExpiresAt: null };
 
+  // Кто нажал — раньше не сохранялось нигде, и вопрос «кто отметил?»
+  // оставался без ответа.
+  const markedBy = from && from.username ? '@' + from.username : (from && from.first_name) || null;
+
   await updateBooking(bookingId, {
     attended,
     attendanceMarkedAt: new Date().toISOString(),
+    attendedBy: markedBy,
     ...introPatch
   });
 
@@ -707,6 +712,9 @@ async function handleStatsCommand(chatId, text) {
   for (const key of keys) {
     const booking = await kvGet(key);
     if (!booking || !booking.createdAt) continue;
+    // Архив — это заявки до запуска рекламы. Они портили доходимость
+    // фальшивыми отметками «пришёл» из старого бага.
+    if (booking.archived) continue;
     const created = new Date(booking.createdAt).getTime();
     if (created < from || created >= to) continue;
     bookings.push(booking);
@@ -725,7 +733,11 @@ async function handleStatsCommand(chatId, text) {
     const [dateStr, time] = String(booking.slot).split('_');
     const [h, m] = String(time).split(':').map(Number);
     // Ключ слота — в базовом поясе расписания (UTC+3), поэтому минус три часа.
-    const slotUtc = new Date(`${dateStr}T${String(h - 3).padStart(2, '0')}:${String(m).padStart(2, '0')}:00Z`);
+    const slotUtc = new Date(`${dateStr}T00:00:00Z`);
+
+    if (Number.isNaN(slotUtc.getTime())) continue;
+
+    slotUtc.setTime(slotUtc.getTime() + ((h - 3) * 60 + m) * 60 * 1000);
     const gap = (slotUtc.getTime() - new Date(booking.createdAt).getTime()) / 3600000;
     if (Number.isFinite(gap) && gap > 0) gaps.push(gap);
   }
@@ -753,9 +765,86 @@ async function handleStatsCommand(chatId, text) {
     (avgGap === null ? '' : `Средний разрыв заявка → урок: ${avgGap} ч\n`) +
     `<i>Считается по базе записей.</i>`
   );
+
+  // Цифра «пришли: 1» без имени бесполезна — сразу показываем, кто это и кто отметил.
+  const named = list => list
+    .map(b => `• ${b.name || 'без имени'} · <code>${b.id}</code>${b.attendedBy ? ' · отметил(а) ' + b.attendedBy : ''}`)
+    .join('\n');
+
+  const attendedList = bookings.filter(b => b.attended === true);
+  const noShowList = bookings.filter(b => b.attended === false);
+
+  if (attendedList.length || noShowList.length) {
+    await sendMessage(chatId,
+      (attendedList.length ? `<b>Пришли</b>\n${named(attendedList)}\n\n` : '') +
+      (noShowList.length ? `<b>Не пришли</b>\n${named(noShowList)}` : '')
+    );
+  }
 }
 
 
+
+// Заявки до запуска рекламы мешают считать доходимость: там тесты и фальшивые
+// отметки «пришёл» из бага с кнопкой «Отмена». Не удаляем — прячем: данные
+// остаются в /find, но выпадают из /stats и сводки.
+const ARCHIVE_BEFORE = process.env.ARCHIVE_BEFORE || '2026-08-28T16:00:00Z';
+
+async function handleCleanupCommand(chatId, text) {
+  const mode = String(text || '').trim().split(/\s+/)[1] || '';
+  const before = new Date(ARCHIVE_BEFORE).getTime();
+  const keys = await kvKeys('booking:*');
+  const found = [];
+
+  for (const key of keys) {
+    const booking = await kvGet(key);
+
+    if (!booking) continue;
+
+    if (mode === 'undo') {
+      if (booking.archived) found.push(booking);
+      continue;
+    }
+
+    if (booking.archived) continue;
+
+    const created = booking.createdAt ? new Date(booking.createdAt).getTime() : 0;
+
+    if (!created || created >= before) continue;
+
+    found.push(booking);
+  }
+
+  if (mode === 'undo') {
+    for (const booking of found) await updateBooking(booking.id, { archived: false });
+    await sendMessage(chatId, `Вернул из архива: ${found.length}.`);
+    return;
+  }
+
+  if (!found.length) {
+    await sendMessage(chatId, 'Старых заявок не нашлось — база уже чистая.');
+    return;
+  }
+
+  const lines = found.slice(0, 30).map(booking =>
+    `• ${booking.name || 'без имени'} · <code>${booking.id}</code> · ${booking.slotDate || 'без времени'}` +
+    (booking.attended === true ? ' · отмечен «пришёл»' : '')
+  );
+
+  if (mode !== 'yes') {
+    await sendMessage(chatId,
+      `<b>В архив пойдёт: ${found.length}</b>\nВсё, что создано до ${new Date(before).toLocaleDateString('ru-RU')}.\n\n` +
+      lines.join('\n') +
+      (found.length > 30 ? `\n… и ещё ${found.length - 30}` : '') +
+      '\n\nЭти заявки пропадут из /stats и дневной сводки, но останутся в /find.\n' +
+      'Применить: /cleanup yes\nВернуть обратно: /cleanup undo'
+    );
+    return;
+  }
+
+  for (const booking of found) await updateBooking(booking.id, { archived: true });
+
+  await sendMessage(chatId, `Готово: в архив отправлено ${found.length}. Вернуть — /cleanup undo.`);
+}
 
 // Расписание живёт в UTC+3, поэтому и «сегодня» считаем в нём:
 // иначе вечерние уроки уезжают на другую дату.
@@ -1340,10 +1429,10 @@ export async function POST(request) {
           await handleKeep(chatId, bookingId, callbackId, messageId);
           break;
         case 'attended':
-          await handleAttendance(chatId, bookingId, true, callbackId, messageId);
+          await handleAttendance(chatId, bookingId, true, callbackId, messageId, from);
           break;
         case 'noshow':
-          await handleAttendance(chatId, bookingId, false, callbackId, messageId);
+          await handleAttendance(chatId, bookingId, false, callbackId, messageId, from);
           break;
         case 'pricing':
           await answerCallback(callbackId);
@@ -1419,6 +1508,11 @@ export async function POST(request) {
 
         if (text && text.startsWith('/stats')) {
           await handleStatsCommand(chatId, text);
+          return NextResponse.json({ ok: true });
+        }
+
+        if (text && text.startsWith('/cleanup')) {
+          await handleCleanupCommand(chatId, text);
           return NextResponse.json({ ok: true });
         }
 
@@ -1504,7 +1598,7 @@ export async function POST(request) {
       // превращалась в чужой ответ: «/stats» отдавал карточку собственной записи.
       if (text && text.startsWith('/')) {
         const command = text.split(/\s+/)[0].toLowerCase();
-        const managerCommands = ['/book', '/today', '/bookings', '/find', '/stats', '/pending', '/help'];
+        const managerCommands = ['/book', '/today', '/bookings', '/find', '/stats', '/pending', '/who', '/cleanup', '/help'];
 
         if (managerCommands.includes(command)) {
           await sendMessage(chatId, 'Эта команда доступна только менеджерам школы.');
