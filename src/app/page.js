@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import Hero from '@/components/hero';
 import Page from '@/components/page';
@@ -20,6 +20,12 @@ const defaultGroupId = globalThis.location
 	? new URLSearchParams(globalThis.location.search).get('id')?.toUpperCase()
 	: undefined;
 
+// Ссылка от менеджера: ?p=IND020 — конкретный пакет из прайса.
+// Открываем оформление сразу на нём, чтобы клиент не выбирал заново.
+const preselectedPackId = globalThis.location
+	? new URLSearchParams(globalThis.location.search).get('p')?.toUpperCase()
+	: undefined;
+
 export default function Home() {
 	const products = useProducts();
 	const scrollToRequest = useScrollTo('#request', {
@@ -33,6 +39,15 @@ export default function Home() {
 
 	const [groupId, setGroupId] = useState(defaultGroupId);
 	const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
+
+	// Прайс приезжает асинхронно, поэтому группу пакета узнаём только после загрузки.
+	useEffect(() => {
+		if (!preselectedPackId || !products) return;
+
+		const product = products.find(item => item.external_id === preselectedPackId);
+
+		if (product) setGroupId(product.group_id);
+	}, [products]);
 
 	if (!products) {
 		return <Loader size="lg" />;
@@ -235,6 +250,7 @@ export default function Home() {
 					<Checkout
 						products={products}
 						groupId={groupId}
+						packId={preselectedPackId}
 					/>
 				}
 			</Modal>
