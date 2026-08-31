@@ -20,13 +20,24 @@ function apiUrl(method) {
   return `https://api.telegram.org/bot${BOT_TOKEN()}/${method}`;
 }
 
+// Клавиатура у Telegram живёт внутри reply_markup. Если передать inline_keyboard
+// верхним уровнем, Telegram просто игнорирует поле: сообщение уходит без кнопок
+// и без единой ошибки. Приводим к правильной форме здесь, а не в каждом вызове.
+function normalizeOptions(options) {
+  if (!options || !options.inline_keyboard) return options || {};
+
+  const { inline_keyboard, ...rest } = options;
+
+  return { ...rest, reply_markup: { inline_keyboard } };
+}
+
 export async function sendMessage(chatId, text, options = {}) {
   try {
     const body = {
       chat_id: chatId,
       text,
       parse_mode: 'HTML',
-      ...options
+      ...normalizeOptions(options)
     };
     const resp = await fetch(apiUrl('sendMessage'), {
       method: 'POST',
