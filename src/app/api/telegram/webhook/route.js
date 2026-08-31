@@ -32,7 +32,7 @@ function generateAvailableSlots(bookedSlots) {
 
   // Горизонт записи три недели — столько же показывает воронка,
   // иначе при переносе человек видел бы меньше вариантов, чем при записи.
-  for (let dayOffset = 0; dayOffset < 21; dayOffset++) {
+  for (let dayOffset = 0; dayOffset < 7; dayOffset++) {
     const date = new Date(now);
     date.setDate(date.getDate() + dayOffset);
 
@@ -913,6 +913,87 @@ async function handleTestMailCommand(chatId, text) {
   );
 }
 
+// Расчистка расписания по географии: кампания на СНГ остановлена, но её записи
+// продолжают занимать слоты и время ведущей. Снимаем неподтверждённые из тех стран,
+// куда она вела. Записи не удаляем — отменяем и освобождаем слот.
+const CLEAN_COUNTRIES = ['Казахстан', 'Друг'];
+
+function isCleanupCountry(booking) {
+  const answers = booking.quizAnswers || {};
+  const country = String(answers['Страна'] || '');
+
+  return CLEAN_COUNTRIES.some(part => country.includes(part));
+}
+
+async function handleCleanSlotsCommand(chatId, text) {
+  const apply = String(text || '').trim().split(/\s+/)[1] === 'yes';
+  const all = await getAllActiveBookings();
+  const now = Date.now();
+
+  const list = all.filter(booking => {
+    if (booking.confirmed) return false;
+    if (booking.status === 'cancelled') return false;
+    if (!booking.slot || booking.slot === 'no_time') return false;
+    if (!isCleanupCountry(booking)) return false;
+
+    const [dateStr, time] = String(booking.slot).split('_');
+    const [h, m] = String(time).split(':').map(Number);
+    const at = new Date(`${dateStr}T00:00:00Z`);
+
+    if (Number.isNaN(at.getTime())) return false;
+
+    at.setTime(at.getTime() + ((h - 3) * 60 + m) * 60 * 1000);
+
+    return at.getTime() > now;
+  });
+
+  if (!list.length) {
+    await sendMessage(chatId, 'Нечего снимать: неподтверждённых записей из этих стран нет.');
+    return;
+  }
+
+  const lines = list.slice(0, 30).map(booking =>
+    `• ${booking.name || 'без имени'} · ${booking.slotDate || ''} ${booking.slotMsk || ''} · ${(booking.quizAnswers || {})['Страна'] || '—'}`
+  );
+
+  if (!apply) {
+    await sendMessage(chatId,
+      `<b>Снимем записей: ${list.length}</b>\nНеподтверждённые, страна — Казахстан/Армения/Грузия или «Другая».\n\n` +
+      lines.join('\n') +
+      (list.length > 30 ? `\n… и ещё ${list.length - 30}` : '') +
+      '\n\nСлоты освободятся, ученикам уйдёт сообщение со ссылкой записаться заново.\nПрименить: /cleanslots yes'
+    );
+    return;
+  }
+
+  let done = 0;
+
+  for (const booking of list) {
+    try {
+      await removeBookedSlot(booking.slot);
+      await updateBooking(booking.id, {
+        status: 'cancelled',
+        releasedByManager: true,
+        releasedAt: new Date().toISOString()
+      });
+
+      if (booking.chatId) {
+        await sendMessage(
+          booking.chatId,
+          'Мы не получили подтверждения, что вы будете на уроке, и освободили ваше время.\n\n' +
+          'Если планы в силе — выберите новое время: https://www.sayyestoenglish.com/learn_easy'
+        );
+      }
+
+      done++;
+    } catch (e) {
+      console.error('Clean slots error:', booking.id, e);
+    }
+  }
+
+  await sendMessage(chatId, `Снято записей: ${done}. Слоты свободны.`);
+}
+
 // Разовая расчистка расписания: просим подтвердить всех, кто записан вперёд.
 // Записи набирались до того, как на воронке появилась цена, и заняли неделю вперёд.
 async function handleConfirmAllCommand(chatId) {
@@ -1669,6 +1750,11 @@ export async function POST(request) {
           return NextResponse.json({ ok: true });
         }
 
+        if (text && text.startsWith('/cleanslots')) {
+          await handleCleanSlotsCommand(chatId, text);
+          return NextResponse.json({ ok: true });
+        }
+
         if (text && text.startsWith('/testmail')) {
           await handleTestMailCommand(chatId, text);
           return NextResponse.json({ ok: true });
@@ -1766,7 +1852,7 @@ export async function POST(request) {
       // превращалась в чужой ответ: «/stats» отдавал карточку собственной записи.
       if (text && text.startsWith('/')) {
         const command = text.split(/\s+/)[0].toLowerCase();
-        const managerCommands = ['/book', '/today', '/bookings', '/find', '/stats', '/pending', '/who', '/cleanup', '/confirmall', '/testmail', '/help'];
+        const managerCommands = ['/book', '/today', '/bookings', '/find', '/stats', '/pending', '/who', '/cleanup', '/confirmall', '/cleanslots', '/testmail', '/help'];
 
         if (managerCommands.includes(command)) {
           await sendMessage(chatId, 'Эта команда доступна только менеджерам школы.');
