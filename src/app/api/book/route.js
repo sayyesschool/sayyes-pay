@@ -115,11 +115,19 @@ export async function POST(request) {
 
     // Письмо с подтверждением. Единственный канал, который не зависит от того,
     // нажал ли человек «Начать» в боте. Без RESEND_API_KEY вызов молча пропускается.
+    // Результат отправки кладём в заявку: иначе «письмо не пришло» выясняется
+    // только жалобой клиента, а менеджер об этом не знает.
     try {
-      await sendBookingConfirmation(booking);
+      const mail = await sendBookingConfirmation(booking);
+      booking.emailOk = Boolean(mail && mail.ok);
+      booking.emailNote = (mail && (mail.skipped || mail.error)) || null;
     } catch (e) {
       console.error('Confirmation email error:', e);
+      booking.emailOk = false;
+      booking.emailNote = String(e).slice(0, 200);
     }
+
+    await createBooking(booking);
 
     // Generate deep link
     const botLink = makeDeepLink(bookingId);
