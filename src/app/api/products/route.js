@@ -6,6 +6,25 @@ import { getIntroProducts, introActive, introExpiry } from '@/services/intro';
 
 // Почту целиком наружу не отдаём, но человек должен узнать свою и заметить
 // опечатку — иначе чек уйдёт в никуда и он об этом не узнает.
+// Код записи — восемь символов, их можно перебирать. Данных здесь мало
+// (только маска почты), но скорость перебора ограничиваем. Память у каждого
+// инстанса своя — это не защита, а тормоз для скрипта.
+const RATE_LIMIT = 30;
+const RATE_WINDOW_MS = 60 * 1000;
+const hits = new Map();
+
+function tooManyLookups(ip) {
+  const now = Date.now();
+  const seen = (hits.get(ip) || []).filter(time => now - time < RATE_WINDOW_MS);
+
+  seen.push(now);
+  hits.set(ip, seen);
+
+  if (hits.size > 5000) hits.clear();
+
+  return seen.length > RATE_LIMIT;
+}
+
 function maskEmail(email) {
   const [local, domain] = String(email || '').split('@');
 
@@ -26,7 +45,9 @@ export async function GET(request) {
     const bookingId = request.nextUrl.searchParams.get('b');
     let booking = null;
 
-    if (bookingId) {
+    const ip = request.headers.get('x-forwarded-for') || 'unknown';
+
+    if (bookingId && !tooManyLookups(ip)) {
       try {
         booking = await getBooking(bookingId);
       } catch (e) {
