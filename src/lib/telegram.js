@@ -180,6 +180,8 @@ export function formatManagerCard(booking) {
   const by = booking.attendedBy ? ` (отметил(а) ${booking.attendedBy})` : '';
   if (booking.archived) marks.push('🗃 архив (до запуска рекламы)');
   if (booking.confirmed) marks.push('🙋 подтвердил(а), что придёт');
+  // Если письмо не ушло, менеджер должен увидеть это сразу, а не от клиента.
+  if (booking.emailOk === false) marks.push('✉️ письмо не ушло');
   // Оплата видна прямо в карточке: раньше о ней знала только почта,
   // и менеджер не мог понять, кто уже заплатил.
   if (booking.paid) {
