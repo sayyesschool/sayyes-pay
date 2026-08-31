@@ -858,13 +858,17 @@ async function handleTestMailCommand(chatId, text) {
     return;
   }
 
+  // Слот в пробе нужен обязательно: без него письмо уходит без вложения-календаря,
+  // а именно вложение — единственное отличие настоящего письма от тестового.
+  const day = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
   const probe = {
     id: 'testmail',
     name: 'Проверка почты',
     email: to,
-    slot: '',
-    slotDate: '',
-    slotMsk: ''
+    slot: `${day}_12:00`,
+    slotDate: 'завтра',
+    slotMsk: '12:00'
   };
 
   const res = await sendBookingConfirmation(probe);
