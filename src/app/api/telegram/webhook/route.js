@@ -707,50 +707,78 @@ async function handleStatsCommand(chatId, text) {
   const { from, to, label } = statsWindow(text);
 
   const keys = await kvKeys('booking:*');
-  const bookings = [];
+  const all = [];
 
   for (const key of keys) {
     const booking = await kvGet(key);
-    if (!booking || !booking.createdAt) continue;
+
+    if (!booking) continue;
     // Архив — это заявки до запуска рекламы. Они портили доходимость
     // фальшивыми отметками «пришёл» из старого бага.
     if (booking.archived) continue;
-    const created = new Date(booking.createdAt).getTime();
-    if (created < from || created >= to) continue;
-    bookings.push(booking);
-  }
 
-  if (!bookings.length) {
-    await sendMessage(chatId, `Заявок ${label} нет.`);
-    return;
+    all.push(booking);
   }
 
   const hasSlot = b => b.slot && b.slot !== 'no_time';
+
+  // Момент урока в UTC. Ключ слота записан в базовом поясе расписания (UTC+3).
+  const slotTime = booking => {
+    if (!hasSlot(booking)) return null;
+
+    const [dateStr, time] = String(booking.slot).split('_');
+    const [h, m] = String(time).split(':').map(Number);
+    const date = new Date(`${dateStr}T00:00:00Z`);
+
+    if (Number.isNaN(date.getTime())) return null;
+
+    date.setTime(date.getTime() + ((h - 3) * 60 + m) * 60 * 1000);
+
+    return date.getTime();
+  };
+
+  // Заявки считаем по дате создания, а уроки — по дате урока. Раньше всё
+  // считалось по созданию, поэтому «не пришёл», отмеченный сегодня по заявке
+  // позавчерашнего дня, не попадал в /stats_today вообще.
+  const bookings = all.filter(b => {
+    if (!b.createdAt) return false;
+    const created = new Date(b.createdAt).getTime();
+    return created >= from && created < to;
+  });
+
+  const lessons = all.filter(b => {
+    const at = slotTime(b);
+    return at !== null && at >= from && at < to;
+  });
+
+  if (!bookings.length && !lessons.length) {
+    await sendMessage(chatId, `Ни заявок, ни уроков ${label} нет.`);
+    return;
+  }
+
   const gaps = [];
 
   for (const booking of bookings) {
-    if (!hasSlot(booking)) continue;
-    const [dateStr, time] = String(booking.slot).split('_');
-    const [h, m] = String(time).split(':').map(Number);
-    // Ключ слота — в базовом поясе расписания (UTC+3), поэтому минус три часа.
-    const slotUtc = new Date(`${dateStr}T00:00:00Z`);
+    const at = slotTime(booking);
 
-    if (Number.isNaN(slotUtc.getTime())) continue;
+    if (at === null) continue;
 
-    slotUtc.setTime(slotUtc.getTime() + ((h - 3) * 60 + m) * 60 * 1000);
-    const gap = (slotUtc.getTime() - new Date(booking.createdAt).getTime()) / 3600000;
-    if (Number.isFinite(gap) && gap > 0) gaps.push(gap);
+    const gap = (at - new Date(booking.createdAt).getTime()) / (1000 * 60 * 60);
+
+    if (gap > 0) gaps.push(Math.round(gap * 10) / 10);
   }
 
   const total = bookings.length;
   const openedBot = bookings.filter(b => b.chatId).length;
   const cancelled = bookings.filter(b => b.status === 'cancelled').length;
   const noTime = bookings.filter(b => !hasSlot(b)).length;
-  const attended = bookings.filter(b => b.attended === true).length;
-  const noShow = bookings.filter(b => b.attended === false).length;
-  const marked = attended + noShow;
-  const share = n => Math.round((n / total) * 100);
+  const share = n => (total ? Math.round((n / total) * 100) : 0);
   const avgGap = gaps.length ? Math.round((gaps.reduce((a, b) => a + b, 0) / gaps.length) * 10) / 10 : null;
+
+  const came = lessons.filter(b => b.attended === true);
+  const missed = lessons.filter(b => b.attended === false);
+  const waiting = lessons.filter(b => b.attended !== true && b.attended !== false && b.status !== 'cancelled');
+  const paid = lessons.filter(b => b.paid);
 
   await sendMessage(chatId,
     `<b>Заявки ${label}</b>\n\n` +
@@ -759,91 +787,27 @@ async function handleStatsCommand(chatId, text) {
     `Без бота: ${total - openedBot}\n` +
     `Без выбранного времени: ${noTime}\n` +
     `Отменено: ${cancelled}\n\n` +
-    `Пришли: ${attended}\n` +
-    `Не пришли: ${noShow}\n` +
-    `Не отмечено: ${total - marked}\n\n` +
+    `<b>Уроки ${label}</b> — ${lessons.length}\n` +
+    `Пришли: ${came.length}\n` +
+    `Не пришли: ${missed.length}\n` +
+    `Без отметки: ${waiting.length}\n` +
+    `Оплатили: ${paid.length}\n\n` +
     (avgGap === null ? '' : `Средний разрыв заявка → урок: ${avgGap} ч\n`) +
-    `<i>Считается по базе записей.</i>`
+    `<i>Заявки — по дате заявки, уроки — по дате урока.</i>`
   );
 
   // Цифра «пришли: 1» без имени бесполезна — сразу показываем, кто это и кто отметил.
   const named = list => list
-    .map(b => `• ${b.name || 'без имени'} · <code>${b.id}</code>${b.attendedBy ? ' · отметил(а) ' + b.attendedBy : ''}`)
+    .map(b => `• ${b.name || 'без имени'} · ${b.slotMsk || '—'} · <code>${b.id}</code>${b.attendedBy ? ' · отметил(а) ' + b.attendedBy : ''}`)
     .join('\n');
 
-  const attendedList = bookings.filter(b => b.attended === true);
-  const noShowList = bookings.filter(b => b.attended === false);
-
-  if (attendedList.length || noShowList.length) {
+  if (came.length || missed.length || waiting.length) {
     await sendMessage(chatId,
-      (attendedList.length ? `<b>Пришли</b>\n${named(attendedList)}\n\n` : '') +
-      (noShowList.length ? `<b>Не пришли</b>\n${named(noShowList)}` : '')
+      (came.length ? `<b>Пришли</b>\n${named(came)}\n\n` : '') +
+      (missed.length ? `<b>Не пришли</b>\n${named(missed)}\n\n` : '') +
+      (waiting.length ? `<b>Без отметки</b>\n${named(waiting)}` : '')
     );
   }
-}
-
-
-
-// Заявки до запуска рекламы мешают считать доходимость: там тесты и фальшивые
-// отметки «пришёл» из бага с кнопкой «Отмена». Не удаляем — прячем: данные
-// остаются в /find, но выпадают из /stats и сводки.
-const ARCHIVE_BEFORE = process.env.ARCHIVE_BEFORE || '2026-08-28T16:00:00Z';
-
-async function handleCleanupCommand(chatId, text) {
-  const mode = String(text || '').trim().split(/\s+/)[1] || '';
-  const before = new Date(ARCHIVE_BEFORE).getTime();
-  const keys = await kvKeys('booking:*');
-  const found = [];
-
-  for (const key of keys) {
-    const booking = await kvGet(key);
-
-    if (!booking) continue;
-
-    if (mode === 'undo') {
-      if (booking.archived) found.push(booking);
-      continue;
-    }
-
-    if (booking.archived) continue;
-
-    const created = booking.createdAt ? new Date(booking.createdAt).getTime() : 0;
-
-    if (!created || created >= before) continue;
-
-    found.push(booking);
-  }
-
-  if (mode === 'undo') {
-    for (const booking of found) await updateBooking(booking.id, { archived: false });
-    await sendMessage(chatId, `Вернул из архива: ${found.length}.`);
-    return;
-  }
-
-  if (!found.length) {
-    await sendMessage(chatId, 'Старых заявок не нашлось — база уже чистая.');
-    return;
-  }
-
-  const lines = found.slice(0, 30).map(booking =>
-    `• ${booking.name || 'без имени'} · <code>${booking.id}</code> · ${booking.slotDate || 'без времени'}` +
-    (booking.attended === true ? ' · отмечен «пришёл»' : '')
-  );
-
-  if (mode !== 'yes') {
-    await sendMessage(chatId,
-      `<b>В архив пойдёт: ${found.length}</b>\nВсё, что создано до ${new Date(before).toLocaleDateString('ru-RU')}.\n\n` +
-      lines.join('\n') +
-      (found.length > 30 ? `\n… и ещё ${found.length - 30}` : '') +
-      '\n\nЭти заявки пропадут из /stats и дневной сводки, но останутся в /find.\n' +
-      'Применить: /cleanup yes\nВернуть обратно: /cleanup undo'
-    );
-    return;
-  }
-
-  for (const booking of found) await updateBooking(booking.id, { archived: true });
-
-  await sendMessage(chatId, `Готово: в архив отправлено ${found.length}. Вернуть — /cleanup undo.`);
 }
 
 // Расписание живёт в UTC+3, поэтому и «сегодня» считаем в нём:
@@ -1361,6 +1325,10 @@ async function handleRelayFromManager(managerChatId, message) {
   const targetChatId = await kvGet(`mgr_reply:${managerChatId}`);
   if (!targetChatId) return false;
 
+  // Команда — это команда, а не сообщение ученику. Иначе ученик получал
+  // «Ответ менеджера: /today» со всем содержимым чужой карточки.
+  if (message.text && message.text.trim().startsWith('/')) return false;
+
   if (message.text) {
     await sendMessage(targetChatId, `Ответ менеджера:\n\n${message.text}`);
   } else {
@@ -1565,6 +1533,16 @@ export async function POST(request) {
 
       // Command: /done or /cancel (exit relay mode)
       if (text === '/done' || text === '/cancel') {
+        // У менеджера свой режим переписки. Раньше /done его не закрывал, а сама
+        // команда уезжала ученику текстом «Ответ менеджера: /done».
+        const mgrTarget = await kvGet(`mgr_reply:${chatId}`);
+
+        if (mgrTarget) {
+          await kvDel(`mgr_reply:${chatId}`);
+          await sendMessage(chatId, 'Режим переписки с учеником закрыт.');
+          return NextResponse.json({ ok: true });
+        }
+
         const relayActive = await kvGet(`relay:${chatId}`);
         if (relayActive) {
           await kvDel(`relay:${chatId}`);
@@ -1663,6 +1641,16 @@ export async function POST(request) {
 
         const relayFromMgr = await handleRelayFromManager(chatId, update.message);
         if (relayFromMgr) return NextResponse.json({ ok: true });
+      }
+
+      // Менеджеру клиентский текст «запишитесь на пробный урок» показывать нельзя:
+      // именно его получила Оля, когда написала сообщение, не открыв карточку.
+      if (await isManagerChat(chatId)) {
+        await sendMessage(chatId,
+          'Чтобы написать ученику, откройте его карточку (/today, /find) и нажмите «✍️ Написать ученику».\n\n' +
+          'Команды: /today, /bookings, /pending, /find, /stats, /who, /help'
+        );
+        return NextResponse.json({ ok: true });
       }
 
       // Default response for unknown messages
