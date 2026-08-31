@@ -1377,10 +1377,15 @@ async function handleRelayFromUser(chatId, message) {
     `Запись: ${booking?.slotDate || '—'}, ${booking?.slotMsk || '—'} МСК\n` +
     `────────────────`;
 
-  // Оба менеджера видят обращение, ответить может любой из них.
+  // Ответить может любой менеджер, но кнопкой: без неё он писал ответ прямо в чат,
+  // а бот не знал, кому его передавать, и отвечал подсказкой про карточку.
+  const replyKeyboard = relayBookingId
+    ? { inline_keyboard: [[{ text: '✍️ Ответить ученику', callback_data: `mgr_write:${relayBookingId}` }]] }
+    : undefined;
+
   for (const managerChatId of managerChatIds) {
     if (message.text) {
-      await sendMessage(managerChatId, `${header}\n\n${message.text}`);
+      await sendMessage(managerChatId, `${header}\n\n${message.text}`, replyKeyboard);
     } else {
       // Forward non-text messages directly
       await forwardMessage(managerChatId, chatId, message.message_id);
@@ -1389,6 +1394,9 @@ async function handleRelayFromUser(chatId, message) {
 
     // Store mapping for manager reply
     await kvSet(`mgr_reply:${managerChatId}`, String(chatId), 86400);
+    // Отдельно помним, чьё это обращение: ключ выше может быть сброшен командой
+    // /done, и тогда ответ менеджера было бы некуда девать.
+    if (relayBookingId) await kvSet(`mgr_last:${managerChatId}`, String(relayBookingId), 86400);
   }
 
   await sendMessage(chatId,
@@ -1732,6 +1740,18 @@ export async function POST(request) {
       // Менеджеру клиентский текст «запишитесь на пробный урок» показывать нельзя:
       // именно его получила Оля, когда написала сообщение, не открыв карточку.
       if (await isManagerChat(chatId)) {
+        // Если ученик недавно писал — не отфутболиваем менеджера, а даём кнопку ответа.
+        const lastBookingId = await kvGet(`mgr_last:${chatId}`);
+        const lastBooking = lastBookingId ? await getBooking(lastBookingId) : null;
+
+        if (lastBooking) {
+          await sendMessage(chatId,
+            `Чтобы ответить ${lastBooking.name || 'ученику'}, нажмите кнопку ниже и отправьте сообщение ещё раз.`,
+            { inline_keyboard: [[{ text: `✍️ Ответить ${lastBooking.name || 'ученику'}`, callback_data: `mgr_write:${lastBooking.id}` }]] }
+          );
+          return NextResponse.json({ ok: true });
+        }
+
         await sendMessage(chatId,
           'Чтобы написать ученику, откройте его карточку (/today, /find) и нажмите «✍️ Написать ученику».\n\n' +
           'Команды: /today, /bookings, /pending, /find, /stats, /who, /help'
