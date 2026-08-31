@@ -359,7 +359,9 @@ async function applyNewSlot(bookingId, newSlotKey) {
     slotDate: newSlotDate,
     slotLocal: localTimeString(booking, newSlotKey),
     reminded24h: false,
-    reminded1h: false
+    reminded1h: false,
+    // Урок переехал — карточка ведущей должна прийти заново перед новым временем.
+    hostBriefed: false
   });
 
   if (updated) await fireSchedule(updated);
@@ -608,10 +610,16 @@ async function handleAttendance(chatId, bookingId, attended, callbackQueryId, me
 
   // Отсчёт спецпредложения начинается здесь: трое суток с момента,
   // когда урок отметили состоявшимся.
+  // Повторное нажатие «Пришёл» не должно молча продлевать спецпредложение,
+  // а «Не пришёл» обязан его закрыть: оффер — за состоявшийся урок.
+  const introPatch = attended
+    ? (booking.introExpiresAt ? {} : { introExpiresAt: nextIntroExpiry() })
+    : { introExpiresAt: null };
+
   await updateBooking(bookingId, {
     attended,
     attendanceMarkedAt: new Date().toISOString(),
-    ...(attended ? { introExpiresAt: nextIntroExpiry() } : {})
+    ...introPatch
   });
 
   if (attended && !booking.attendedSent) {
@@ -862,6 +870,11 @@ async function handleMgrPayLink(chatId, bookingId, callbackQueryId) {
     return;
   }
 
+  if (booking.status === 'cancelled') {
+    await answerCallback(callbackQueryId, 'Запись отменена');
+    return;
+  }
+
   let groups;
 
   try {
@@ -928,6 +941,11 @@ async function handleMgrPaySend(chatId, bookingId, packId, callbackQueryId) {
 
   if (!booking || !booking.chatId) {
     await answerCallback(callbackQueryId, 'Запись не найдена');
+    return;
+  }
+
+  if (booking.status === 'cancelled') {
+    await answerCallback(callbackQueryId, 'Запись отменена');
     return;
   }
 
@@ -1011,6 +1029,22 @@ async function handleMgrPayIntro(chatId, bookingId, packId, callbackQueryId) {
 
   if (!booking || !booking.chatId) {
     await answerCallback(callbackQueryId, 'Запись не найдена');
+    return;
+  }
+
+  // Кнопка живёт в переписке вечно: старое сообщение можно нажать через неделю.
+  if (booking.status === 'cancelled') {
+    await answerCallback(callbackQueryId, 'Запись отменена');
+    return;
+  }
+
+  if (!booking.attended) {
+    await answerCallback(callbackQueryId, 'Сначала отметьте «Пришёл»');
+    return;
+  }
+
+  if (booking.introPaid) {
+    await answerCallback(callbackQueryId, 'Спецпредложение уже оплачено');
     return;
   }
 
