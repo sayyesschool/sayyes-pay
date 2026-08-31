@@ -27,7 +27,8 @@ const preselectedPackId = globalThis.location
 	: undefined;
 
 export default function Home() {
-	const products = useProducts();
+	const catalog = useProducts();
+	const products = catalog?.products;
 	const scrollToRequest = useScrollTo('#request', {
 		block: 'center'
 	});
@@ -49,7 +50,7 @@ export default function Home() {
 		if (product) setGroupId(product.group_id);
 	}, [products]);
 
-	if (!products) {
+	if (!catalog) {
 		return <Loader size="lg" />;
 	}
 
@@ -222,8 +223,10 @@ export default function Home() {
 				title="Мы предлагаем курсы в различных форматах"
 				centered
 			>
+				{/* Интро-офферы в каталог не попадают никогда: они только
+				    для тех, кому менеджер отправил персональную ссылку. */}
 				<Products
-					products={products}
+					products={products.filter(product => !product.intro)}
 					onCheckout={handleCheckout}
 				/>
 			</Section>
@@ -251,6 +254,8 @@ export default function Home() {
 						products={products}
 						groupId={groupId}
 						packId={preselectedPackId}
+						knownEmail={Boolean(catalog.booking?.hasEmail)}
+						introExpiresAt={catalog.introExpiresAt}
 					/>
 				}
 			</Modal>
