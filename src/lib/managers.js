@@ -3,16 +3,34 @@ import { sendMessage, MANAGER_USERNAMES } from '@/lib/telegram';
 
 // Telegram не даёт боту писать человеку первым, поэтому chat id менеджера
 // появляется только после того, как он сам написал боту. Храним его по username.
-export async function getManagerChatIds() {
-  const ids = [];
-
-  const primary = await getManagerChatId();
-  if (primary) ids.push(String(primary));
+// Карта «менеджер → chat id». Смотрим в трёх местах, потому что исторически
+// их три: персональный ключ менеджера, общая карта username→chat
+// и старый единственный слот manager_chat_id.
+export async function getManagerChatMap() {
+  const map = {};
 
   for (const username of MANAGER_USERNAMES) {
-    const id = await kvGet(`user_chat:${username}`);
-    if (id && !ids.includes(String(id))) ids.push(String(id));
+    const own = await kvGet(`manager_chat:${username}`);
+    const fallback = await kvGet(`user_chat:${username}`);
+    const id = own || fallback;
+    if (id) map[username] = String(id);
   }
+
+  return map;
+}
+
+export async function getManagerChatIds() {
+  const ids = [];
+  const map = await getManagerChatMap();
+
+  for (const username of Object.keys(map)) {
+    if (!ids.includes(map[username])) ids.push(map[username]);
+  }
+
+  // Старый глобальный слот: его перезаписывает каждый новый менеджер, нажавший /start,
+  // поэтому он только дополнение, а не источник правды.
+  const primary = await getManagerChatId();
+  if (primary && !ids.includes(String(primary))) ids.push(String(primary));
 
   return ids;
 }
