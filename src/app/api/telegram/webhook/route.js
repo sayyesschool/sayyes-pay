@@ -854,6 +854,79 @@ async function handleStatsCommand(chatId, text) {
 
 // Проверка почты. Отказ провайдера раньше был виден только в логах хостинга,
 // поэтому «письмо не пришло» выяснялось только жалобой клиента.
+// Возврат записей, снятых автоматикой. Само правило выключено 1 сентября,
+// но снять двух живых учеников оно успело — команда возвращает и запись, и слот.
+async function handleRestoreCommand(chatId, text) {
+  const args = String(text || '').trim().split(/\s+/).slice(1);
+  const apply = args[0] === 'yes';
+  const hours = Number(args[apply ? 1 : 0]) || 48;
+  const since = Date.now() - hours * 60 * 60 * 1000;
+  const keys = await kvKeys('booking:*');
+  const found = [];
+
+  for (const key of keys) {
+    const b = await kvGet(key);
+
+    if (!b || !b.releasedUnconfirmed) continue;
+    if (b.releasedAt && new Date(b.releasedAt).getTime() < since) continue;
+
+    found.push(b);
+  }
+
+  if (!found.length) {
+    await sendMessage(chatId, 'Автоматика ничего не снимала за последние ' + hours + ' ч.');
+    return;
+  }
+
+  if (!apply) {
+    await sendMessage(chatId,
+      'Снято автоматикой за ' + hours + ' ч: ' + found.length + '\n\n' +
+      found.map(b => '• ' + (b.name || 'без имени') + ' · ' + (b.slotDate || '') + ' ' + (b.slotMsk || '') + ' · <code>' + b.id + '</code>').join('\n') +
+      '\n\nВернуть: <code>/restore yes</code>'
+    );
+    return;
+  }
+
+  const taken = await getBookedSlots();
+  const skipped = [];
+  let restored = 0;
+
+  for (const b of found) {
+    const hasSlot = b.slot && b.slot !== 'no_time';
+
+    if (hasSlot && taken.includes(b.slot)) {
+      skipped.push(b);
+      continue;
+    }
+
+    await updateBooking(b.id, {
+      status: 'confirmed',
+      releasedUnconfirmed: false,
+      releasedAt: null,
+      restoredAt: new Date().toISOString()
+    });
+
+    if (hasSlot) await addBookedSlot(b.slot);
+
+    if (b.chatId) {
+      await sendMessage(
+        b.chatId,
+        'Ваше время снова за вами — мы освободили его по ошибке, извините.\n\n' + clientWhen(b),
+        bookingActionsKeyboard(b.id, b)
+      );
+    }
+
+    restored++;
+  }
+
+  await sendMessage(chatId,
+    'Возвращено записей: ' + restored +
+    (skipped.length
+      ? '\n\nСлот уже занят другим учеником, вернуть не удалось:\n' + skipped.map(b => '• ' + (b.name || '—') + ' · <code>' + b.id + '</code>').join('\n')
+      : '')
+  );
+}
+
 // Проверка спецпредложения на будущей записи. Кнопка «Пришёл» до начала урока
 // теперь не работает, а тестировать оплату надо заранее — поэтому отдельная
 // команда: она открывает окно на трое суток, но НЕ шлёт StartTrial в рекламу
@@ -1857,6 +1930,11 @@ export async function POST(request) {
           return NextResponse.json({ ok: true });
         }
 
+        if (text && text.startsWith('/restore')) {
+          await handleRestoreCommand(chatId, text);
+          return NextResponse.json({ ok: true });
+        }
+
         if (text && text.startsWith('/find')) {
           await handleFindCommand(chatId, text.slice(5));
           return NextResponse.json({ ok: true });
@@ -1949,7 +2027,7 @@ export async function POST(request) {
       // превращалась в чужой ответ: «/stats» отдавал карточку собственной записи.
       if (text && text.startsWith('/')) {
         const command = text.split(/\s+/)[0].toLowerCase();
-        const managerCommands = ['/book', '/today', '/bookings', '/find', '/stats', '/pending', '/who', '/cleanup', '/confirmall', '/cleanslots', '/testmail', '/testintro', '/help'];
+        const managerCommands = ['/book', '/today', '/bookings', '/find', '/stats', '/pending', '/who', '/cleanup', '/confirmall', '/cleanslots', '/testmail', '/testintro', '/restore', '/help'];
 
         if (managerCommands.includes(command)) {
           await sendMessage(chatId, 'Эта команда доступна только менеджерам школы.');
