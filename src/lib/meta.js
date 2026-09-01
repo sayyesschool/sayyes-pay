@@ -322,6 +322,10 @@ export async function sendTrialAttended(booking, extra = {}) {
     phone: booking.telegram,
     name: booking.name,
     attribution: booking.attribution,
+    // Без event_source_url Мета принимала событие с events_received: 1 и без ошибок,
+    // но в датасете оно не появлялось вообще. Отметку ставят в Телеграме, страницы нет —
+    // поэтому указываем воронку, точно так же, как это сделано у Schedule, который доходит.
+    sourceUrl: extra.sourceUrl || 'https://www.sayyestoenglish.com/learn_easy',
     customData: custom
   });
 }
