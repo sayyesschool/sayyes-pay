@@ -2,61 +2,72 @@ import { NextResponse } from 'next/server';
 
 import { kvKeys, kvGet } from '@/lib/redis';
 
-// Полные заявки с контактами — для разбора расхождений с рекламным кабинетом.
+// Полные заявки с контактами — для разбора расхождений с рекламным кабинетом
+// и работы с конкретными людьми.
 //
-// Это персональные данные клиентов, поэтому без ключа эндпоинт выключен совсем:
+// Это персональные данные, поэтому без ключа эндпоинт выключен совсем:
 // открытый адрес с именами и почтами — это выгрузка базы для любого, кто угадает ссылку.
-// Ключ задаётся переменной ADMIN_API_KEY и передаётся заголовком x-admin-key.
+// Ключ задаётся переменной ADMIN_API_KEY, передаётся заголовком x-admin-key или ?key=
+//
+// Фильтры: ?days=N — заявки за N суток; ?lesson=YYYY-MM-DD — все уроки этого дня.
 export async function GET(request) {
-  const key = process.env.ADMIN_API_KEY;
+  const secret = process.env.ADMIN_API_KEY;
 
-  if (!key) {
-    return NextResponse.json({
-      error: 'Выключено: не задан ADMIN_API_KEY'
-    }, { status: 503 });
+  if (!secret) {
+    return NextResponse.json({ error: 'Выключено: не задан ADMIN_API_KEY' }, { status: 503 });
   }
 
-  if (request.headers.get('x-admin-key') !== key) {
+  const params = request.nextUrl.searchParams;
+  const provided = request.headers.get('x-admin-key') || params.get('key');
+
+  if (provided !== secret) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   try {
-    const days = Math.min(Number(request.nextUrl.searchParams.get('days') || 3), 31);
+    const days = Math.min(Number(params.get('days') || 3), 31);
     const from = Date.now() - days * 24 * 60 * 60 * 1000;
+    const lessonDay = params.get('lesson');
     const keys = await kvKeys('booking:*');
     const list = [];
 
     for (const storageKey of keys) {
-      const booking = await kvGet(storageKey);
+      const b = await kvGet(storageKey);
 
-      if (!booking || !booking.createdAt) continue;
-      if (new Date(booking.createdAt).getTime() < from) continue;
+      if (!b) continue;
+
+      const slotDay = b.slot && b.slot !== 'no_time' ? String(b.slot).slice(0, 10) : null;
+      const created = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      const matches = lessonDay ? slotDay === lessonDay : created >= from;
+
+      if (!matches) continue;
 
       list.push({
-        id: booking.id,
-        createdAt: booking.createdAt,
-        name: booking.name || null,
-        email: booking.email || null,
-        telegram: booking.telegram || null,
-        phone: booking.phone || null,
-        slot: booking.slot || null,
-        slotDate: booking.slotDate || null,
-        slotMsk: booking.slotMsk || null,
-        status: booking.status || null,
-        openedBot: Boolean(booking.chatId),
-        confirmed: Boolean(booking.confirmed),
-        attended: booking.attended === undefined ? null : booking.attended,
-        attendedBy: booking.attendedBy || null,
-        paid: Boolean(booking.paid),
-        paidPack: booking.paidPack || null,
-        archived: Boolean(booking.archived),
-        releasedUnconfirmed: Boolean(booking.releasedUnconfirmed),
-        emailOk: booking.emailOk === undefined ? null : booking.emailOk,
-        quizAnswers: booking.quizAnswers || null
+        id: b.id,
+        createdAt: b.createdAt || null,
+        name: b.name || null,
+        email: b.email || null,
+        phone: b.phone || null,
+        telegram: b.telegram || null,
+        slot: b.slot || null,
+        slotMsk: b.slotMsk || null,
+        tz: b.tz || null,
+        status: b.status || null,
+        openedBot: Boolean(b.chatId),
+        confirmed: Boolean(b.confirmed),
+        attended: b.attended === undefined ? null : b.attended,
+        attendedBy: b.attendedBy || null,
+        paid: Boolean(b.paid),
+        paidPack: b.paidPack || null,
+        introExpiresAt: b.introExpiresAt || null,
+        archived: Boolean(b.archived),
+        releasedUnconfirmed: Boolean(b.releasedUnconfirmed),
+        emailOk: b.emailOk === undefined ? null : b.emailOk,
+        quiz: b.quizAnswers || b.quiz || null
       });
     }
 
-    list.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+    list.sort((a, b) => String(a.slot || a.createdAt).localeCompare(String(b.slot || b.createdAt)));
 
     return NextResponse.json({ count: list.length, bookings: list });
   } catch (e) {
