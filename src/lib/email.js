@@ -430,3 +430,133 @@ export async function sendHandoutEmail(booking) {
 export async function sendRescheduleConfirmation(booking) {
   return sendBookingConfirmation(booking, 'reschedule');
 }
+
+
+// --- Письма тем, у кого нет Telegram ---
+//
+// Без чата с ботом человек выпадал из всего: ни подтверждения, ни напоминаний,
+// ни спецпредложения после урока. Почта есть почти у каждой заявки, поэтому
+// весь тот же путь дублируется письмами. Подтверждение — ссылкой: она ставит
+// ту же отметку, что кнопка в боте, и уходит в рекламу тем же событием.
+
+const SITE = () => process.env.PUBLIC_BASE_URL || 'https://www.sayyestoenglish.com';
+
+export function confirmLink(booking) {
+  return SITE() + '/api/confirm?b=' + encodeURIComponent((booking && booking.id) || '');
+}
+
+// Тот же путь отправки, что у подтверждения записи, но для любого письма.
+async function deliver(msg, tag) {
+  const which = provider();
+
+  if (!which) return { skipped: 'no mail provider configured' };
+
+  try {
+    const resp = await ADAPTERS[which](msg);
+
+    if (!resp.ok) {
+      const text = await resp.text().catch(() => '');
+
+      console.error('Mail ' + tag + ' (' + which + ') error:', resp.status, text.slice(0, 400));
+      await storeMailError({ provider: which, tag, status: resp.status, text: text.slice(0, 300) });
+
+      return { ok: false, provider: which, status: resp.status };
+    }
+
+    return { ok: true, provider: which };
+  } catch (e) {
+    console.error('Mail ' + tag + ' (' + which + ') failed:', e);
+    await storeMailError({ provider: which, tag, error: String(e).slice(0, 300) });
+
+    return { ok: false, provider: which, error: String(e) };
+  }
+}
+
+function whenText(booking) {
+  const local = localSlot(booking);
+
+  if (local) return local.date + ', ' + local.time;
+
+  return (String(booking.slotDate || '') + ' ' + String(booking.slotLocal || '')).trim() || 'по расписанию';
+}
+
+function button(href, label) {
+  return '<tr><td style="padding-bottom:6px">'
+    + '<a href="' + href + '" style="display:inline-block;padding:13px 22px;background:#5B2D8E;'
+    + 'color:#fff;border-radius:100px;font-size:14px;font-weight:700;text-decoration:none">'
+    + label + '</a></td></tr>';
+}
+
+function baseMsg(booking, subject, html) {
+  return {
+    from: parseFrom(MAIL_FROM()),
+    to: booking.email,
+    replyTo: MAIL_REPLY_TO(),
+    subject,
+    html,
+    ics: null
+  };
+}
+
+// Просьба подтвердить за сутки — почтовый двойник кнопки «Буду на уроке».
+export async function sendConfirmRequestEmail(booking) {
+  if (!booking || !booking.email) return { skipped: 'no email' };
+
+  const when = whenText(booking);
+  const html = layout(
+    '<tr><td style="font-size:22px;font-weight:800;line-height:1.3;padding-bottom:14px">'
+    + 'Подтвердите пробный урок</td></tr>'
+    + '<tr><td style="font-size:14px;line-height:1.7;color:#444;padding-bottom:18px">'
+    + 'Ваш урок ' + esc(when) + '. Нажмите кнопку — так мы поймём, что время в силе, '
+    + 'и преподаватель будет ждать именно вас.</td></tr>'
+    + button(confirmLink(booking), 'Буду на уроке')
+    + '<tr><td style="font-size:12px;color:#888;line-height:1.6;padding-top:10px">'
+    + 'Планы изменились? Ответьте на это письмо, и мы перенесём урок.</td></tr>'
+  );
+
+  return deliver(baseMsg(booking, 'Подтвердите пробный урок — ' + when, html), 'confirm-request');
+}
+
+// Напоминание за сутки и за час.
+export async function sendLessonReminderEmail(booking, hours) {
+  if (!booking || !booking.email) return { skipped: 'no email' };
+
+  const when = whenText(booking);
+  const soon = hours <= 1;
+  const title = soon ? 'Урок через час' : 'Урок завтра, ' + esc(when);
+  const html = layout(
+    '<tr><td style="font-size:22px;font-weight:800;line-height:1.3;padding-bottom:14px">'
+    + title + '</td></tr>'
+    + '<tr><td style="font-size:14px;line-height:1.7;color:#444;padding-bottom:18px">'
+    + 'Пробный урок — 30 минут в Zoom.<br>'
+    + '<span style="color:#6b4b8a">Идентификатор ' + ZOOM_MEETING_ID
+    + ', код доступа ' + ZOOM_PASSCODE + '</span></td></tr>'
+    + button(ZOOM_JOIN_URL, 'Подключиться в Zoom')
+    + '<tr><td style="font-size:12px;color:#888;line-height:1.6;padding-top:10px">'
+    + 'Не получается прийти? Ответьте на это письмо — перенесём.</td></tr>'
+  );
+
+  return deliver(
+    baseMsg(booking, soon ? 'Пробный урок через час' : 'Напоминание: пробный урок ' + when, html),
+    'reminder-' + hours + 'h'
+  );
+}
+
+// Спецпредложение после урока — для тех, кому его некуда прислать в боте.
+export async function sendIntroOfferEmail(booking, link, offerName, deadline) {
+  if (!booking || !booking.email || !link) return { skipped: 'no email or link' };
+
+  const html = layout(
+    '<tr><td style="font-size:22px;font-weight:800;line-height:1.3;padding-bottom:14px">'
+    + 'Спасибо за урок!</td></tr>'
+    + '<tr><td style="font-size:14px;line-height:1.7;color:#444;padding-bottom:18px">'
+    + 'Следующий шаг — ' + esc(offerName || 'специальное предложение') + '.'
+    + (deadline ? ' Предложение действует до ' + esc(deadline) + '.' : '')
+    + '</td></tr>'
+    + button(link, 'Перейти к оплате')
+    + '<tr><td style="font-size:12px;color:#888;line-height:1.6;padding-top:10px">'
+    + 'Есть вопросы — просто ответьте на это письмо.</td></tr>'
+  );
+
+  return deliver(baseMsg(booking, 'Ваше предложение после пробного урока', html), 'intro-offer');
+}
