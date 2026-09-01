@@ -82,7 +82,7 @@ export async function GET(request) {
         const day = touch(lessonDay);
 
         day.lessons++;
-        if (booking.attended === true) day.attended++;
+        if (booking.attended === true && !booking.introTest) day.attended++;
         if (booking.attended === false) day.noShow++;
         if (booking.paid) day.paid++;
       }
