@@ -647,7 +647,11 @@ async function handleAttendance(chatId, bookingId, attended, callbackQueryId, me
       attended: null,
       attendedBy: null,
       attendanceMarkedAt: null,
-      introExpiresAt: null
+      introExpiresAt: null,
+      // Сняли отметку — значит и «уже отправлено в рекламу» больше не верно.
+      // От дублей защищает event_id, а вот повторить неудавшуюся отправку
+      // без этого было невозможно вообще.
+      attendedSent: false
     });
 
     await answerCallback(callbackQueryId, 'Отметка снята');
