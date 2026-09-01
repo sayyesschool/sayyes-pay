@@ -639,6 +639,25 @@ async function handleAttendance(chatId, bookingId, attended, callbackQueryId, me
     return;
   }
 
+  // Повторное нажатие уже стоящей отметки снимает её. Без этого ошибочную
+  // отметку было не убрать вообще, а она тянет за собой и доходимость в сводках,
+  // и трёхсуточное окно спецпредложения.
+  if (booking.attended === attended) {
+    await updateBooking(bookingId, {
+      attended: null,
+      attendedBy: null,
+      attendanceMarkedAt: null,
+      introExpiresAt: null
+    });
+
+    await answerCallback(callbackQueryId, 'Отметка снята');
+    await editMessage(chatId, messageId,
+      '⏳ Отметка снята\n\n' + (booking.name || '—') + ' (' + (booking.telegram || booking.email || '—') + ')'
+    );
+
+    return;
+  }
+
   // Отметить урок состоявшимся можно только после его начала. Нажатие по будущей
   // записи уходило в Мету как StartTrial и запускало трёхсуточное окно оффера —
   // оно сгорало ещё до самого урока.
@@ -668,7 +687,7 @@ async function handleAttendance(chatId, bookingId, attended, callbackQueryId, me
     ...introPatch
   });
 
-  if (attended && !booking.attendedSent) {
+  if (attended && !booking.attendedSent && booking.status !== 'cancelled') {
     try {
       const res = await sendTrialAttended({ ...booking, attended: true });
       if (res && res.ok) await updateBooking(bookingId, { attendedSent: true });
