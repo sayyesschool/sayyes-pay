@@ -145,11 +145,24 @@ export async function GET(request) {
       // Через час после урока спрашиваем менеджера, состоялся ли он. Ответ уходит
       // в Мету событием TrialAttended — иначе реклама так и будет приводить тех,
       // кто записывается и не доходит.
-      if (!booking.attendanceAsked && hoursUntil < -1 && hoursUntil > -72) {
-        const asked = await notifyManagers(formatAttendanceAsk(booking), attendanceKeyboard(booking.id));
-        if (asked) {
-          await updateBooking(booking.id, { attendanceAsked: true });
-          askedAttendance++;
+      // Спрашиваем трижды: через час, через четыре и через сутки. Одного вопроса
+      // не хватало — 31 августа из 19 уроков десять остались без отметки, а без неё
+      // нет ни StartTrial в рекламе, ни окна спецпредложения у ученика.
+      const noMark = booking.attended === undefined || booking.attended === null;
+
+      if (noMark && hoursUntil < -1 && hoursUntil > -72) {
+        const stage = hoursUntil <= -24 ? 3 : (hoursUntil <= -4 ? 2 : 1);
+
+        if ((booking.attendanceAskedStage || 0) < stage) {
+          const asked = await notifyManagers(
+            formatAttendanceAsk(booking) + (stage > 1 ? '\n\n⚠️ Урок до сих пор без отметки.' : ''),
+            attendanceKeyboard(booking.id)
+          );
+
+          if (asked) {
+            await updateBooking(booking.id, { attendanceAsked: true, attendanceAskedStage: stage });
+            askedAttendance++;
+          }
         }
       }
     }
