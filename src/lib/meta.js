@@ -11,7 +11,7 @@
 // Всё под флагом: без META_CAPI_TOKEN модуль молча ничего не делает.
 
 import crypto from 'crypto';
-import { kvGet, kvKeys, getBooking } from '@/lib/redis';
+import { kvGet, kvKeys, kvSet, getBooking } from '@/lib/redis';
 
 const PIXEL_ID = () => process.env.META_PIXEL_ID || '1405840230688968';
 const CAPI_TOKEN = () => process.env.META_CAPI_TOKEN;
@@ -23,6 +23,17 @@ const CAPI_TOKEN_2 = () => process.env.META_CAPI_TOKEN_2 || '';
 
 const TEST_EVENT_CODE = () => process.env.META_TEST_EVENT_CODE || '';
 const GRAPH_VERSION = 'v21.0';
+
+// Результат последней отправки каждого события храним неделю. Без этого отказ
+// Меты виден только в логах хостинга, то есть практически никому: событие просто
+// не появляется в Events Manager, и понять почему нечем.
+async function storeCapiResult(eventName, info) {
+  try {
+    await kvSet('last_capi:' + eventName, JSON.stringify({ ...info, at: new Date().toISOString() }), 604800);
+  } catch (e) {
+    console.error('Cannot store CAPI result:', e);
+  }
+}
 
 export function capiEnabled() {
   return !!CAPI_TOKEN();
@@ -144,6 +155,8 @@ export async function sendCapiEvent({
 
     // Без единого идентификатора событие бесполезно — Мета его не сматчит.
     if (!userData.em && !userData.ph && !userData.fbp && !userData.fbc) {
+      await storeCapiResult(eventName, { skipped: 'no identifiers' });
+
       return { skipped: 'no identifiers', eventName };
     }
 
@@ -176,11 +189,18 @@ export async function sendCapiEvent({
     }
     if (!resp.ok) {
       console.error(`CAPI ${eventName} error:`, resp.status, data);
+      await storeCapiResult(eventName, { ok: false, status: resp.status, data });
+
       return { ok: false, eventName, status: resp.status, data };
     }
+
+    await storeCapiResult(eventName, { ok: true, dataset: PIXEL_ID(), eventId: eventId || null });
+
     return { ok: true, eventName, data };
   } catch (e) {
     console.error(`CAPI ${eventName} failed:`, e);
+    await storeCapiResult(eventName, { ok: false, error: String(e).slice(0, 300) });
+
     return { ok: false, eventName, error: String(e) };
   }
 }
