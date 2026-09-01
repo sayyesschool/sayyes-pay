@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { sendBookingConfirmation, mailProvider } from '@/lib/email';
+import { sendBookingConfirmation, mailProvider, sendIntroOfferEmail } from '@/lib/email';
 import { getProducts } from '@/services/stripe';
 import { getIntroProducts, getIntroProduct, introActive, introExpiry, nextIntroExpiry } from '@/services/intro';
 import { clientTimeLine, clientDateLine, clientWhen, localTimeString, localSlot, slotKeyToDate } from '@/lib/time';
@@ -919,6 +919,10 @@ async function handleRestoreCommand(chatId, text) {
     restored++;
   }
 
+  if (restored) {
+    await notifyManagers('↩️ Возвращено записей, снятых автоматикой: ' + restored + '. Слоты снова заняты.');
+  }
+
   await sendMessage(chatId,
     'Возвращено записей: ' + restored +
     (skipped.length
@@ -1333,8 +1337,9 @@ async function handleMgrPayLink(chatId, bookingId, callbackQueryId) {
     return;
   }
 
-  if (!booking.chatId) {
-    await answerCallback(callbackQueryId, 'У ученика нет чата с ботом');
+  // Нет чата с ботом — не отказ, а другой канал: ссылку отправим на почту.
+  if (!booking.chatId && !booking.email) {
+    await answerCallback(callbackQueryId, 'У ученика нет ни чата с ботом, ни почты');
     return;
   }
 
@@ -1407,8 +1412,15 @@ async function handleMgrPayGroup(chatId, bookingId, groupId, callbackQueryId) {
 async function handleMgrPaySend(chatId, bookingId, packId, callbackQueryId) {
   const booking = await getBooking(bookingId);
 
-  if (!booking || !booking.chatId) {
+  if (!booking) {
     await answerCallback(callbackQueryId, 'Запись не найдена');
+    return;
+  }
+
+  // Раньше отсутствие чата с ботом читалось как «запись не найдена», и человеку
+  // без телеграма отправить ссылку было нельзя вообще. Теперь запасной канал — почта.
+  if (!booking.chatId && !booking.email) {
+    await answerCallback(callbackQueryId, 'Некуда отправить: нет ни телеграма, ни почты');
     return;
   }
 
@@ -1437,6 +1449,13 @@ async function handleMgrPaySend(chatId, bookingId, packId, callbackQueryId) {
 
   const link = `https://www.sayyestoenglish.com/?b=${encodeURIComponent(booking.id)}&p=${encodeURIComponent(product.external_id)}`;
   const price = `${Math.round(product.price / 100)} €`;
+
+  if (!booking.chatId) {
+    await answerCallback(callbackQueryId);
+    await sendIntroOfferEmail(booking, link, product.name + ' · ' + product.description, null);
+    await sendMessage(chatId, 'Ссылка отправлена письмом: ' + (booking.name || 'ученик') + ' — ' + product.name + ', ' + price + '.');
+    return;
+  }
 
   await answerCallback(callbackQueryId);
   await sendMessage(
@@ -1495,8 +1514,15 @@ async function introMenu(booking) {
 async function handleMgrPayIntro(chatId, bookingId, packId, callbackQueryId) {
   const booking = await getBooking(bookingId);
 
-  if (!booking || !booking.chatId) {
+  if (!booking) {
     await answerCallback(callbackQueryId, 'Запись не найдена');
+    return;
+  }
+
+  // Раньше отсутствие чата с ботом читалось как «запись не найдена», и человеку
+  // без телеграма отправить ссылку было нельзя вообще. Теперь запасной канал — почта.
+  if (!booking.chatId && !booking.email) {
+    await answerCallback(callbackQueryId, 'Некуда отправить: нет ни телеграма, ни почты');
     return;
   }
 
@@ -1535,6 +1561,13 @@ async function handleMgrPayIntro(chatId, bookingId, packId, callbackQueryId) {
 
   const link = `https://www.sayyestoenglish.com/?b=${encodeURIComponent(booking.id)}&p=${encodeURIComponent(product.external_id)}`;
   const price = `${Math.round(product.price / 100)} €`;
+
+  if (!booking.chatId) {
+    await answerCallback(callbackQueryId);
+    await sendIntroOfferEmail(booking, link, product.name + ' · ' + product.description, introDeadlineText(expiresAt));
+    await sendMessage(chatId, '🎁 Спецпредложение отправлено письмом: ' + (booking.name || 'ученик') + ' — ' + product.name + ', ' + price + '.\nДействует до ' + introDeadlineText(expiresAt) + '.');
+    return;
+  }
 
   await answerCallback(callbackQueryId);
   await sendMessage(
