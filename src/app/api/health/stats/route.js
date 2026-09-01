@@ -88,6 +88,8 @@ export async function GET(request) {
       }
     }
 
+    const headers = { 'Access-Control-Allow-Origin': '*' };
+
     return NextResponse.json({
       timezone: 'UTC+3',
       note: 'bookings/noTime/cancelled/openedBot/confirmed — по дате заявки; lessons/attended/noShow/paid — по дате урока',
@@ -96,7 +98,7 @@ export async function GET(request) {
         acc[key] = byDay[key];
         return acc;
       }, {})
-    });
+    }, { headers });
   } catch (e) {
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
