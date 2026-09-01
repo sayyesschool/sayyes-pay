@@ -178,6 +178,21 @@ export function managerActionsKeyboard(bookingId, booking) {
 }
 
 // Карточка записи для менеджера: всё, что нужно для решения, в одном сообщении.
+// Начало урока в миллисекундах. Ключ слота хранится в базовом поясе
+// расписания (UTC+3), поэтому час уменьшаем на три — и только арифметикой:
+// у ночных слотов вычитание прямо в строке давало невалидную дату.
+function slotStartMs(booking) {
+  if (!booking || !booking.slot || booking.slot === 'no_time') return null;
+
+  const [dateStr, time] = String(booking.slot).split('_');
+  const [h, m] = String(time).split(':').map(Number);
+  const at = new Date(dateStr + 'T00:00:00Z');
+
+  if (Number.isNaN(at.getTime()) || Number.isNaN(h) || Number.isNaN(m)) return null;
+
+  return at.getTime() + ((h - 3) * 60 + m) * 60 * 1000;
+}
+
 export function formatManagerCard(booking) {
   if (!booking) return "Запись не найдена";
 
@@ -211,11 +226,19 @@ export function formatManagerCard(booking) {
 
   // Статус — первой строкой. Внизу, в общем списке пометок, его не замечали:
   // отмеченная запись выглядела так же, как та, где никто ничего не ставил.
+  // «Отметки нет» на будущем уроке читалось как «человек не подтвердил» — это
+  // разные вещи, и из-за путаницы возникал вопрос, почему запись не снята.
+  // До начала урока пишем прямо: урок ещё не прошёл, и есть ли подтверждение.
+  const startsAt = slotStartMs(booking);
+  const notYet = startsAt !== null && Date.now() < startsAt;
+  const pending = notYet
+    ? (booking.confirmed ? '🕓 урок ещё не прошёл · 🙋 подтвердил(а)' : '🕓 урок ещё не прошёл · подтверждения нет')
+    : '⏳ отметки нет';
   const status = booking.attended === true
     ? `✅ <b>ПРИШЁЛ</b>${by}`
     : booking.attended === false
       ? `🚫 <b>НЕ ПРИШЁЛ</b>${by}`
-      : '⏳ отметки нет';
+      : pending;
 
   return `${status}\n` +
     `<b>${booking.name || 'Без имени'}</b>\n` +
