@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getAllActiveBookings, updateBooking, getManagerChatId, removeBookedSlot } from '@/lib/redis';
 import { sendMessage, formatReminder, formatHandout, bookingActionsKeyboard, formatAttendanceAsk, attendanceKeyboard, formatManagerCard, managerActionsKeyboard } from '@/lib/telegram';
 import { notifyManagers, notifyHost } from '@/lib/managers';
-import { sendHandoutEmail } from '@/lib/email';
+import { sendHandoutEmail, sendConfirmRequestEmail, sendLessonReminderEmail } from '@/lib/email';
 
 // Protect cron endpoint
 const CRON_SECRET = process.env.CRON_SECRET;
@@ -23,6 +23,7 @@ export async function GET(request) {
     let askedAttendance = 0;
     let briefedHost = 0;
     let released = 0;
+    let mailed = 0;
 
     for (const booking of bookings) {
       if (!booking.slot || booking.slot === 'no_time') continue;
@@ -56,6 +57,14 @@ export async function GET(request) {
         sent24h++;
       }
 
+      // Тем, у кого нет чата с ботом, то же самое письмом. Без этого человек
+      // между заявкой и уроком не получал от нас ни одного касания.
+      if (!booking.chatId && booking.email && !booking.mailed24h && hoursUntil > 23 && hoursUntil < 25) {
+        await sendConfirmRequestEmail(booking);
+        await updateBooking(booking.id, { mailed24h: true });
+        mailed++;
+      }
+
       // Send 1h reminder (between 0.5-1.5 hours before)
       if (booking.chatId && !booking.reminded1h && hoursUntil > 0.5 && hoursUntil < 1.5) {
         await sendMessage(
@@ -65,6 +74,12 @@ export async function GET(request) {
         );
         await updateBooking(booking.id, { reminded1h: true });
         sent1h++;
+      }
+
+      if (!booking.chatId && booking.email && !booking.mailed1h && hoursUntil > 0.5 && hoursUntil < 1.5) {
+        await sendLessonReminderEmail(booking, 1);
+        await updateBooking(booking.id, { mailed1h: true });
+        mailed++;
       }
 
       // Памятка «Как заговорить без стеснения» — отдельное касание перед уроком.
@@ -145,6 +160,7 @@ export async function GET(request) {
       sent1h,
       sentHandout,
       askedAttendance,
+      mailed,
       briefedHost,
       released,
       timestamp: now.toISOString()
