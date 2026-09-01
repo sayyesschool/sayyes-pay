@@ -164,7 +164,9 @@ export async function sendCapiEvent({
     const { resp, data } = await postToDataset(PIXEL_ID(), token, body);
 
     // Зеркало в свой датасет. Его ошибки не влияют на результат основного события.
-    if (PIXEL_ID_2() && CAPI_TOKEN_2()) {
+    // Если зеркало указано на тот же датасет — не шлём: каждое событие падало
+    // в него дважды, и в отчётах цифры были вдвое больше реальных.
+    if (PIXEL_ID_2() && CAPI_TOKEN_2() && PIXEL_ID_2() !== PIXEL_ID()) {
       try {
         const mirror = await postToDataset(PIXEL_ID_2(), CAPI_TOKEN_2(), body);
         if (!mirror.resp.ok) console.error(`CAPI mirror ${eventName} error:`, mirror.resp.status, mirror.data);
