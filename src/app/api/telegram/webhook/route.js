@@ -816,7 +816,8 @@ async function handleStatsCommand(chatId, text) {
   const share = n => (total ? Math.round((n / total) * 100) : 0);
   const avgGap = gaps.length ? Math.round((gaps.reduce((a, b) => a + b, 0) / gaps.length) * 10) / 10 : null;
 
-  const came = lessons.filter(b => b.attended === true);
+  // Тестовые отметки (/testintro) не считаются доходимостью.
+  const came = lessons.filter(b => b.attended === true && !b.introTest);
   const missed = lessons.filter(b => b.attended === false);
   const waiting = lessons.filter(b => b.attended !== true && b.attended !== false && b.status !== 'cancelled');
   const paid = lessons.filter(b => b.paid);
@@ -853,6 +854,55 @@ async function handleStatsCommand(chatId, text) {
 
 // Проверка почты. Отказ провайдера раньше был виден только в логах хостинга,
 // поэтому «письмо не пришло» выяснялось только жалобой клиента.
+// Проверка спецпредложения на будущей записи. Кнопка «Пришёл» до начала урока
+// теперь не работает, а тестировать оплату надо заранее — поэтому отдельная
+// команда: она открывает окно на трое суток, но НЕ шлёт StartTrial в рекламу
+// и помечает заявку тестовой, чтобы та не попала в доходимость.
+async function handleTestIntroCommand(chatId, text) {
+  const args = String(text || '').trim().split(/\s+/).slice(1);
+  const off = args[0] === 'off';
+  const code = off ? args[1] : args[0];
+
+  if (!code) {
+    await sendMessage(chatId,
+      'Как пользоваться:\n' +
+      '<code>/testintro код</code> — открыть спецпредложение по заявке на трое суток\n' +
+      '<code>/testintro off код</code> — снять тестовую отметку\n\n' +
+      'В рекламу ничего не уходит, в статистику доходимости заявка не попадает.'
+    );
+    return;
+  }
+
+  const booking = await getBooking(code);
+
+  if (!booking) {
+    await sendMessage(chatId, 'Заявка не найдена: ' + code);
+    return;
+  }
+
+  if (off) {
+    await updateBooking(booking.id, { attended: null, introExpiresAt: null, introTest: false });
+    await sendMessage(chatId, '🧪 Тестовая отметка снята: ' + code);
+    return;
+  }
+
+  await updateBooking(booking.id, {
+    attended: true,
+    introExpiresAt: nextIntroExpiry(),
+    introTest: true
+  });
+
+  const fresh = await getBooking(booking.id);
+  const menu = await introMenu(fresh);
+
+  await sendMessage(
+    chatId,
+    '🧪 Тест спецпредложения: ' + (fresh.name || '—') + ' (' + code + ').' + menu.note +
+    '\n\nStartTrial в рекламу не отправлен. Снять: <code>/testintro off ' + code + '</code>',
+    menu.rows.length ? { inline_keyboard: menu.rows } : {}
+  );
+}
+
 async function handleTestMailCommand(chatId, text) {
   const args = String(text || '').trim().split(/\s+/).slice(1);
   const provider = mailProvider();
@@ -1802,6 +1852,11 @@ export async function POST(request) {
           return NextResponse.json({ ok: true });
         }
 
+        if (text && text.startsWith('/testintro')) {
+          await handleTestIntroCommand(chatId, text);
+          return NextResponse.json({ ok: true });
+        }
+
         if (text && text.startsWith('/find')) {
           await handleFindCommand(chatId, text.slice(5));
           return NextResponse.json({ ok: true });
@@ -1894,7 +1949,7 @@ export async function POST(request) {
       // превращалась в чужой ответ: «/stats» отдавал карточку собственной записи.
       if (text && text.startsWith('/')) {
         const command = text.split(/\s+/)[0].toLowerCase();
-        const managerCommands = ['/book', '/today', '/bookings', '/find', '/stats', '/pending', '/who', '/cleanup', '/confirmall', '/cleanslots', '/testmail', '/help'];
+        const managerCommands = ['/book', '/today', '/bookings', '/find', '/stats', '/pending', '/who', '/cleanup', '/confirmall', '/cleanslots', '/testmail', '/testintro', '/help'];
 
         if (managerCommands.includes(command)) {
           await sendMessage(chatId, 'Эта команда доступна только менеджерам школы.');
