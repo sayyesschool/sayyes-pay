@@ -78,7 +78,9 @@ export async function GET(request) {
 
       const lessonDay = slotDayKey(booking);
 
-      if (lessonDay && new Date(lessonDay).getTime() >= from) {
+      // Отменённые записи — не уроки: иначе ошибочная отметка по удалённой
+      // заявке навсегда оставалась в доходимости.
+      if (lessonDay && booking.status !== 'cancelled' && new Date(lessonDay).getTime() >= from) {
         const day = touch(lessonDay);
 
         day.lessons++;
