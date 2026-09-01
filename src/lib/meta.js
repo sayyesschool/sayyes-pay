@@ -194,7 +194,17 @@ export async function sendCapiEvent({
       return { ok: false, eventName, status: resp.status, data };
     }
 
-    await storeCapiResult(eventName, { ok: true, dataset: PIXEL_ID(), eventId: eventId || null });
+    // Сохраняем именно ответ Меты: она отвечает 200 и тогда, когда событие
+    // принято, но куда-то не туда — вся правда в events_received и messages.
+    await storeCapiResult(eventName, {
+      ok: true,
+      dataset: PIXEL_ID(),
+      eventId: eventId || null,
+      actionSource,
+      hasSourceUrl: Boolean(sourceUrl),
+      identifiers: Object.keys(userData),
+      response: data
+    });
 
     return { ok: true, eventName, data };
   } catch (e) {
