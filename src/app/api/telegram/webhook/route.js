@@ -639,6 +639,16 @@ async function handleAttendance(chatId, bookingId, attended, callbackQueryId, me
     return;
   }
 
+  // Отметить урок состоявшимся можно только после его начала. Нажатие по будущей
+  // записи уходило в Мету как StartTrial и запускало трёхсуточное окно оффера —
+  // оно сгорало ещё до самого урока.
+  const slotStart = slotTimestamp(booking);
+
+  if (attended && slotStart && Date.now() < slotStart) {
+    await answerCallback(callbackQueryId, 'Урок ещё не начался — отметить можно после начала');
+    return;
+  }
+
   // Отсчёт спецпредложения начинается здесь: трое суток с момента,
   // когда урок отметили состоявшимся.
   // Повторное нажатие «Пришёл» не должно молча продлевать спецпредложение,
