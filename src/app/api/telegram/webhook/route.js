@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { sendBookingConfirmation, mailProvider, sendIntroOfferEmail } from '@/lib/email';
 import { getProducts } from '@/services/stripe';
 import { getIntroProducts, getIntroProduct, introActive, introExpiry, nextIntroExpiry } from '@/services/intro';
+import { isSlotClosed } from '@/lib/capacity';
 import { clientTimeLine, clientDateLine, clientWhen, localTimeString, localSlot, slotKeyToDate } from '@/lib/time';
 import { sendSchedule, sendTrialAttended, sendTrialConfirmed, sendPurchase } from '@/lib/meta';
 import {
@@ -49,6 +50,10 @@ function generateAvailableSlots(bookedSlots) {
 
     for (const time of times) {
       const slotKey = `${dateStr}_${time}`;
+
+      // Дни с ограниченным расписанием: при переносе тоже нельзя предлагать часы,
+      // когда вести урок некому.
+      if (isSlotClosed(slotKey)) continue;
       if (bookedSlots.includes(slotKey)) continue;
 
       // Check if slot is in the future (at least 2 hours from now)
