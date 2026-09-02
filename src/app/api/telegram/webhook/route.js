@@ -3,7 +3,7 @@ import { sendBookingConfirmation, mailProvider, sendIntroOfferEmail } from '@/li
 import { getProducts } from '@/services/stripe';
 import { getIntroProducts, getIntroProduct, introActive, introExpiry, nextIntroExpiry } from '@/services/intro';
 import { clientTimeLine, clientDateLine, clientWhen, localTimeString, localSlot, slotKeyToDate } from '@/lib/time';
-import { sendSchedule, sendTrialAttended, sendTrialConfirmed } from '@/lib/meta';
+import { sendSchedule, sendTrialAttended, sendTrialConfirmed, sendPurchase } from '@/lib/meta';
 import {
   getBooking, updateBooking, getBookedSlots, removeBookedSlot, addBookedSlot,
   setUserBooking, getUserBooking, clearUserBooking,
@@ -877,6 +877,74 @@ async function handleStatsCommand(chatId, text) {
 
 // Проверка почты. Отказ провайдера раньше был виден только в логах хостинга,
 // поэтому «письмо не пришло» выяснялось только жалобой клиента.
+// Оплата мимо Stripe — переводом или наличными. Без этой команды такая покупка
+// не попадала ни в карточку, ни в сводку, ни в рекламу, а Purchase — единственное событие,
+// по которому Мета может учиться на деньгах, а не на заявках.
+async function handlePaidCommand(chatId, text) {
+  const args = String(text || '').trim().split(/\s+/).slice(1);
+  const code = args[0];
+  const amount = Number(String(args[1] || '').replace(',', '.'));
+  const pack = args[2] || null;
+
+  if (!code || !amount) {
+    await sendMessage(chatId,
+      'Как пользоваться: <code>/paid код сумма</code>\n\n' +
+      'Например: <code>/paid tfl1mrpg 30</code> — отметить оплату 30 € мимо Stripe.\n' +
+      'Третьим аргументом можно указать пакет: <code>/paid код 30 INTRO_IND</code>.\n\n' +
+      'Покупка попадёт в карточку, в сводку и в рекламу как Purchase.'
+    );
+
+    return;
+  }
+
+  const booking = await getBooking(code);
+
+  if (!booking) {
+    await sendMessage(chatId, 'Заявка не найдена: ' + code);
+
+    return;
+  }
+
+  // Два Purchase по одной оплате исказят обучение сильнее, чем отсутствие одного.
+  if (booking.paid) {
+    await sendMessage(chatId, 'По этой заявке оплата уже отмечена: ' + (booking.paidPack || 'пакет') + '. Повторно в рекламу не шлю.');
+
+    return;
+  }
+
+  const isIntro = !pack || String(pack).toUpperCase().indexOf('INTRO') === 0;
+
+  await updateBooking(booking.id, {
+    paid: true,
+    paidAt: new Date().toISOString(),
+    paidPack: pack || 'INTRO_MANUAL',
+    paidAmount: Math.round(amount * 100),
+    paidCurrency: 'EUR',
+    paidVia: 'manual',
+    ...(isIntro ? { introPaid: true } : {})
+  });
+
+  let capi = null;
+
+  try {
+    capi = await sendPurchase({
+      eventId: 'pur_' + booking.id,
+      email: booking.email,
+      phone: booking.telegram,
+      value: amount,
+      currency: 'EUR',
+      contentName: pack || 'intro_manual',
+      orderId: booking.id
+    });
+  } catch (e) {
+    console.error('CAPI purchase error:', e);
+  }
+
+  await notifyManagers('💰 Оплата вне Stripe: ' + (booking.name || 'ученик') + ' — ' + amount + ' €' + (pack ? ' (' + pack + ')' : '') + '.');
+
+  await sendMessage(chatId, 'Отмечено. Purchase в рекламу: ' + (capi && capi.ok ? 'отправлен' : 'не ушёл, смотрите /api/health/meta') + '.');
+}
+
 // Возврат записей, снятых автоматикой. Само правило выключено 1 сентября,
 // но снять двух живых учеников оно успело — команда возвращает и запись, и слот.
 async function handleRestoreCommand(chatId, text) {
@@ -1991,6 +2059,11 @@ export async function POST(request) {
           return NextResponse.json({ ok: true });
         }
 
+        if (text && text.startsWith('/paid')) {
+          await handlePaidCommand(chatId, text);
+          return NextResponse.json({ ok: true });
+        }
+
         if (text && text.startsWith('/find')) {
           await handleFindCommand(chatId, text.slice(5));
           return NextResponse.json({ ok: true });
@@ -2083,7 +2156,7 @@ export async function POST(request) {
       // превращалась в чужой ответ: «/stats» отдавал карточку собственной записи.
       if (text && text.startsWith('/')) {
         const command = text.split(/\s+/)[0].toLowerCase();
-        const managerCommands = ['/book', '/today', '/bookings', '/find', '/stats', '/pending', '/who', '/cleanup', '/confirmall', '/cleanslots', '/testmail', '/testintro', '/restore', '/help'];
+        const managerCommands = ['/book', '/today', '/bookings', '/find', '/stats', '/pending', '/who', '/cleanup', '/confirmall', '/cleanslots', '/testmail', '/testintro', '/restore', '/paid', '/help'];
 
         if (managerCommands.includes(command)) {
           await sendMessage(chatId, 'Эта команда доступна только менеджерам школы.');
