@@ -43,8 +43,12 @@ export async function GET(request) {
 
       const hoursUntil = (slotDate - now) / (1000 * 60 * 60);
 
-      // Send 24h reminder (between 23-25 hours before)
-      if (booking.chatId && !booking.reminded24h && hoursUntil > 23 && hoursUntil < 25) {
+      // Окна намеренно широкие, а не «ровно за сутки». GitHub Actions на бесплатном
+      // тарифе выполняет расписание не каждые 15 минут, как записано, а раз в 4–5 часов:
+      // 2 сентября запуски были в 07:06, 11:39 и 15:52. Узкое двухчасовое окно такой
+      // планировщик просто перепрыгивает, и напоминание не уходит вообще.
+      // От повторов защищает флаг reminded24h, а не ширина окна.
+      if (booking.chatId && !booking.reminded24h && hoursUntil > 1.5 && hoursUntil < 25) {
         // За сутки просим явного «буду»: без него мы не знаем, кто придёт,
         // а человек не делает ни одного действия между заявкой и уроком.
         await sendMessage(
@@ -59,14 +63,14 @@ export async function GET(request) {
 
       // Тем, у кого нет чата с ботом, то же самое письмом. Без этого человек
       // между заявкой и уроком не получал от нас ни одного касания.
-      if (!booking.chatId && booking.email && !booking.mailed24h && hoursUntil > 23 && hoursUntil < 25) {
+      if (!booking.chatId && booking.email && !booking.mailed24h && hoursUntil > 1.5 && hoursUntil < 25) {
         await sendConfirmRequestEmail(booking);
         await updateBooking(booking.id, { mailed24h: true });
         mailed++;
       }
 
       // Send 1h reminder (between 0.5-1.5 hours before)
-      if (booking.chatId && !booking.reminded1h && hoursUntil > 0.5 && hoursUntil < 1.5) {
+      if (booking.chatId && !booking.reminded1h && hoursUntil > 0 && hoursUntil < 2) {
         await sendMessage(
           booking.chatId,
           formatReminder(booking, 1),
@@ -76,7 +80,7 @@ export async function GET(request) {
         sent1h++;
       }
 
-      if (!booking.chatId && booking.email && !booking.mailed1h && hoursUntil > 0.5 && hoursUntil < 1.5) {
+      if (!booking.chatId && booking.email && !booking.mailed1h && hoursUntil > 0 && hoursUntil < 2) {
         await sendLessonReminderEmail(booking, 1);
         await updateBooking(booking.id, { mailed1h: true });
         mailed++;
@@ -114,7 +118,7 @@ export async function GET(request) {
       // чтобы на урок не заходили вслепую. Окно широкое (5–40 минут), потому что
       // крон дёргается раз в 15 минут и GitHub Actions регулярно опаздывает.
       const minutesUntil = hoursUntil * 60;
-      if (!booking.hostBriefed && minutesUntil > 5 && minutesUntil < 40) {
+      if (!booking.hostBriefed && minutesUntil > -15 && minutesUntil < 90) {
         const briefed = await notifyHost(
           `⏰ <b>Пробный урок через ${Math.round(minutesUntil)} мин</b>\n\n` + formatManagerCard(booking),
           managerActionsKeyboard(booking.id)
