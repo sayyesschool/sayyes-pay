@@ -8,6 +8,7 @@ import { makeDeepLink, sendMessage, formatBookingForManager, managerActionsKeybo
 import { notifyManagers } from '@/lib/managers';
 import { sendBookingConfirmation } from '@/lib/email';
 import { sendLead } from '@/lib/meta';
+import { isSlotClosed } from '@/lib/capacity';
 
 // Generate short unique booking ID
 function generateBookingId() {
@@ -69,6 +70,12 @@ export async function POST(request) {
 
     // Check & book slot
     if (slot && slot !== 'no_time') {
+      // Проверка на сервере, а не только в сетке: страница могла быть открыта
+      // до того, как день закрыли, и человек выбрал бы час, когда вести урок некому.
+      if (isSlotClosed(slot)) {
+        return NextResponse.json({ error: 'Это время больше недоступно. Выберите другое.' }, { status: 409 });
+      }
+
       const booked = await getBookedSlots();
       if (booked.includes(slot)) {
         return NextResponse.json({ error: 'Это время уже занято. Выберите другое.' }, { status: 409 });
