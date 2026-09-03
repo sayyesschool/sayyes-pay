@@ -523,7 +523,8 @@ export async function sendLessonReminderEmail(booking, hours) {
 
   const when = whenText(booking);
   const soon = hours <= 1;
-  const title = soon ? 'Урок через час' : 'Урок завтра, ' + esc(when);
+  // Не пишем «завтра»: напоминание уходит и тем, кто записался ночью на сегодня.
+  const title = soon ? 'Урок через час' : 'Напоминание об уроке: ' + esc(when);
   const html = layout(
     '<tr><td style="font-size:22px;font-weight:800;line-height:1.3;padding-bottom:14px">'
     + title + '</td></tr>'
