@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getAllActiveBookings, updateBooking, getManagerChatId, removeBookedSlot } from '@/lib/redis';
-import { sendMessage, formatReminder, formatHandout, bookingActionsKeyboard, formatAttendanceAsk, attendanceKeyboard, formatManagerCard, managerActionsKeyboard } from '@/lib/telegram';
+import { sendMessage, formatReminder, formatHandout, handoutBody, bookingActionsKeyboard, formatAttendanceAsk, attendanceKeyboard, formatManagerCard, managerActionsKeyboard } from '@/lib/telegram';
 import { notifyManagers, notifyHost } from '@/lib/managers';
 import { sendHandoutEmail, sendConfirmRequestEmail, sendLessonReminderEmail } from '@/lib/email';
 
@@ -70,19 +70,31 @@ export async function GET(request) {
       }
 
       // Send 1h reminder (between 0.5-1.5 hours before)
+      // Записался впритык — памятка едет вместе с напоминанием, а не пропадает.
+      // Два сообщения подряд были бы спамом, а без памятки человек не узнаёт
+      // ни что будет на уроке, ни про бонус — а ему это нужнее всех.
       if (booking.chatId && !booking.reminded1h && hoursUntil > 0 && hoursUntil < 2) {
+        const withHandout = !booking.handoutSent;
+
         await sendMessage(
           booking.chatId,
-          formatReminder(booking, 1),
+          formatReminder(booking, 1, { skipBonusLine: withHandout })
+            + (withHandout ? '\n\n' + handoutBody() : ''),
           bookingActionsKeyboard(booking.id, booking)
         );
-        await updateBooking(booking.id, { reminded1h: true });
+        await updateBooking(booking.id, withHandout
+          ? { reminded1h: true, handoutSent: true }
+          : { reminded1h: true });
         sent1h++;
       }
 
       if (!booking.chatId && booking.email && !booking.mailed1h && hoursUntil > 0 && hoursUntil < 2) {
-        await sendLessonReminderEmail(booking, 1);
-        await updateBooking(booking.id, { mailed1h: true });
+        const withHandout = !booking.handoutSent;
+
+        await sendLessonReminderEmail(booking, 1, withHandout);
+        await updateBooking(booking.id, withHandout
+          ? { mailed1h: true, handoutSent: true }
+          : { mailed1h: true });
         mailed++;
       }
 
