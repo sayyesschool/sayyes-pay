@@ -518,7 +518,7 @@ export async function sendConfirmRequestEmail(booking) {
 }
 
 // Напоминание за сутки и за час.
-export async function sendLessonReminderEmail(booking, hours) {
+export async function sendLessonReminderEmail(booking, hours, withHandout) {
   if (!booking || !booking.email) return { skipped: 'no email' };
 
   const when = whenText(booking);
@@ -532,6 +532,17 @@ export async function sendLessonReminderEmail(booking, hours) {
     + 'Пробный урок — 30 минут в Zoom.<br>'
     + '<span style="color:#6b4b8a">Идентификатор ' + ZOOM_MEETING_ID
     + ', код доступа ' + ZOOM_PASSCODE + '</span></td></tr>'
+    + (withHandout
+      ? '<tr><td style="font-size:14px;line-height:1.7;color:#444;padding-bottom:18px">'
+        + 'Во время пробного занятия преподаватель:<br>'
+        + '• определит ваш уровень и обозначит сильные стороны<br>'
+        + '• даст разговорные конструкции, которые можно сразу использовать<br>'
+        + '• составит план обучения под вашу цель</td></tr>'
+        + '<tr><td style="font-size:14px;line-height:1.7;color:#1a1a1a;font-weight:700;'
+        + 'background:#f5f0fb;border-radius:12px;padding:14px 16px">'
+        + '💡 Бонус: после урока — подборка ресурсов под ваши цели, преподаватель соберёт её лично для вас.</td></tr>'
+        + '<tr><td style="height:18px"></td></tr>'
+      : '')
     + button(ZOOM_JOIN_URL, 'Подключиться в Zoom')
     + '<tr><td style="font-size:12px;color:#888;line-height:1.6;padding-top:10px">'
     + 'Не получается прийти? Ответьте на это письмо — перенесём.</td></tr>'
