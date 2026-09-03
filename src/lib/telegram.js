@@ -316,8 +316,26 @@ export function formatBookingForManager(booking, action = 'new') {
     `ID: ${booking.id}`;
 }
 
+// После того как окна напоминаний расширили, «за сутки» перестало значить «завтра»:
+// заявка может прийти ночью на сегодняшнее утро. Смотрим на реальную дату урока.
+function reminderWhenLabel(booking, hoursLeft) {
+  if (hoursLeft <= 2) return 'через час';
+
+  const start = slotStartMs(booking);
+
+  if (start === null) return 'скоро';
+
+  const day = ms => new Date(ms + 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const lesson = day(start);
+
+  if (lesson === day(Date.now())) return 'сегодня';
+  if (lesson === day(Date.now() + 86400000)) return 'завтра';
+
+  return 'скоро';
+}
+
 export function formatReminder(booking, hoursLeft) {
-  const timeLabel = hoursLeft === 24 ? 'завтра' : 'через 1 час';
+  const timeLabel = reminderWhenLabel(booking, hoursLeft);
   // Показываем время в поясе клиента — он выбирал слот именно в нём.
   // Раньше здесь был slotMsk, из-за чего человек видел час, отличный от забронированного.
   return `Напоминание: ваш пробный урок ${timeLabel}!\n\n` +
@@ -326,7 +344,7 @@ export function formatReminder(booking, hoursLeft) {
     `Формат: Zoom · 30 мин\n` +
     `🔗 <a href="${ZOOM_JOIN_URL}">Подключиться к уроку</a>\n` +
     `Идентификатор ${ZOOM_MEETING_ID}, код доступа ${ZOOM_PASSCODE}\n\n` +
-    (hoursLeft === 1 ? `После урока преподаватель соберёт для вас подборку материалов под вашу цель.\n\n` : '') +
+    (hoursLeft <= 2 ? `После урока преподаватель соберёт для вас подборку материалов под вашу цель.\n\n` : '') +
     `Если нужно перенести или отменить, нажмите кнопку ниже.`;
 }
 
