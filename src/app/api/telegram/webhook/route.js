@@ -637,6 +637,18 @@ async function handleConfirmAttendance(chatId, bookingId, callbackQueryId, messa
   );
 }
 
+// Карточка после отметки: раньше оставались только имя и телефон, и код заявки
+// приходилось искать через /find — а он нужен для /paid, /testintro и любого разбора.
+// Код отдаём тегом <code>: в Telegram он копируется одним касанием.
+function attendanceCardLine(booking) {
+  const when = booking.slotDate || booking.slotMsk
+    ? `\n${[booking.slotDate, booking.slotMsk].filter(Boolean).join(', ')}`
+    : '';
+
+  return `${booking.name || '—'} (${booking.telegram || booking.email || '—'})` + when
+    + `\nКод: <code>${booking.id}</code>`;
+}
+
 async function handleAttendance(chatId, bookingId, attended, callbackQueryId, messageId, from) {
   const booking = await getBooking(bookingId);
   if (!booking) {
@@ -661,7 +673,7 @@ async function handleAttendance(chatId, bookingId, attended, callbackQueryId, me
 
     await answerCallback(callbackQueryId, 'Отметка снята');
     await editMessage(chatId, messageId,
-      '⏳ Отметка снята\n\n' + (booking.name || '—') + ' (' + (booking.telegram || booking.email || '—') + ')'
+      '⏳ Отметка снята\n\n' + attendanceCardLine(booking)
     );
 
     return;
@@ -707,8 +719,7 @@ async function handleAttendance(chatId, bookingId, attended, callbackQueryId, me
 
   await answerCallback(callbackQueryId, attended ? 'Отмечено: урок состоялся' : 'Отмечено: не пришёл');
   await editMessage(chatId, messageId,
-    (attended ? '✅ Урок состоялся\n\n' : '🚫 Не пришёл\n\n') +
-    `${booking.name || '—'} (${booking.telegram || booking.email || '—'})`
+    (attended ? '✅ Урок состоялся\n\n' : '🚫 Не пришёл\n\n') + attendanceCardLine(booking)
   );
 
   // Напоминание, а не автоотправка: формат выбирает ведущая,
