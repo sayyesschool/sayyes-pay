@@ -961,6 +961,31 @@ async function handlePaidCommand(chatId, text) {
   await sendMessage(chatId, 'Отмечено. Purchase в рекламу: ' + (capi && capi.ok ? 'отправлен' : 'не ушёл, смотрите /api/health/meta') + '.');
 }
 
+// «Напишу позже» в реанимационной цепочке. Это не отказ, а просьба не давить:
+// цепочка останавливается, человек остаётся в базе для касания через пару месяцев.
+async function handleReviveLater(chatId, bookingId, callbackQueryId, messageId) {
+  const booking = await getBooking(bookingId);
+
+  if (booking) {
+    await updateBooking(bookingId, {
+      reviveStopped: true,
+      reviveStopReason: 'later',
+      reviveStoppedAt: new Date().toISOString()
+    });
+  }
+
+  await answerCallback(callbackQueryId, 'Хорошо, не буду беспокоить');
+  await editMessage(chatId, messageId,
+    'Поняла, спасибо, что ответили. Напишу через пару месяцев, раньше беспокоить не буду.\n\n' +
+    'Если понадобимся раньше, я на связи 🙂'
+  );
+
+  if (booking) {
+    await notifyManagers('⏸ Просил(а) не беспокоить: ' + (booking.name || 'ученик') +
+      ' · <code>' + booking.id + '</code>. Реанимация остановлена, вернуться через 2 месяца.');
+  }
+}
+
 // Возврат записей, снятых автоматикой. Само правило выключено 1 сентября,
 // но снять двух живых учеников оно успело — команда возвращает и запись, и слот.
 async function handleRestoreCommand(chatId, text) {
@@ -1826,6 +1851,13 @@ async function handleRelayFromUser(chatId, message) {
   const booking = await getBooking(relayBookingId);
   const managerChatIds = await getManagerChatIds();
 
+  // Человек ответил — реанимационная цепочка дальше идти не должна:
+  // дальше работает менеджер, а автоматическое «вы не пришли» поверх живого диалога
+  // выглядит как безразличие.
+  if (booking && booking.attended === false && !booking.reviveStopped) {
+    await updateBooking(booking.id, { reviveStopped: true, reviveStopReason: 'replied' });
+  }
+
   if (!managerChatIds.length) {
     await sendMessage(chatId, 'Напишите менеджеру напрямую: @sayesstephanie');
     return true;
@@ -1908,6 +1940,9 @@ export async function POST(request) {
       const bookingId = params[0];
 
       switch (action) {
+        case 'revive_later':
+          await handleReviveLater(chatId, bookingId, callbackId, messageId);
+          break;
         case 'cancel':
           await handleCancel(chatId, bookingId, callbackId);
           break;
