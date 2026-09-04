@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server';
 import { getAllActiveBookings, updateBooking, getManagerChatId, removeBookedSlot } from '@/lib/redis';
 import { sendMessage, formatReminder, formatHandout, bookingActionsKeyboard, formatAttendanceAsk, attendanceKeyboard, formatManagerCard, managerActionsKeyboard } from '@/lib/telegram';
 import { notifyManagers, notifyHost } from '@/lib/managers';
-import { sendHandoutEmail, sendConfirmRequestEmail, sendLessonReminderEmail } from '@/lib/email';
+import { sendHandoutEmail, sendConfirmRequestEmail, sendLessonReminderEmail, sendReviveEmail } from '@/lib/email';
+import { reviveTelegram, reviveKeyboard, reviveDueAt } from '@/lib/revive';
 
 // Protect cron endpoint
 const CRON_SECRET = process.env.CRON_SECRET;
@@ -24,6 +25,7 @@ export async function GET(request) {
     let briefedHost = 0;
     let released = 0;
     let mailed = 0;
+    let revived = 0;
 
     for (const booking of bookings) {
       if (!booking.slot || booking.slot === 'no_time') continue;
@@ -168,6 +170,62 @@ export async function GET(request) {
           }
         }
       }
+
+      // Реанимация не пришедших: три касания от МОМЕНТА ОТМЕТКИ, +1, +4 и +11 дней.
+      // Отсчёт от отметки, а не от урока, потому что отмечают руками и с задержкой —
+      // иначе у поздно отмеченных первые два письма ушли бы одной пачкой.
+      if (booking.attended === false && !booking.reviveStopped && (booking.reviveStep || 0) < 3) {
+        let startedAt = booking.reviveStartAt ? new Date(booking.reviveStartAt).getTime() : 0;
+
+        if (!startedAt) {
+          const marked = booking.attendanceMarkedAt
+            ? new Date(booking.attendanceMarkedAt).getTime()
+            : now.getTime();
+
+          // Накопленная база: отметка стоит давно, но цепочка для неё начинается сейчас.
+          startedAt = (now.getTime() - marked) > 24 * 60 * 60 * 1000
+            ? now.getTime() - 24 * 60 * 60 * 1000
+            : marked;
+
+          await updateBooking(booking.id, { reviveStartAt: new Date(startedAt).toISOString() });
+        }
+
+        // Записался заново — цепочка про «ваше место осталось за вами» становится ложью.
+        const mail = String(booking.email || '').trim().toLowerCase();
+        const tg = String(booking.telegram || '').trim().toLowerCase();
+        const rebooked = bookings.some(other => other.id !== booking.id
+          && other.status !== 'cancelled'
+          && new Date(other.createdAt || 0).getTime() > startedAt
+          && ((mail && String(other.email || '').trim().toLowerCase() === mail)
+            || (tg && String(other.telegram || '').trim().toLowerCase() === tg)));
+
+        if (rebooked) {
+          await updateBooking(booking.id, { reviveStopped: true, reviveStopReason: 'rebooked' });
+        } else {
+          const step = (booking.reviveStep || 0) + 1;
+
+          if (now.getTime() >= reviveDueAt(startedAt, step)) {
+            if (booking.chatId) {
+              const parts = reviveTelegram(booking, step, startedAt);
+
+              for (let i = 0; i < parts.length; i++) {
+                const last = i === parts.length - 1;
+
+                await sendMessage(booking.chatId, parts[i], last ? reviveKeyboard(booking) : {});
+              }
+            }
+
+            if (booking.email) await sendReviveEmail(booking, step, startedAt);
+
+            await updateBooking(booking.id, {
+              reviveStep: step,
+              reviveSentAt: new Date().toISOString()
+            });
+
+            revived++;
+          }
+        }
+      }
     }
 
     return NextResponse.json({
@@ -178,6 +236,7 @@ export async function GET(request) {
       sentHandout,
       askedAttendance,
       mailed,
+      revived,
       briefedHost,
       released,
       timestamp: now.toISOString()
