@@ -14,6 +14,7 @@ import { ZOOM_JOIN_URL, ZOOM_MEETING_ID, ZOOM_PASSCODE } from '@/lib/zoom';
 // Не задан ни один — модуль молча ничего не делает и никогда не роняет запись.
 
 import { localSlot, tzNoteFor } from '@/lib/time';
+import { reviveEmailBody, reviveSubject } from '@/lib/revive';
 import { kvSet } from '@/lib/redis';
 
 const BOT_LINK_BASE = 'https://t.me/SY_school_bot';
@@ -571,4 +572,16 @@ export async function sendIntroOfferEmail(booking, link, offerName, deadline) {
   );
 
   return deliver(baseMsg(booking, 'Ваше предложение после пробного урока', html), 'intro-offer');
+}
+
+
+// Письмо реанимационной цепочки. Тексты живут в revive.js рядом с телеграм-версией:
+// обещания в двух каналах должны совпадать, а разнесённые по файлам тексты расходятся.
+export async function sendReviveEmail(booking, step, startedAt) {
+    if (!booking || !booking.email) return { skipped: 'no email' };
+
+    return deliver(
+        baseMsg(booking, reviveSubject(booking, step), layout(reviveEmailBody(booking, step, startedAt))),
+        'revive-' + step
+    );
 }
