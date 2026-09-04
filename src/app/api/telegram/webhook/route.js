@@ -3,6 +3,7 @@ import { sendBookingConfirmation, mailProvider, sendIntroOfferEmail } from '@/li
 import { getProducts } from '@/services/stripe';
 import { getIntroProducts, getIntroProduct, introActive, introExpiry, nextIntroExpiry } from '@/services/intro';
 import { isSlotClosed } from '@/lib/capacity';
+import { reviveTelegram, reviveKeyboard, reviveDueAt } from '@/lib/revive';
 import { clientTimeLine, clientDateLine, clientWhen, localTimeString, localSlot, slotKeyToDate } from '@/lib/time';
 import { sendSchedule, sendTrialAttended, sendTrialConfirmed, sendPurchase } from '@/lib/meta';
 import {
@@ -893,6 +894,88 @@ async function handleStatsCommand(chatId, text) {
 
 // Проверка почты. Отказ провайдера раньше был виден только в логах хостинга,
 // поэтому «письмо не пришло» выяснялось только жалобой клиента.
+// Сухой прогон реанимации: кто в очереди, когда уйдёт следующее касание и как
+// выглядит текст. Ничего не отправляет ученикам — цепочка пишет живым людям сразу
+// в два канала, и посмотреть её глазами нужно до включения, а не после.
+function reviveStartOf(booking, now) {
+  if (booking.reviveStartAt) return new Date(booking.reviveStartAt).getTime();
+
+  const marked = booking.attendanceMarkedAt ? new Date(booking.attendanceMarkedAt).getTime() : now;
+
+  return (now - marked) > 24 * 60 * 60 * 1000 ? now - 24 * 60 * 60 * 1000 : marked;
+}
+
+async function handleReviveCommand(chatId, text) {
+  const args = String(text || '').trim().split(/\s+/).slice(1);
+  const now = Date.now();
+  const enabled = process.env.REVIVE_ENABLED === '1';
+
+  // /revive text 1|2|3 [код] — прислать себе то, что увидит ученик
+  if (args[0] === 'text') {
+    const step = Math.min(Math.max(Number(args[1]) || 1, 1), 3);
+    const code = args[2];
+    let booking = code ? await getBooking(code) : null;
+
+    if (!booking) {
+      const keys = await kvKeys('booking:*');
+
+      for (const key of keys) {
+        const b = await kvGet(key);
+
+        if (b && b.attended === false && !b.reviveStopped) { booking = b; break; }
+      }
+    }
+
+    if (!booking) {
+      await sendMessage(chatId, 'Не на ком показать: нет ни одной заявки с отметкой «не пришёл».');
+
+      return;
+    }
+
+    const parts = reviveTelegram(booking, step, reviveStartOf(booking, now));
+
+    await sendMessage(chatId, 'Так это увидит ' + (booking.name || 'ученик') +
+      ' (<code>' + booking.id + '</code>), касание ' + step + ' из 3:');
+
+    for (let i = 0; i < parts.length; i++) {
+      await sendMessage(chatId, parts[i], i === parts.length - 1 ? reviveKeyboard(booking) : {});
+    }
+
+    await sendMessage(chatId, 'Письмо по этому же касанию уходит отдельно, текст развёрнутее.');
+
+    return;
+  }
+
+  const keys = await kvKeys('booking:*');
+  const rows = [];
+  let stopped = 0;
+  let done = 0;
+
+  for (const key of keys) {
+    const b = await kvGet(key);
+
+    if (!b || b.attended !== false || b.archived) continue;
+    if (b.reviveStopped) { stopped++; continue; }
+    if ((b.reviveStep || 0) >= 3) { done++; continue; }
+
+    const step = (b.reviveStep || 0) + 1;
+    const due = reviveDueAt(reviveStartOf(b, now), step);
+    const channel = [b.chatId ? 'бот' : null, b.email ? 'почта' : null].filter(Boolean).join(' + ') || 'некуда';
+    const when = due <= now ? 'сейчас' : new Date(due).toLocaleString('ru-RU', {
+      day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Moscow'
+    });
+
+    rows.push('• ' + (b.name || 'без имени') + ' · касание ' + step + ' · ' + when + ' · ' + channel +
+      ' · <code>' + b.id + '</code>');
+  }
+
+  const head = (enabled ? '🟢 Цепочка ВКЛЮЧЕНА' : '⏸ Цепочка ВЫКЛЮЧЕНА (REVIVE_ENABLED не задан)') +
+    '\n\nВ очереди: ' + rows.length + ' · остановлено: ' + stopped + ' · прошли все три: ' + done;
+
+  await sendMessage(chatId, head + (rows.length ? '\n\n' + rows.slice(0, 40).join('\n') : '') +
+    '\n\nПосмотреть текст: <code>/revive text 1</code> (или 2, 3). Можно с кодом заявки: <code>/revive text 1 код</code>.');
+}
+
 // Оплата мимо Stripe — переводом или наличными. Без этой команды такая покупка
 // не попадала ни в карточку, ни в сводку, ни в рекламу, а Purchase — единственное событие,
 // по которому Мета может учиться на деньгах, а не на заявках.
@@ -2110,6 +2193,11 @@ export async function POST(request) {
           return NextResponse.json({ ok: true });
         }
 
+        if (text && text.startsWith('/revive')) {
+          await handleReviveCommand(chatId, text);
+          return NextResponse.json({ ok: true });
+        }
+
         if (text && text.startsWith('/paid')) {
           await handlePaidCommand(chatId, text);
           return NextResponse.json({ ok: true });
@@ -2207,7 +2295,7 @@ export async function POST(request) {
       // превращалась в чужой ответ: «/stats» отдавал карточку собственной записи.
       if (text && text.startsWith('/')) {
         const command = text.split(/\s+/)[0].toLowerCase();
-        const managerCommands = ['/book', '/today', '/bookings', '/find', '/stats', '/pending', '/who', '/cleanup', '/confirmall', '/cleanslots', '/testmail', '/testintro', '/restore', '/paid', '/help'];
+        const managerCommands = ['/book', '/today', '/bookings', '/find', '/stats', '/pending', '/who', '/cleanup', '/confirmall', '/cleanslots', '/testmail', '/testintro', '/restore', '/paid', '/revive', '/help'];
 
         if (managerCommands.includes(command)) {
           await sendMessage(chatId, 'Эта команда доступна только менеджерам школы.');
