@@ -174,7 +174,11 @@ export async function GET(request) {
       // Реанимация не пришедших: три касания от МОМЕНТА ОТМЕТКИ, +1, +4 и +11 дней.
       // Отсчёт от отметки, а не от урока, потому что отмечают руками и с задержкой —
       // иначе у поздно отмеченных первые два письма ушли бы одной пачкой.
-      if (booking.attended === false && !booking.reviveStopped && (booking.reviveStep || 0) < 3) {
+      // Цепочка пишет живым людям сразу в два канала, поэтому включается отдельно:
+      // REVIVE_ENABLED=1 в переменных окружения. Без неё код живёт, но молчит —
+      // тексты сначала смотрят глазами через /revive в боте.
+      if (process.env.REVIVE_ENABLED === '1'
+        && booking.attended === false && !booking.reviveStopped && (booking.reviveStep || 0) < 3) {
         let startedAt = booking.reviveStartAt ? new Date(booking.reviveStartAt).getTime() : 0;
 
         if (!startedAt) {
