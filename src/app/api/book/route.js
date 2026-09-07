@@ -39,6 +39,32 @@ async function verifyTurnstile(token) {
   }
 }
 
+// Люди пишут в поле контакта что попало: почти половина — телефон, каждый
+// седьмой — почту, кто-то имя или ссылку t.me. Раскладываем на сервере, а не
+// требуем формата от человека. Исходное значение не трогаем: менеджер видит
+// в карточке ровно то, что ввели.
+function splitContact(raw, email) {
+  const value = String(raw || '').trim();
+  const digits = value.replace(/\D/g, '');
+  const out = { phone: '', email: String(email || '').trim() };
+
+  if (!value) return out;
+
+  // Почта, вписанная в поле контакта: подхватываем, если своего email нет.
+  if (!out.email && /^[^\s@]+@[^\s@]+\.[a-zA-Z]{2,}$/.test(value)) {
+    out.email = value;
+
+    return out;
+  }
+
+  // Телефон: с плюсом или без, лишь бы это были цифры, а не @handle.
+  if (!value.startsWith('@') && digits.length >= 9 && digits.length <= 15) {
+    out.phone = value.startsWith('+') ? value : '+' + digits;
+  }
+
+  return out;
+}
+
 export async function POST(request) {
   try {
     const body = await request.json();
@@ -83,13 +109,16 @@ export async function POST(request) {
       await addBookedSlot(slot);
     }
 
+    const contact = splitContact(telegram, email);
+
     // Create booking record
     const bookingId = generateBookingId();
     const booking = {
       id: bookingId,
       name,
       telegram: telegram || '',
-      email: email || '',
+      email: contact.email || '',
+      phone: contact.phone || '',
       slot: slot || 'no_time',
       slotMsk: slotMsk || '',
       slotDate: slotDate || '',
