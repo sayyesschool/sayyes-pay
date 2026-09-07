@@ -809,8 +809,9 @@ const rescheduleBookingId = _urlParams.get('reschedule') || '';
 const isReschedule = !!rescheduleBookingId;
 
 function isValidTgOrPhone(val) {
-  // Phone: must start with + followed by country code and number (e.g. +4917685015119)
-  const phoneRe = /^\+\d[\d\s\-\(\)]{7,}$/;
+  // Телефон: плюс необязателен — почти половина пишет номер без него,
+  // и раньше такой номер считался невалидным и молча уезжал в базу как есть.
+  const phoneRe = /^\+?\d[\d\s\-()]{7,}$/;
   // Telegram: @handle or Latin-only (a-z, digits, underscore, at least 4 chars)
   const tgRe = /^@?[a-zA-Z][a-zA-Z0-9_]{3,}$/;
   const v = val.trim();
@@ -839,6 +840,14 @@ function goToSlots() {
   const tg = tgInput.value.trim();
   const email = emailInput.value.trim();
 
+  // Каждый четвёртый писал в поле контакта не то: почту, имя, ссылку t.me.
+  // Почту молча переносим в её поле — это ровно то, что человек имел в виду.
+  if (tg && isValidEmail(tg) && !email) {
+    emailInput.value = tg;
+    tgInput.value = '';
+    return goToSlots();
+  }
+
   const tgOk = tg && isValidTgOrPhone(tg);
   const emailOk = email && isValidEmail(email);
 
@@ -851,14 +860,16 @@ function goToSlots() {
     tgInput.focus();
     return;
   }
-  if (tg && !tgOk && !emailOk) {
+  // Раньше здесь стояло !emailOk: при верной почте мусор в поле контакта
+  // проезжал молча, и в базу попадали имена, ссылки и телефоны без плюса.
+  if (tg && !tgOk) {
     markInvalid(tgInput);
-    hint.textContent = 'Нужен @username латиницей или номер телефона с кодом страны. Либо укажите email.';
+    hint.textContent = 'Проверьте контакт: нужен @username латиницей или номер телефона. Поле можно оставить пустым, если указали email.';
     hint.style.color = 'var(--pink)';
     tgInput.focus();
     return;
   }
-  if (email && !emailOk && !tgOk) {
+  if (email && !emailOk) {
     markInvalid(emailInput);
     hint.textContent = 'Проверьте email — похоже, в адресе опечатка.';
     hint.style.color = 'var(--pink)';
