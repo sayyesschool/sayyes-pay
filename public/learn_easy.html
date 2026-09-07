@@ -1379,7 +1379,9 @@ function fillConfirmation(slot, bookingId) {
   const tzEl = document.getElementById('cTz');
   if (tzEl) tzEl.textContent = TZ_LABEL ? 'Время указано для вашего пояса: ' + TZ_LABEL : '';
   const ics = document.getElementById('icsBtn');
-  const url = buildIcsDataUrl(slot, bookingId);
+  // Файл календаря берём с сервера: там в описании есть ссылка на Zoom, идентификатор
+  // и код доступа. Клиентская версия остаётся запасным вариантом без кода заявки.
+  const url = bookingId ? ('/api/ics?b=' + encodeURIComponent(bookingId)) : buildIcsDataUrl(slot, bookingId);
   if (ics) {
     if (url) { ics.href = url; ics.style.display = 'flex'; }
     else { ics.style.display = 'none'; }
