@@ -44,7 +44,7 @@ export async function POST(request) {
             // а чужая оплата по чужой заявке. Отличить одно от другого может только человек.
             try {
               await notifyManagers(
-                '💰 <b>Оплата</b>\n' +
+                '💰 <b>Оплата</b> · Stripe\n' +
                 `${booking.name || 'Ученик'}, код <code>${bookingId}</code>\n` +
                 `${purchaseData.label || pack || 'Пакет'} — ${Math.round(Number(purchaseData.amount || 0) / 100)} ${String(purchaseData.currency || '').toUpperCase()}` +
                 (emailChanged && booking.email
