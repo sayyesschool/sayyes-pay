@@ -976,6 +976,108 @@ async function handleReviveCommand(chatId, text) {
     '\n\nПосмотреть текст: <code>/revive text 1</code> (или 2, 3). Можно с кодом заявки: <code>/revive text 1 код</code>.');
 }
 
+// Все оплаты одним списком: кто, что, сколько и через какую платформу.
+//
+// Источников два, и это важно. Записи payment:* пишет вебхук Stripe и команда
+// /paid — там есть даже оплаты без кода заявки, сделанные прямо с сайта.
+// Флаги в самих заявках остались от прежних оплат, до появления этих записей,
+// поэтому берём и их, а дубли по коду заявки убираем.
+function paymentMonthKey(iso) {
+  const t = new Date(iso).getTime();
+
+  if (Number.isNaN(t)) return '';
+
+  return new Date(t + 3 * 60 * 60 * 1000).toISOString().slice(0, 7);
+}
+
+async function handlePaymentsCommand(chatId) {
+  const keys = await kvKeys('payment:*');
+  const rows = [];
+  const seen = new Set();
+
+  for (const key of keys) {
+    const p = await kvGet(key);
+
+    if (!p || !p.at) continue;
+
+    let name = '';
+
+    if (p.bookingId) {
+      const b = await getBooking(p.bookingId);
+
+      if (b) name = b.name || '';
+      seen.add(p.bookingId);
+    }
+
+    rows.push({
+      at: p.at,
+      name: name || p.email || 'без имени',
+      label: p.label || 'пакет',
+      amount: Number(p.amount || 0),
+      currency: String(p.currency || 'eur').toUpperCase(),
+      via: p.via || 'Stripe',
+      bookingId: p.bookingId || null
+    });
+  }
+
+  const bookingKeys = await kvKeys('booking:*');
+
+  for (const key of bookingKeys) {
+    const b = await kvGet(key);
+
+    if (!b || !b.paid || !b.paidAt) continue;
+    if (seen.has(b.id)) continue;
+
+    rows.push({
+      at: b.paidAt,
+      name: b.name || b.email || 'без имени',
+      label: b.paidPack || 'пакет',
+      amount: Number(b.paidAmount || 0),
+      currency: String(b.paidCurrency || 'eur').toUpperCase(),
+      via: b.paidVia === 'manual' ? 'Мимо кассы' : 'Stripe',
+      bookingId: b.id
+    });
+  }
+
+  if (!rows.length) {
+    await sendMessage(chatId, 'Оплат пока нет.');
+
+    return;
+  }
+
+  rows.sort((a, b) => String(b.at).localeCompare(String(a.at)));
+
+  const thisMonth = paymentMonthKey(new Date().toISOString());
+  const totals = {};
+  let monthCount = 0;
+
+  for (const r of rows) {
+    if (paymentMonthKey(r.at) !== thisMonth) continue;
+
+    totals[r.currency] = (totals[r.currency] || 0) + r.amount;
+    monthCount++;
+  }
+
+  const lines = rows.slice(0, 40).map(r => {
+    const when = new Date(r.at).toLocaleString('ru-RU', {
+      day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Moscow'
+    });
+
+    return '• ' + when + ' — <b>' + r.name + '</b>\n  ' + r.label + ' · ' +
+      Math.round(r.amount / 100) + ' ' + r.currency + ' · ' + r.via +
+      (r.bookingId ? ' · <code>' + r.bookingId + '</code>' : ' · без заявки');
+  });
+
+  const sum = Object.keys(totals).map(c => Math.round(totals[c] / 100) + ' ' + c).join(', ') || '0';
+
+  await sendMessage(chatId,
+    '💰 <b>Оплаты</b> — всего ' + rows.length + '\n\n' +
+    lines.join('\n') +
+    (rows.length > 40 ? '\n\n…показаны последние 40.' : '') +
+    '\n\n<b>За текущий месяц: ' + sum + '</b> (' + monthCount + ' шт.)'
+  );
+}
+
 // Оплата мимо Stripe — переводом или наличными. Без этой команды такая покупка
 // не попадала ни в карточку, ни в сводку, ни в рекламу, а Purchase — единственное событие,
 // по которому Мета может учиться на деньгах, а не на заявках.
@@ -1022,6 +1124,20 @@ async function handlePaidCommand(chatId, text) {
     paidVia: 'manual',
     ...(isIntro ? { introPaid: true } : {})
   });
+
+  try {
+    await kvSet('payment:manual_' + booking.id + '_' + Date.now(), {
+      at: new Date().toISOString(),
+      bookingId: booking.id,
+      email: booking.email || '',
+      label: pack || 'INTRO_MANUAL',
+      amount: Math.round(amount * 100),
+      currency: 'eur',
+      via: 'Мимо кассы'
+    });
+  } catch (e) {
+    console.error('Payment record error:', e);
+  }
 
   let capi = null;
 
@@ -2198,6 +2314,11 @@ export async function POST(request) {
           return NextResponse.json({ ok: true });
         }
 
+        if (text && text.startsWith('/payments')) {
+          await handlePaymentsCommand(chatId);
+          return NextResponse.json({ ok: true });
+        }
+
         if (text && text.startsWith('/paid')) {
           await handlePaidCommand(chatId, text);
           return NextResponse.json({ ok: true });
@@ -2295,7 +2416,7 @@ export async function POST(request) {
       // превращалась в чужой ответ: «/stats» отдавал карточку собственной записи.
       if (text && text.startsWith('/')) {
         const command = text.split(/\s+/)[0].toLowerCase();
-        const managerCommands = ['/book', '/today', '/bookings', '/find', '/stats', '/pending', '/who', '/cleanup', '/confirmall', '/cleanslots', '/testmail', '/testintro', '/restore', '/paid', '/revive', '/help'];
+        const managerCommands = ['/book', '/today', '/bookings', '/find', '/stats', '/pending', '/who', '/cleanup', '/confirmall', '/cleanslots', '/testmail', '/testintro', '/restore', '/paid', '/payments', '/revive', '/help'];
 
         if (managerCommands.includes(command)) {
           await sendMessage(chatId, 'Эта команда доступна только менеджерам школы.');
