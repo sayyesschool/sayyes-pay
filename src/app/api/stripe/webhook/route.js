@@ -3,7 +3,7 @@ import {
   getWebhookEvent,
   getCheckoutSessionDataForPurchase
 } from '@/services/stripe';
-import { getBooking, updateBooking } from '@/lib/redis';
+import { getBooking, updateBooking, kvSet } from '@/lib/redis';
 import { notifyManagers } from '@/lib/managers';
 import { sendPurchase } from '@/lib/meta';
 
@@ -57,6 +57,41 @@ export async function POST(request) {
           }
         } catch (e) {
           console.error('Booking payment update error:', e);
+        }
+      }
+
+      // Запись об оплате в базе. Отчёт /payments собирается из них, а не из Stripe:
+      // так видны и оплаты без кода заявки, и переводы мимо кассы.
+      try {
+        const sessionId = (event.data.object && event.data.object.id) || String(Date.now());
+
+        await kvSet('payment:' + sessionId, {
+          at: new Date().toISOString(),
+          bookingId: bookingId || null,
+          email: purchaseData.email || '',
+          label: purchaseData.label || pack || null,
+          amount: purchaseData.amount || 0,
+          currency: purchaseData.currency || 'eur',
+          via: 'Stripe'
+        });
+      } catch (e) {
+        console.error('Payment record error:', e);
+      }
+
+      // Оплата без кода заявки — человек платил с сайта, а не по ссылке из бота.
+      // Раньше о такой оплате никто не узнавал: уведомление стояло внутри ветки с кодом.
+      if (!bookingId) {
+        try {
+          await notifyManagers(
+            '💰 <b>Оплата без заявки</b> · Stripe\n' +
+            (purchaseData.email ? purchaseData.email + '\n' : '') +
+            (purchaseData.label || pack || 'Пакет') + ' — ' +
+            Math.round(Number(purchaseData.amount || 0) / 100) + ' ' +
+            String(purchaseData.currency || '').toUpperCase() + '\n' +
+            'Кода заявки нет — человек платил с сайта. Найти его: <code>/find почта</code>'
+          );
+        } catch (e) {
+          console.error('Payment notification error:', e);
         }
       }
 
