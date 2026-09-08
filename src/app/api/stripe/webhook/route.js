@@ -3,13 +3,66 @@ import {
   getWebhookEvent,
   getCheckoutSessionDataForPurchase
 } from '@/services/stripe';
-import { getBooking, updateBooking, kvSet } from '@/lib/redis';
+import { getBooking, updateBooking, kvSet, kvGet, kvKeys } from '@/lib/redis';
 import { notifyManagers } from '@/lib/managers';
 import { sendPurchase } from '@/lib/meta';
 
 export async function POST(request) {
   try {
     const event = await getWebhookEvent(request);
+
+    // Оплата вне Checkout: инвойс, ссылка на оплату старого образца, ручное
+    // списание в кассе. Stripe присылает только payment_intent.succeeded, события
+    // сессии нет — и такая оплата не долетала до бота вообще. Именно так прошла
+    // оплата 8 сентября, которую никто не увидел.
+    if (event.type === 'payment_intent.succeeded') {
+      const pi = event.data.object || {};
+      const key = 'payment:pi_' + pi.id;
+      const known = await kvGet(key);
+
+      // Тот же платёж мог уже прийти событием сессии — тогда он записан
+      // под ключом сессии, а идентификатор намерения лежит в поле pi.
+      let duplicate = Boolean(known);
+
+      if (!duplicate) {
+        const keys = await kvKeys('payment:*');
+
+        for (const k of keys) {
+          const rec = await kvGet(k);
+
+          if (rec && rec.pi && rec.pi === pi.id) { duplicate = true; break; }
+        }
+      }
+
+      if (!duplicate) {
+        const email = (pi.receipt_email)
+          || (pi.charges && pi.charges.data && pi.charges.data[0] && pi.charges.data[0].billing_details && pi.charges.data[0].billing_details.email)
+          || '';
+        const label = pi.description || 'Оплата в Stripe';
+
+        await kvSet(key, {
+          at: new Date().toISOString(),
+          bookingId: null,
+          pi: pi.id,
+          email,
+          label,
+          amount: pi.amount_received || pi.amount || 0,
+          currency: pi.currency || 'eur',
+          via: 'Stripe'
+        });
+
+        await notifyManagers(
+          '💰 <b>Оплата вне кассы бота</b> · Stripe\n' +
+          (email ? email + '\n' : '') +
+          label + ' — ' + Math.round(Number(pi.amount_received || pi.amount || 0) / 100) + ' ' +
+          String(pi.currency || '').toUpperCase() + '\n' +
+          'Заявка не привязана. Найти человека: <code>/find почта</code>, ' +
+          'отметить оплату в его карточке: <code>/paid код сумма</code>'
+        );
+      }
+
+      return new Response('ok', { status: 200 });
+    }
 
     if (event.type === SESSION_COMPLETED_EVENT) {
       const purchaseData = await getCheckoutSessionDataForPurchase(event.data.object);
@@ -68,6 +121,7 @@ export async function POST(request) {
         await kvSet('payment:' + sessionId, {
           at: new Date().toISOString(),
           bookingId: bookingId || null,
+          pi: (event.data.object && event.data.object.payment_intent) || null,
           email: purchaseData.email || '',
           label: purchaseData.label || pack || null,
           amount: purchaseData.amount || 0,
