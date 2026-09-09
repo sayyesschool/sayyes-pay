@@ -17,6 +17,16 @@ export async function POST(request) {
     // оплата 8 сентября, которую никто не увидел.
     if (event.type === 'payment_intent.succeeded') {
       const pi = event.data.object || {};
+
+      // В этом же аккаунте Stripe школа выставляет счета постоянным ученикам:
+      // «Payment for Invoice» к пробным урокам отношения не имеет, и уведомлять
+      // о нём менеджеров воронки — чистый шум. Оплаты через Checkout приезжают
+      // отдельным событием сессии, дублировать их здесь тоже незачем.
+      const orderRef = String((pi.payment_details && pi.payment_details.order_reference) || '');
+
+      if (pi.invoice || orderRef.startsWith('in_') || orderRef.startsWith('cs_')) {
+        return new Response('ok', { status: 200 });
+      }
       const key = 'payment:pi_' + pi.id;
       const known = await kvGet(key);
 
@@ -78,6 +88,12 @@ export async function POST(request) {
           }
         }
 
+        // Ни с одной заявкой платёж не сошёлся: значит, это не наша воронка,
+        // а обычная оплата школы. Молча пропускаем — раньше бот присылал их все.
+        if (!matchedId) {
+          return new Response('ok', { status: 200 });
+        }
+
         await kvSet(key, {
           at: new Date().toISOString(),
           bookingId: matchedId,
@@ -94,10 +110,7 @@ export async function POST(request) {
           (email ? email + '\n' : '') +
           label + ' — ' + Math.round(Number(pi.amount_received || pi.amount || 0) / 100) + ' ' +
           String(pi.currency || '').toUpperCase() + '\n' +
-          (matchedId
-            ? 'Привязано к заявке <code>' + matchedId + '</code> — оплата прямая, отмечать руками не нужно.'
-            : 'Заявка не привязана. Найти человека: <code>/find почта</code>, ' +
-              'отметить оплату в его карточке: <code>/paid код сумма</code>')
+          'Привязано к заявке <code>' + matchedId + '</code> — оплата прямая, отмечать руками не нужно.'
         );
       }
 
