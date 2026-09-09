@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { sendBookingConfirmation, mailProvider, sendIntroOfferEmail } from '@/lib/email';
-import { getProducts } from '@/services/stripe';
+import { getProducts, stripe } from '@/services/stripe';
 import { getIntroProducts, getIntroProduct, introActive, introExpiry, nextIntroExpiry } from '@/services/intro';
 import { isSlotClosed } from '@/lib/capacity';
 import { reviveTelegram, reviveKeyboard, reviveDueAt } from '@/lib/revive';
@@ -988,6 +988,113 @@ function paymentMonthKey(iso) {
   if (Number.isNaN(t)) return '';
 
   return new Date(t + 3 * 60 * 60 * 1000).toISOString().slice(0, 7);
+}
+
+// Сверка с Stripe. Вебхук работает на push: если его не существовало (так было
+// до 8 сентября) или доставка не прошла, оплата остаётся только в Stripe, а в боте
+// её нет — и менеджер проводит её руками как «мимо кассы». Команда ходит в Stripe
+// сама и подтягивает недостающее, привязывая платёж к заявке по почте.
+async function handleSyncStripeCommand(chatId, text) {
+  const parts = String(text || '').trim().split(/\s+/);
+  const apply = parts.includes('yes');
+  const days = Number(parts.find(p => /^\d+$/.test(p))) || 30;
+  const since = Math.floor(Date.now() / 1000) - days * 86400;
+  let list;
+
+  try {
+    list = await stripe.paymentIntents.list({ limit: 100, created: { gte: since } });
+  } catch (e) {
+    await sendMessage(chatId, 'Stripe не ответил: ' + e.message);
+
+    return;
+  }
+
+  const paid = (list.data || []).filter(pi => pi.status === 'succeeded');
+
+  // Что уже есть в базе, сверяем по идентификатору платежа, а не по сумме:
+  // две оплаты по 30 евро в один день — обычное дело.
+  const known = new Set();
+  const keys = await kvKeys('payment:*');
+
+  for (const key of keys) {
+    const rec = await kvGet(key);
+
+    if (rec && rec.pi) known.add(String(rec.pi));
+  }
+
+  const bookingKeys = await kvKeys('booking:*');
+  const bookings = [];
+
+  for (const key of bookingKeys) {
+    const b = await kvGet(key);
+
+    if (b && b.status !== 'cancelled') bookings.push(b);
+  }
+
+  const lines = [];
+  let added = 0;
+
+  for (const pi of paid) {
+    if (known.has(pi.id)) continue;
+
+    const email = String(pi.receipt_email || '').trim().toLowerCase();
+    let match = null;
+
+    for (const b of bookings) {
+      if (!email || String(b.email || '').trim().toLowerCase() !== email) continue;
+      if (!match || String(b.createdAt || '') > String(match.createdAt || '')) match = b;
+    }
+
+    const when = new Date(pi.created * 1000).toLocaleString('ru-RU', {
+      day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Moscow'
+    });
+    const sum = Math.round(Number(pi.amount_received || pi.amount || 0) / 100) + ' ' +
+      String(pi.currency || '').toUpperCase();
+
+    lines.push('• ' + when + ' — <b>' + (match ? (match.name || 'без имени') : (email || 'без почты')) + '</b>\n  ' +
+      sum + (match ? ' · заявка <code>' + match.id + '</code>' : ' · заявки не нашлось'));
+
+    if (!apply) continue;
+
+    await kvSet('payment:pi_' + pi.id, {
+      at: new Date(pi.created * 1000).toISOString(),
+      bookingId: match ? match.id : null,
+      pi: pi.id,
+      email: pi.receipt_email || '',
+      label: pi.description || 'Оплата в Stripe',
+      amount: pi.amount_received || pi.amount || 0,
+      currency: pi.currency || 'eur',
+      via: 'Stripe'
+    });
+
+    // Заявка могла быть отмечена руками как «мимо кассы» — теперь она честная.
+    if (match) {
+      await updateBooking(match.id, {
+        paid: true,
+        paidAt: match.paidAt || new Date(pi.created * 1000).toISOString(),
+        paidAmount: match.paidAmount || pi.amount_received || pi.amount || 0,
+        paidCurrency: match.paidCurrency || pi.currency || 'eur',
+        paidVia: 'stripe',
+        paidPi: pi.id
+      });
+    }
+
+    added++;
+  }
+
+  if (!lines.length) {
+    await sendMessage(chatId, 'Сверка со Stripe за ' + days + ' дн.: расхождений нет.');
+
+    return;
+  }
+
+  await sendMessage(chatId,
+    '🔄 <b>Оплаты в Stripe, которых нет в боте</b> — за ' + days + ' дн.\n\n' +
+    lines.join('\n') +
+    (apply
+      ? '\n\nЗаписано: ' + added + '. Проверить: /payments'
+      : '\n\nЭто только показ, ничего не изменилось. Записать: <code>/syncstripe yes</code>')
+  );
 }
 
 async function handlePaymentsCommand(chatId) {
@@ -2334,6 +2441,11 @@ export async function POST(request) {
           return NextResponse.json({ ok: true });
         }
 
+        if (text && text.startsWith('/syncstripe')) {
+          await handleSyncStripeCommand(chatId, text);
+          return NextResponse.json({ ok: true });
+        }
+
         if (text && text.startsWith('/payments')) {
           await handlePaymentsCommand(chatId);
           return NextResponse.json({ ok: true });
@@ -2436,7 +2548,7 @@ export async function POST(request) {
       // превращалась в чужой ответ: «/stats» отдавал карточку собственной записи.
       if (text && text.startsWith('/')) {
         const command = text.split(/\s+/)[0].toLowerCase();
-        const managerCommands = ['/book', '/today', '/bookings', '/find', '/stats', '/pending', '/who', '/cleanup', '/confirmall', '/cleanslots', '/testmail', '/testintro', '/restore', '/paid', '/payments', '/revive', '/help'];
+        const managerCommands = ['/book', '/today', '/bookings', '/find', '/stats', '/pending', '/who', '/cleanup', '/confirmall', '/cleanslots', '/testmail', '/testintro', '/restore', '/paid', '/payments', '/syncstripe', '/revive', '/help'];
 
         if (managerCommands.includes(command)) {
           await sendMessage(chatId, 'Эта команда доступна только менеджерам школы.');
