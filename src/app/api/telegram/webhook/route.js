@@ -992,7 +992,7 @@ function paymentMonthKey(iso) {
 
 async function handlePaymentsCommand(chatId) {
   const keys = await kvKeys('payment:*');
-  const rows = [];
+  let rows = [];
   const seen = new Set();
 
   for (const key of keys) {
@@ -1039,6 +1039,23 @@ async function handlePaymentsCommand(chatId) {
     });
   }
 
+  // Одна и та же оплата может лежать дважды: менеджер отметил её руками, а потом
+  // дошло событие Stripe. Прямая запись главнее — иначе оплата попадала и в список,
+  // и в сумму месяца дважды. Ручную в этом случае просто не показываем.
+  const byBooking = new Map();
+
+  for (const row of rows) {
+    if (!row.bookingId) continue;
+
+    const kept = byBooking.get(row.bookingId);
+
+    if (!kept || (kept.via === 'Мимо кассы' && row.via !== 'Мимо кассы')) {
+      byBooking.set(row.bookingId, row);
+    }
+  }
+
+  rows = rows.filter(row => !row.bookingId || byBooking.get(row.bookingId) === row);
+
   if (!rows.length) {
     await sendMessage(chatId, 'Оплат пока нет.');
 
@@ -1069,12 +1086,15 @@ async function handlePaymentsCommand(chatId) {
   });
 
   const sum = Object.keys(totals).map(c => Math.round(totals[c] / 100) + ' ' + c).join(', ') || '0';
+  // Прямые оплаты ценнее ручных: их видно в Stripe и по ним работает вся аналитика.
+  const direct = rows.filter(row => row.via !== 'Мимо кассы').length;
 
   await sendMessage(chatId,
     '💰 <b>Оплаты</b> — всего ' + rows.length + '\n\n' +
     lines.join('\n') +
     (rows.length > 40 ? '\n\n…показаны последние 40.' : '') +
-    '\n\n<b>За текущий месяц: ' + sum + '</b> (' + monthCount + ' шт.)'
+    '\n\n<b>За текущий месяц: ' + sum + '</b> (' + monthCount + ' шт.)' +
+    '\nПрямых через Stripe: ' + direct + ' из ' + rows.length + '.'
   );
 }
 
