@@ -1033,9 +1033,19 @@ async function handleSyncStripeCommand(chatId, text) {
 
   const lines = [];
   let added = 0;
+  let foreign = 0;
 
   for (const pi of paid) {
     if (known.has(pi.id)) continue;
+
+    // Через этот же аккаунт Stripe школа выставляет счета постоянным ученикам.
+    // К пробным урокам они отношения не имеют и в сводку воронки не идут.
+    const ref = String((pi.payment_details && pi.payment_details.order_reference) || '');
+
+    if (pi.invoice || ref.startsWith('in_')) {
+      foreign++;
+      continue;
+    }
 
     const email = String(pi.receipt_email || '').trim().toLowerCase();
     let match = null;
@@ -1043,6 +1053,12 @@ async function handleSyncStripeCommand(chatId, text) {
     for (const b of bookings) {
       if (!email || String(b.email || '').trim().toLowerCase() !== email) continue;
       if (!match || String(b.createdAt || '') > String(match.createdAt || '')) match = b;
+    }
+
+    // Заявки нет — значит, платил не человек из воронки.
+    if (!match) {
+      foreign++;
+      continue;
     }
 
     const when = new Date(pi.created * 1000).toLocaleString('ru-RU', {
@@ -1083,7 +1099,8 @@ async function handleSyncStripeCommand(chatId, text) {
   }
 
   if (!lines.length) {
-    await sendMessage(chatId, 'Сверка со Stripe за ' + days + ' дн.: расхождений нет.');
+    await sendMessage(chatId, 'Сверка со Stripe за ' + days + ' дн.: расхождений нет.' +
+      (foreign ? '\nПлатежей школы не из воронки: ' + foreign + ' — они сюда не идут.' : ''));
 
     return;
   }
@@ -1093,7 +1110,8 @@ async function handleSyncStripeCommand(chatId, text) {
     lines.join('\n') +
     (apply
       ? '\n\nЗаписано: ' + added + '. Проверить: /payments'
-      : '\n\nЭто только показ, ничего не изменилось. Записать: <code>/syncstripe yes</code>')
+      : '\n\nЭто только показ, ничего не изменилось. Записать: <code>/syncstripe yes</code>') +
+    (foreign ? '\n\nПлатежей школы не из воронки: ' + foreign + ' — пропущены.' : '')
   );
 }
 
