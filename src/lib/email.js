@@ -518,6 +518,26 @@ export async function sendConfirmRequestEmail(booking) {
   return deliver(baseMsg(booking, 'Подтвердите пробный урок — ' + when, html), 'confirm-request');
 }
 
+// Слот сняли за неподтверждённость. Письмо не про наказание, а про возврат:
+// единственное, что человеку нужно, — ссылка на выбор нового времени.
+export async function sendSlotReleasedEmail(booking, link) {
+  if (!booking || !booking.email) return { skipped: 'no email' };
+
+  const when = whenText(booking);
+  const html = layout(
+    '<tr><td style="font-size:22px;font-weight:800;line-height:1.3;padding-bottom:14px">'
+    + 'Мы освободили ваше время</td></tr>'
+    + '<tr><td style="font-size:14px;line-height:1.7;color:#444;padding-bottom:18px">'
+    + 'Урок ' + esc(when) + ' ждал подтверждения, но его не было, а желающих на пробный урок '
+    + 'больше, чем мест. Если планы в силе, выберите новое время — это займёт минуту.</td></tr>'
+    + button(link, 'Выбрать новое время')
+    + '<tr><td style="font-size:12px;color:#888;line-height:1.6;padding-top:10px">'
+    + 'Если удобнее, просто ответьте на это письмо — подберём время вместе.</td></tr>'
+  );
+
+  return deliver(baseMsg(booking, 'Ваше время освободилось — выберите новое', html), 'slot-released');
+}
+
 // Напоминание за сутки и за час.
 export async function sendLessonReminderEmail(booking, hours, withHandout) {
   if (!booking || !booking.email) return { skipped: 'no email' };
