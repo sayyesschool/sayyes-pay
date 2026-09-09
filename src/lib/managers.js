@@ -35,31 +35,51 @@ export async function getManagerChatIds() {
   return ids;
 }
 
-// Ведущая пробных уроков. Ей одной уходит карточка перед звонком:
-// остальным этот шум не нужен. Меняется переменной окружения.
-export const TRIAL_HOST_USERNAME = (process.env.TRIAL_HOST_USERNAME || 'sayyes_kristina')
-  .trim()
-  .replace(/^@/, '')
-  .toLowerCase();
+// Ведущие пробных уроков. Им уходит карточка клиента перед звонком:
+// остальным этот шум не нужен. Уроки ведёт не один человек, поэтому список,
+// а не единственный username. Меняется переменной окружения.
+export const TRIAL_HOST_USERNAMES = (
+  process.env.TRIAL_HOST_USERNAMES ||
+  process.env.TRIAL_HOST_USERNAME ||
+  'sayyes_kristina,sayyes_roman,sayesstephanie'
+)
+  .split(',')
+  .map(name => name.trim().replace(/^@/, '').toLowerCase())
+  .filter(Boolean);
 
-// Сообщение ведущей. Если её чат боту неизвестен (не нажимала «Начать»),
-// молчать нельзя — так уже терялись уведомления. Шлём всем менеджерам.
+// Первый в списке — на случай, если где-то нужно одно имя.
+export const TRIAL_HOST_USERNAME = TRIAL_HOST_USERNAMES[0];
+
+// Сообщение ведущим. Если ничей чат боту неизвестен (никто не нажимал «Начать»),
+// молчать нельзя — так уже терялись уведомления. Тогда шлём всем менеджерам.
 export async function notifyHost(text, keyboard) {
   const map = await getManagerChatMap();
-  const id = map[TRIAL_HOST_USERNAME];
+  const ids = [];
 
-  if (!id) {
-    console.warn('Trial host chat unknown:', TRIAL_HOST_USERNAME);
+  for (const username of TRIAL_HOST_USERNAMES) {
+    const id = map[username];
+
+    if (id && !ids.includes(id)) ids.push(id);
+  }
+
+  if (!ids.length) {
+    console.warn('Trial host chats unknown:', TRIAL_HOST_USERNAMES.join(','));
     return notifyManagers(text, keyboard);
   }
 
-  try {
-    await sendMessage(id, text, keyboard);
-    return 1;
-  } catch (e) {
-    console.error('Trial host notification failed', e);
-    return 0;
+  let sent = 0;
+
+  // Ошибка на одном чате не должна отменять доставку остальным.
+  for (const id of ids) {
+    try {
+      await sendMessage(id, text, keyboard);
+      sent++;
+    } catch (e) {
+      console.error('Trial host notification failed for chat', id, e);
+    }
   }
+
+  return sent;
 }
 
 export async function isManagerChat(chatId) {
