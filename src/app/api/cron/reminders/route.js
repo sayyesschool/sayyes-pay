@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getAllActiveBookings, updateBooking, getManagerChatId, removeBookedSlot } from '@/lib/redis';
 import { sendMessage, formatReminder, formatHandout, bookingActionsKeyboard, formatAttendanceAsk, attendanceKeyboard, formatManagerCard, managerActionsKeyboard } from '@/lib/telegram';
 import { notifyManagers, notifyHost } from '@/lib/managers';
-import { sendHandoutEmail, sendConfirmRequestEmail, sendLessonReminderEmail, sendReviveEmail } from '@/lib/email';
+import { sendHandoutEmail, sendConfirmRequestEmail, sendLessonReminderEmail, sendReviveEmail, sendSlotReleasedEmail } from '@/lib/email';
 import { reviveTelegram, reviveKeyboard, reviveDueAt } from '@/lib/revive';
 
 // Protect cron endpoint
@@ -144,11 +144,52 @@ export async function GET(request) {
         }
       }
 
-      // Автоснятие неподтверждённых записей за 6 часов ОТКЛЮЧЕНО 1 сентября.
-      // Оно вводилось, когда расписание было забито заявками из СНГ и слоты
-      // стоили времени ведущей. Сейчас записей мало, и цена ошибки развернулась:
-      // 1 сентября правило сняло двух живых учеников, которые просто не нажали
-      // кнопку. Подтверждение по-прежнему запрашиваем — но слот держим за человеком.
+      // Автоснятие неподтверждённых записей за 6 часов до урока. Правило отключали
+      // 1 сентября: оно сняло двух живых учеников, которые просто не нажали кнопку.
+      // 9 сентября вернули с оговоркой — если человек записался меньше чем за
+      // 8 часов до урока, снимать нельзя: просьбу подтвердить шлют за сутки,
+      // и подтвердить он физически не успевал.
+      const createdAtMs = booking.createdAt ? new Date(booking.createdAt).getTime() : null;
+      const leadHours = createdAtMs ? (slotDate.getTime() - createdAtMs) / (1000 * 60 * 60) : 999;
+
+      if (!booking.confirmed
+        && !booking.releasedUnconfirmed
+        && booking.status !== 'cancelled'
+        && leadHours >= 8
+        && hoursUntil > 0 && hoursUntil < 6) {
+        await updateBooking(booking.id, {
+          status: 'cancelled',
+          releasedUnconfirmed: true,
+          releasedAt: new Date().toISOString()
+        });
+
+        if (booking.slot && booking.slot !== 'no_time') await removeBookedSlot(booking.slot);
+
+        // Человеку — не выговор, а способ вернуться: ссылка открывает воронку
+        // сразу на выборе времени, квиз он проходить второй раз не будет.
+        const again = 'https://www.sayyestoenglish.com/learn_easy?reschedule=' + booking.id;
+
+        if (booking.chatId) {
+          await sendMessage(booking.chatId,
+            'Мы освободили ваше время: подтверждения так и не было, а желающих на пробный урок больше, чем мест.\n\n' +
+            'Если планы в силе, выберите новое время — это минута:\n' + again);
+        } else if (booking.email) {
+          try {
+            await sendSlotReleasedEmail(booking, again);
+          } catch (e) {
+            console.error('Release email error:', e);
+          }
+        }
+
+        await notifyManagers(
+          '🕕 <b>Снята неподтверждённая запись</b>\n\n' + formatManagerCard(booking) +
+          '\n\nВернуть: <code>/restore</code>'
+        );
+
+        released++;
+
+        continue;
+      }
 
       // Спрашиваем трижды: через час, через четыре и через сутки. Одного вопроса
       // не хватало — 31 августа из 19 уроков десять остались без отметки, а без неё
