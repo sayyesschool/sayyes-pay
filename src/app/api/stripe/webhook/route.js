@@ -40,9 +40,47 @@ export async function POST(request) {
           || '';
         const label = pi.description || 'Оплата в Stripe';
 
+        // Оплата пришла не по ссылке из бота, кода заявки в ней нет. Пробуем найти
+        // человека по почте: иначе прямая оплата навсегда остаётся «без заявки»,
+        // а рядом висит ручная отметка менеджера про ту же самую сумму.
+        let matchedId = null;
+
+        if (email) {
+          try {
+            const target = String(email).trim().toLowerCase();
+            const bookingKeys = await kvKeys('booking:*');
+            let best = null;
+
+            for (const bk of bookingKeys) {
+              const b = await kvGet(bk);
+
+              if (!b || b.status === 'cancelled') continue;
+              if (String(b.email || '').trim().toLowerCase() !== target) continue;
+              if (!best || String(b.createdAt || '') > String(best.createdAt || '')) best = b;
+            }
+
+            if (best) {
+              matchedId = best.id;
+
+              // Человек заплатил картой, а в заявке стоит «мимо кассы»: так было,
+              // пока вебхука не существовало и оплаты проводили руками. Чиним запись.
+              await updateBooking(best.id, {
+                paid: true,
+                paidAt: best.paidAt || new Date().toISOString(),
+                paidAmount: best.paidAmount || pi.amount_received || pi.amount || 0,
+                paidCurrency: best.paidCurrency || pi.currency || 'eur',
+                paidVia: 'stripe',
+                paidPi: pi.id
+              });
+            }
+          } catch (e) {
+            console.error('Payment booking match error:', e);
+          }
+        }
+
         await kvSet(key, {
           at: new Date().toISOString(),
-          bookingId: null,
+          bookingId: matchedId,
           pi: pi.id,
           email,
           label,
@@ -56,8 +94,10 @@ export async function POST(request) {
           (email ? email + '\n' : '') +
           label + ' — ' + Math.round(Number(pi.amount_received || pi.amount || 0) / 100) + ' ' +
           String(pi.currency || '').toUpperCase() + '\n' +
-          'Заявка не привязана. Найти человека: <code>/find почта</code>, ' +
-          'отметить оплату в его карточке: <code>/paid код сумма</code>'
+          (matchedId
+            ? 'Привязано к заявке <code>' + matchedId + '</code> — оплата прямая, отмечать руками не нужно.'
+            : 'Заявка не привязана. Найти человека: <code>/find почта</code>, ' +
+              'отметить оплату в его карточке: <code>/paid код сумма</code>')
         );
       }
 
