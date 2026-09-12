@@ -13,11 +13,24 @@ export function dayKey(value) {
   return new Date(ms + TZ_SHIFT).toISOString().slice(0, 10);
 }
 
-export function dayList(days) {
-  const out = [];
-  const today = Date.now();
+export function today() {
+  return dayKey(Date.now());
+}
 
-  for (let i = days - 1; i >= 0; i--) out.push(dayKey(today - i * DAY));
+export function shiftDay(date, days) {
+  return new Date(new Date(date + 'T00:00:00Z').getTime() + days * DAY).toISOString().slice(0, 10);
+}
+
+// Период задаётся датами: три кнопки «7 / 30 / 90» не отвечают на вопрос
+// «что было с 1 по 14 сентября», а он возникает чаще всего.
+export function dayList(from, to) {
+  const out = [];
+  let cursor = from;
+
+  while (cursor <= to && out.length < 400) {
+    out.push(cursor);
+    cursor = shiftDay(cursor, 1);
+  }
 
   return out;
 }
@@ -90,16 +103,17 @@ function quizValue(booking, field) {
   return answers[field] || null;
 }
 
-export async function buildAnalytics({ days = 30 } = {}) {
-  const dates = dayList(days);
-  const from = dates[0];
+export async function buildAnalytics({ from, to } = {}) {
+  const last = to || today();
+  const first = from || shiftDay(last, -29);
+  const dates = dayList(first, last);
   const [bookings, payments, traffic] = await Promise.all([
     loadBookings(),
     loadPayments(),
     loadTraffic(dates)
   ]);
 
-  const inRange = date => Boolean(date) && date >= from;
+  const inRange = date => Boolean(date) && date >= first && date <= last;
 
   // --- Заявки по дате заявки ---
   const daily = dates.map(date => ({
@@ -246,7 +260,7 @@ export async function buildAnalytics({ days = 30 } = {}) {
   };
 
   return {
-    range: { days, from, to: dates[dates.length - 1] },
+    range: { from: first, to: last, days: dates.length },
     daily,
     lessons,
     totals,
