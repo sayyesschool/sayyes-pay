@@ -1,7 +1,8 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { SESSION_COOKIE, readSession } from '@/lib/adminAuth';
-import { ADMIN_CSS, SECTIONS, statusTags } from '@/lib/adminUi';
+import { statusTags } from '@/lib/adminUi';
+import { Shell } from '@/lib/adminShell';
 import { getBooking } from '@/lib/redis';
 import { listPacks } from '@/lib/adminActions';
 import { introActive, introExpiry } from '@/services/intro';
@@ -33,12 +34,9 @@ export default async function ClientPage({ params, searchParams }) {
 
   if (!booking) {
     return (
-      <>
-        <style dangerouslySetInnerHTML={{ __html: ADMIN_CSS }} />
-        <div className="wrap">
-          <p>Записи с кодом {id} нет. <a href="/admin/work">Вернуться к работе</a></p>
-        </div>
-      </>
+      <Shell session={session} active="work" title="Запись не найдена">
+        <p>Записи с кодом {id} нет. <a href="/admin/work">Вернуться к работе</a></p>
+      </Shell>
     );
   }
 
@@ -48,20 +46,7 @@ export default async function ClientPage({ params, searchParams }) {
   const offerUntil = introExpiry(booking);
 
   return (
-    <>
-      <style dangerouslySetInnerHTML={{ __html: ADMIN_CSS }} />
-      <div className="wrap">
-        <div className="top">
-          <h1>{booking.name || 'Без имени'}</h1>
-          <div className="who">@{session.username}</div>
-        </div>
-
-        <div className="nav">
-          {SECTIONS.map(item => (
-            <a key={item.key} className={item.key === 'work' ? 'on' : ''} href={item.href}>{item.label}</a>
-          ))}
-        </div>
-
+    <Shell session={session} active="work" title={booking.name || 'Без имени'}>
         {message && <div className={'msg' + (message.startsWith('Ошибка') ? ' err' : '')}>{message}</div>}
 
         <div className="card">
@@ -199,7 +184,6 @@ export default async function ClientPage({ params, searchParams }) {
         </div>
 
         <p className="muted"><a href="/admin/work">← ко всем записям</a></p>
-      </div>
-    </>
+    </Shell>
   );
 }
