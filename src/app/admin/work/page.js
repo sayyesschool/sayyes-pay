@@ -183,17 +183,37 @@ export default async function ManagePage({ searchParams }) {
           <span className="count">{todo}</span>
         </summary>
         <div className="body">
-          <div className="sub-h">Уроки без отметки — {unmarked.length}</div>
-          <List items={unmarked.slice(0, 20)} empty="Все уроки отмечены." />
+          <details className="sub">
+            <summary>Уроки без отметки <span className="count">{unmarked.length}</span></summary>
+            <List items={unmarked.slice(0, 40)} empty="Все уроки отмечены." />
+            {unmarked.length > 0 && (
+              <form method="post" action="/api/admin/action" style={{ marginTop: 10 }}>
+                <input type="hidden" name="action" value="archive-unmarked" />
+                <input type="hidden" name="days" value="30" />
+                <input type="hidden" name="back" value="/admin/work" />
+                <button type="submit">Убрать в архив всё старше 30 дней</button>
+                <p className="muted">
+                  Записи пропадут из списков и отчётов, но останутся в поиске.
+                  Ученикам и в чат бота ничего не уходит. Вернуть: команда /cleanup undo.
+                </p>
+              </form>
+            )}
+          </details>
 
-          <div className="sub-h">Пришли, но ссылка на оплату не отправлена — {noLink.length}</div>
-          <List items={noLink} empty="Таких нет." />
+          <details className="sub">
+            <summary>Пришли, но ссылка на оплату не отправлена <span className="count">{noLink.length}</span></summary>
+            <List items={noLink} empty="Таких нет." />
+          </details>
 
-          <div className="sub-h">Ссылка отправлена, оплаты пока нет — {waitingPay.length}</div>
-          <List items={waitingPay} empty="Таких нет." />
+          <details className="sub">
+            <summary>Ссылка отправлена, оплаты пока нет <span className="count">{waitingPay.length}</span></summary>
+            <List items={waitingPay} empty="Таких нет." />
+          </details>
 
-          <div className="sub-h">Заявки без выбранного времени — {noTime.length}</div>
-          <List items={noTime} empty="Таких нет." />
+          <details className="sub">
+            <summary>Заявки без выбранного времени <span className="count">{noTime.length}</span></summary>
+            <List items={noTime} empty="Таких нет." />
+          </details>
         </div>
       </details>
 
