@@ -4,6 +4,17 @@ import { SESSION_COOKIE, readSession } from '@/lib/adminAuth';
 import { statusTags, whenLabel } from '@/lib/adminUi';
 import { Shell } from '@/lib/adminShell';
 import { loadBookings, slotStartMs, dayKey, today } from '@/lib/analytics';
+import { getBookedSlots } from '@/lib/redis';
+import { getBlocked } from '@/lib/schedule';
+import { isSlotClosed } from '@/lib/capacity';
+
+// Та же сетка, что в карточке ученика: 10:00–20:00 через полчаса.
+const GRID = [];
+
+for (let h = 10; h <= 20; h++) {
+  GRID.push(String(h).padStart(2, '0') + ':00');
+  if (h < 20) GRID.push(String(h).padStart(2, '0') + ':30');
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -59,7 +70,10 @@ export default async function ManagePage({ searchParams }) {
   const month = /^\d{4}-\d{2}$/.test(String(params?.month || '')) ? params.month : todayKey.slice(0, 7);
   const selected = /^\d{4}-\d{2}-\d{2}$/.test(String(params?.day || '')) ? params.day : todayKey;
 
+  const owner = session.role === 'owner';
   const all = await loadBookings();
+  const booked = owner ? await getBookedSlots() : [];
+  const blocked = owner ? await getBlocked() : [];
   const active = all.filter(booking => booking.status !== 'cancelled');
   const now = Date.now();
 
@@ -161,6 +175,76 @@ export default async function ManagePage({ searchParams }) {
           empty="В этот день уроков нет."
         />
       </div>
+
+      {owner && (
+        <details className="block">
+          <summary>
+            <span>Расписание: открыть и закрыть слоты</span>
+            <span className="count">{selected.slice(8)}.{selected.slice(5, 7)}</span>
+          </summary>
+          <div className="body">
+            <p className="muted">
+              Закрытый слот исчезает из воронки и из бота сразу — его нельзя выбрать нигде.
+              Слот с уроком закрыть нельзя: сначала перенесите запись.
+            </p>
+            <div className="slots">
+              {GRID.map(time => {
+                const key = selected + '_' + time;
+                const isBlocked = blocked.includes(key);
+                const isBusy = booked.includes(key) && !isBlocked;
+                const isClosed = isSlotClosed(key);
+                const lesson = (byDay[selected] || []).find(item => item.slot === key);
+
+                if (isBusy || lesson) {
+                  return (
+                    <a className="slot off" key={key} href={lesson ? '/admin/client/' + lesson.id : undefined}>
+                      {time}
+                    </a>
+                  );
+                }
+
+                if (isClosed) return <span className="slot off" key={key}>{time}</span>;
+
+                return (
+                  <form method="post" action="/api/admin/action" key={key}>
+                    <input type="hidden" name="action" value={isBlocked ? 'slot-open' : 'slot-close'} />
+                    <input type="hidden" name="slot" value={key} />
+                    <input type="hidden" name="back" value={'/admin/work?month=' + month + '&day=' + selected} />
+                    <button className={'slot' + (isBlocked ? ' mine' : '')} type="submit">
+                      {time}{isBlocked ? ' ✕' : ''}
+                    </button>
+                  </form>
+                );
+              })}
+            </div>
+
+            <div className="btns">
+              <form method="post" action="/api/admin/action">
+                <input type="hidden" name="action" value="slot-close" />
+                <input type="hidden" name="back" value={'/admin/work?month=' + month + '&day=' + selected} />
+                {GRID.map(time => (
+                  <input type="hidden" name="slot" value={selected + '_' + time} key={time} />
+                ))}
+                <button type="submit">Закрыть весь день</button>
+              </form>
+
+              <form method="post" action="/api/admin/action">
+                <input type="hidden" name="action" value="slot-open" />
+                <input type="hidden" name="back" value={'/admin/work?month=' + month + '&day=' + selected} />
+                {GRID.map(time => (
+                  <input type="hidden" name="slot" value={selected + '_' + time} key={time} />
+                ))}
+                <button type="submit">Открыть весь день</button>
+              </form>
+            </div>
+
+            <p className="muted">
+              Крестиком помечены слоты, закрытые вручную, — нажатие открывает их обратно.
+              Серые без крестика — уроки и дни с ограничениями из расписания школы.
+            </p>
+          </div>
+        </details>
+      )}
 
       <form className="card" method="get">
         <div className="field">
