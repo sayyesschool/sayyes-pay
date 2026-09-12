@@ -45,7 +45,8 @@ const CSS = [
 const TABS = [
   { key: 'meta', label: 'Перформанс на Мете', owner: true },
   { key: 'funnel', label: 'Воронка', owner: false },
-  { key: 'work', label: 'Заявки и уроки', owner: false }
+  { key: 'work', label: 'Заявки и уроки', owner: false },
+  { key: 'money', label: 'Финансы', owner: true }
 ];
 
 function money(cents) {
@@ -326,27 +327,6 @@ export default async function AdminPage({ searchParams }) {
               </div>
             </div>
 
-            {owner && data.money.list.length > 0 && (
-              <div className="card">
-                <h2>Оплаты</h2>
-                <div className="scroll">
-                  <table>
-                    <thead><tr><th>Когда</th><th>Пакет</th><th>Сумма</th><th>Как</th></tr></thead>
-                    <tbody>
-                      {data.money.list.map(row => (
-                        <tr key={row.at + (row.pi || row.bookingId || '')}>
-                          <td>{String(row.at).slice(8, 10)}.{String(row.at).slice(5, 7)}</td>
-                          <td>{row.label || 'пакет'}</td>
-                          <td>{money(row.amount)}</td>
-                          <td>{row.via || 'Stripe'}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-
             <div className={'card' + (data.health.unmarkedOld ? ' warn' : '')}>
               <h2>Что требует внимания</h2>
               <div className="kpis">
@@ -358,6 +338,100 @@ export default async function AdminPage({ searchParams }) {
                 <div className="kpi"><b className={data.health.noContact ? 'bad' : ''}>{data.health.noContact}</b><span>вообще без контактов</span></div>
               </div>
               <p className="muted">Эти счётчики — по всей базе, а не только за выбранный период.</p>
+            </div>
+          </>
+        )}
+
+        {tab === 'money' && (
+          <>
+            <div className="card">
+              <h2>Деньги за период</h2>
+              <div className="kpis">
+                <div className="kpi"><b>{money(data.money.revenue)}</b><span>выручка</span></div>
+                <div className="kpi"><b>{data.money.payments}</b><span>оплат</span></div>
+                <div className="kpi"><b>{money(data.money.averageCheck)}</b><span>средний чек</span></div>
+                <div className="kpi"><b>{data.money.direct} из {data.money.payments}</b><span>прямых через Stripe</span></div>
+                <div className="kpi"><b>{money(data.money.monthRevenue)}</b><span>за текущий месяц, {data.money.monthPayments} шт.</span></div>
+                <div className="kpi"><b>{data.money.attendedToPaid === null ? '—' : data.money.attendedToPaid + '%'}</b><span>дошли и оплатили</span></div>
+              </div>
+              <p className="muted">
+                Прямая оплата — по ссылке из бота: она видна в Stripe и уходит в рекламу как Purchase.
+                «Мимо кассы» проводит менеджер руками, и в аналитике рекламы её нет.
+              </p>
+            </div>
+
+            <div className="card">
+              <h2>Когда платят</h2>
+              <div className="kpis">
+                <div className="kpi">
+                  <b>{data.money.medianHoursToPay === null ? '—' : data.money.medianHoursToPay + ' ч'}</b>
+                  <span>медиана от урока до оплаты</span>
+                </div>
+                <div className="kpi"><b>{data.money.paidWithinDay}</b><span>оплат в первые сутки после урока</span></div>
+              </div>
+              <p className="muted">
+                Спецпредложение живёт трое суток. Если медиана уезжает к концу окна, ссылку отправляют поздно.
+              </p>
+            </div>
+
+            {data.money.byPack.length > 0 && (
+              <div className="card">
+                <h2>Что покупают</h2>
+                <div className="scroll">
+                  <table>
+                    <thead><tr><th>Пакет</th><th>Оплат</th><th>Сумма</th><th>Средний чек</th></tr></thead>
+                    <tbody>
+                      {data.money.byPack.map(row => (
+                        <tr key={row.label}>
+                          <td>{row.label}</td>
+                          <td>{row.count}</td>
+                          <td>{money(row.amount)}</td>
+                          <td>{money(row.amount / row.count)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            <div className="card">
+              <h2>Деньги по дням</h2>
+              <div className="scroll">
+                <table>
+                  <thead><tr><th>Дата</th><th>Оплат</th><th>Сумма</th></tr></thead>
+                  <tbody>
+                    {data.money.byDay.filter(row => row.count > 0).reverse().map(row => (
+                      <tr key={row.date}>
+                        <td>{short(row.date)}</td>
+                        <td>{row.count}</td>
+                        <td><b>{money(row.amount)}</b></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="card">
+              <h2>Все оплаты периода</h2>
+              <div className="scroll">
+                <table>
+                  <thead><tr><th>Когда</th><th>Пакет</th><th>Сумма</th><th>Как</th><th>Заявка</th></tr></thead>
+                  <tbody>
+                    {data.money.list.map(row => (
+                      <tr key={row.at + (row.pi || row.bookingId || '')}>
+                        <td>{String(row.at).slice(8, 10)}.{String(row.at).slice(5, 7)}</td>
+                        <td>{row.label || 'пакет'}</td>
+                        <td>{money(row.amount)}</td>
+                        <td>{row.via || 'Stripe'}</td>
+                        <td>{row.bookingId || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {data.money.list.length === 0 && <p className="muted">За этот период оплат не было.</p>}
             </div>
           </>
         )}
