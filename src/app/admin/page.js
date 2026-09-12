@@ -32,6 +32,7 @@ const CSS = [
   '.step .bar{height:10px;border-radius:6px;background:#ececf0;overflow:hidden}',
   '.step .bar i{display:block;height:100%;background:#6d28d9}',
   '.muted{color:#71717a;font-size:13px}',
+  '.topshare{display:inline-block;min-width:52px;text-align:right;margin-left:8px}',
   'table{width:100%;border-collapse:collapse;font-size:13px}',
   'th,td{text-align:right;padding:6px 4px;border-bottom:1px solid #f1f1f4;white-space:nowrap}',
   'th:first-child,td:first-child{text-align:left;white-space:normal}',
@@ -94,7 +95,19 @@ export default async function AdminPage({ searchParams }) {
   const tab = visible.some(item => item.key === params?.tab) ? params.tab : visible[0].key;
 
   const data = await buildAnalytics({ from, to });
-  const ads = owner && tab === 'meta' ? await getAdsInsights({ from, to }) : null;
+  const needAds = owner && (tab === 'meta' || tab === 'funnel');
+  const ads = needAds ? await getAdsInsights({ from, to }) : null;
+
+  // Верхняя точка воронки — клик по рекламе, если кабинет доступен. Иначе
+  // открытие страницы: выше этого мы ничего не видим.
+  const steps = (ads && ads.ok ? [{ key: 'clicks', label: 'Клик по рекламе', value: ads.clicks }] : [])
+    .concat(data.funnel);
+  const head = steps[0] ? steps[0].value || 1 : 1;
+  const chain = steps.map((step, index) => ({
+    ...step,
+    prevPct: index === 0 ? null : (steps[index - 1].value ? Math.round((step.value / steps[index - 1].value) * 1000) / 10 : null),
+    topPct: index === 0 ? 100 : Math.round((step.value / head) * 1000) / 10
+  }));
   const spend = ads && ads.ok ? ads.spend : null;
   const thisMonth = monthEdges(0);
   const prevMonth = monthEdges(1);
@@ -224,21 +237,32 @@ export default async function AdminPage({ searchParams }) {
           <>
             <div className="card">
               <h2>Путь от клика до оплаты</h2>
-              {data.funnel.map(step => (
+              {chain.map(step => (
                 <div className="step" key={step.key}>
                   <div className="line">
                     <span>{step.label}</span>
-                    <span><b>{step.value}</b>{step.of === null ? '' : ' · ' + step.of + '%'}</span>
+                    <span>
+                      <b>{step.value}</b>
+                      <span className="muted">
+                        {step.prevPct === null ? '' : ' · ' + step.prevPct + '% с прошлого шага'}
+                      </span>
+                      <b className="topshare">{step.topPct}%</b>
+                    </span>
                   </div>
-                  <div className="bar">
-                    <i style={{ width: Math.max(1, Math.round((step.value / (data.funnel[0].value || 1)) * 100)) + '%' }} />
-                  </div>
+                  <div className="bar"><i style={{ width: Math.max(1, Math.round((step.value / head) * 100)) + '%' }} /></div>
                 </div>
               ))}
               <p className="muted">
-                Процент — переход от предыдущего шага. «Пришли» считаются от уроков этого периода,
-                а не от заявок: урок часто в другой день, чем заявка.
+                Жирный процент справа — доля от самой верхней точки: сколько людей из ста дошло
+                до этого шага. Серый — переход с предыдущего шага.
+                {ads && ads.ok ? ' Верх воронки — клики по рекламе.' : ' Кабинет недоступен, верх воронки — открытия страницы.'}
               </p>
+              {data.totals.visits < data.totals.quiz && (
+                <p className="muted bad">
+                  Открытия страницы до 12 сентября не считались вообще — счётчик стоял только
+                  на переходах между экранами. Поэтому в старых периодах первый шаг занижен.
+                </p>
+              )}
             </div>
 
             <div className="card">
