@@ -232,13 +232,54 @@ export async function buildAnalytics({ from, to } = {}) {
   const revenue = paymentRows.reduce((acc, rec) => acc + Number(rec.amount || 0), 0);
   const direct = paymentRows.filter(rec => (rec.via || 'Stripe') !== 'Мимо кассы').length;
 
+  // Деньги по дням и по пакетам: без этого не видно, что именно покупают
+  // и в какие дни приходят деньги, а один общий итог этого не показывает.
+  const byDayMap = Object.fromEntries(dates.map(date => [date, { date, count: 0, amount: 0 }]));
+  const byPackMap = {};
+
+  for (const rec of paymentRows) {
+    const date = dayKey(rec.at);
+    const row = byDayMap[date];
+
+    if (row) {
+      row.count++;
+      row.amount += Number(rec.amount || 0);
+    }
+
+    const label = rec.label || 'без пакета';
+    const pack = byPackMap[label] || (byPackMap[label] = { label, count: 0, amount: 0 });
+
+    pack.count++;
+    pack.amount += Number(rec.amount || 0);
+  }
+
+  // Текущий календарный месяц считаем всегда, независимо от выбранного периода:
+  // это тот самый вопрос «сколько мы уже заработали в этом месяце».
+  const monthPrefix = today().slice(0, 7);
+  const monthRows = payments.filter(rec => String(dayKey(rec.at) || '').startsWith(monthPrefix));
+
+  // Сколько проходит от урока до оплаты — окно спецпредложения три дня,
+  // и полезно видеть, попадают ли люди в первые часы или тянут до конца.
+  const paidBookings = bookings.filter(booking => booking.paid && booking.paidAt && slotStartMs(booking));
+  const gaps = paidBookings
+    .map(booking => (new Date(booking.paidAt).getTime() - slotStartMs(booking)) / (60 * 60 * 1000))
+    .filter(hours => hours >= 0 && hours < 24 * 30)
+    .sort((a, b) => a - b);
+
   const money = {
     payments: paymentRows.length,
     revenue,
     direct,
     directPct: pct(direct, paymentRows.length),
     averageCheck: paymentRows.length ? Math.round(revenue / paymentRows.length) : 0,
-    list: paymentRows.slice(0, 20)
+    list: paymentRows.slice(0, 40),
+    byDay: dates.map(date => byDayMap[date]),
+    byPack: Object.values(byPackMap).sort((a, b) => b.amount - a.amount),
+    monthRevenue: monthRows.reduce((acc, rec) => acc + Number(rec.amount || 0), 0),
+    monthPayments: monthRows.length,
+    attendedToPaid: pct(totals.paid, totals.attended),
+    medianHoursToPay: gaps.length ? Math.round(gaps[Math.floor(gaps.length / 2)] * 10) / 10 : null,
+    paidWithinDay: gaps.filter(hours => hours <= 24).length
   };
 
   // --- Здоровье данных ---
