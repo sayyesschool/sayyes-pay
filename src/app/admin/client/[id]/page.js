@@ -6,6 +6,7 @@ import { Shell } from '@/lib/adminShell';
 import { getBooking, getBookedSlots } from '@/lib/redis';
 import { isSlotClosed } from '@/lib/capacity';
 import { today, shiftDay, slotStartMs } from '@/lib/analytics';
+import { getThread } from '@/lib/thread';
 import { listPacks } from '@/lib/adminActions';
 import { introActive, introExpiry } from '@/services/intro';
 
@@ -55,6 +56,7 @@ export default async function ClientPage({ params, searchParams }) {
   const back = '/admin/client/' + id;
   const packs = await listPacks(booking);
   const booked = await getBookedSlots();
+  const thread = await getThread(id);
   const days = [];
 
   for (let i = 0; i < 14; i++) days.push(shiftDay(today(), i));
@@ -236,7 +238,21 @@ export default async function ClientPage({ params, searchParams }) {
         </div>
 
         <div className="card">
-          <h2>Написать ученику</h2>
+          <h2>Переписка</h2>
+          {thread.length > 0 ? (
+            <div className="thread">
+              {thread.map((item, index) => (
+                <div className={'bubble ' + (item.from === 'student' ? 'in' : 'out')} key={index}>
+                  {item.text}
+                  <span className="meta">
+                    {item.from === 'student' ? 'ученик' : (item.by || 'школа')} · {fmt(item.at)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="muted">Переписки пока нет. Здесь будут и ответы ученика из бота, и ваши сообщения.</p>
+          )}
           <form method="post" action="/api/admin/action">
             <input type="hidden" name="action" value="message" />
             <input type="hidden" name="id" value={booking.id} />
