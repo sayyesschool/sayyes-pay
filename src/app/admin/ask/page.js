@@ -1,7 +1,7 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { SESSION_COOKIE, readSession } from '@/lib/adminAuth';
-import { ADMIN_CSS, SECTIONS } from '@/lib/adminUi';
+import { Shell } from '@/lib/adminShell';
 import { askAssistant } from '@/lib/assistant';
 
 export const dynamic = 'force-dynamic';
@@ -24,20 +24,7 @@ export default async function AskPage({ searchParams }) {
   const result = question ? await askAssistant(question) : null;
 
   return (
-    <>
-      <style dangerouslySetInnerHTML={{ __html: ADMIN_CSS }} />
-      <div className="wrap">
-        <div className="top">
-          <h1>Спросить</h1>
-          <div className="who">@{session.username}</div>
-        </div>
-
-        <div className="nav">
-          {SECTIONS.map(item => (
-            <a key={item.key} className={item.key === 'ask' ? 'on' : ''} href={item.href}>{item.label}</a>
-          ))}
-        </div>
-
+    <Shell session={session} active="ask" title="Спросить">
         <form className="card" method="get">
           <div className="field">
             <label>Вопрос по работе школы, воронке, записям или цифрам</label>
@@ -67,7 +54,6 @@ export default async function AskPage({ searchParams }) {
             </div>
           ))}
         </div>
-      </div>
-    </>
+    </Shell>
   );
 }
