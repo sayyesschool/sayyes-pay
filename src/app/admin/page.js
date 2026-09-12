@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { SESSION_COOKIE, readSession } from '@/lib/adminAuth';
 import { buildAnalytics, shiftDay, today } from '@/lib/analytics';
 import { getAdsInsights } from '@/lib/metaAds';
+import { SECTIONS } from '@/lib/adminUi';
 
 export const dynamic = 'force-dynamic';
 
@@ -122,6 +123,12 @@ export default async function AdminPage({ searchParams }) {
         <div className="top">
           <h1>SAY YES</h1>
           <div className="who">@{session.username} · {owner ? 'управляющий' : 'менеджер'}</div>
+        </div>
+
+        <div className="tabs" style={{ marginBottom: 6 }}>
+          {SECTIONS.map(item => (
+            <a key={item.key} className={'tab' + (item.key === 'admin' ? ' on' : '')} href={item.href}>{item.label}</a>
+          ))}
         </div>
 
         <div className="tabs">
