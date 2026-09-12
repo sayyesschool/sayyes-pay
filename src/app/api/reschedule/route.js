@@ -46,7 +46,24 @@ export async function POST(request) {
       slotDate: slotDate || '',
       slotLocal: slotLocal || '',
       reminded24h: false,
-      reminded1h: false
+      reminded1h: false,
+      mailed24h: false,
+      mailed1h: false,
+      hostBriefed: false,
+      attendanceAskedStage: 0,
+      // Перенос — это новый урок. Старые отметки к нему отношения не имеют:
+      // человек, который не пришёл и перенёс, висел с отметкой «не пришёл»
+      // и попадал в реанимацию, хотя ждёт следующего урока.
+      attended: null,
+      attendedBy: null,
+      attendanceMarkedAt: null,
+      attendedSent: false,
+      introExpiresAt: null,
+      confirmed: false,
+      confirmedAt: null,
+      confirmedVia: null,
+      reviveStopped: true,
+      reviveStopReason: 'rebooked'
     });
 
     // Письмо о переносе — с новым .ics, чтобы старое событие в календаре заменилось
