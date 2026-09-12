@@ -3,7 +3,7 @@ import { cookies } from 'next/headers';
 import { SESSION_COOKIE, readSession } from '@/lib/adminAuth';
 import {
   markAttendance, cancelBooking, rescheduleBooking,
-  sendPayLink, markPaid, messageStudent
+  sendPayLink, markPaid, messageStudent, archiveUnmarked
 } from '@/lib/adminActions';
 
 // Все действия менеджера приходят сюда обычной формой, без единой строчки
@@ -31,6 +31,7 @@ export async function POST(request) {
     else if (action === 'paylink') result = await sendPayLink(id, String(form.get('pack') || ''), by);
     else if (action === 'paid') result = await markPaid(id, form.get('amount'), String(form.get('pack') || ''), by);
     else if (action === 'message') result = await messageStudent(id, String(form.get('text') || ''), by);
+    else if (action === 'archive-unmarked') result = await archiveUnmarked(form.get('days'), by);
   } catch (e) {
     console.error('Admin action error:', action, e);
     result = { ok: false, error: 'Сорвалось: ' + e.message };
