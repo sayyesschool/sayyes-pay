@@ -158,6 +158,38 @@ async function linkByUsername(chatId, username) {
 }
 
 async function handleStart(chatId, username, args) {
+  // Вход в админку: одноразовый код из браузера. Пускаем только менеджеров —
+  // сам по себе код ничего не открывает, пока бот не подтвердит, кто его принёс.
+  if (args && String(args).startsWith('adm_')) {
+    const nonce = String(args).slice(4);
+    const pending = await kvGet('adminlogin:' + nonce);
+
+    if (!pending) {
+      await sendMessage(chatId, 'Код входа устарел. Обновите страницу админки и нажмите кнопку заново.');
+
+      return;
+    }
+
+    if (!isManager(username)) {
+      await sendMessage(chatId, 'Этот аккаунт не в списке менеджеров школы — в админку он не пускает.');
+
+      return;
+    }
+
+    await kvSet('adminlogin:' + nonce, {
+      ...pending,
+      username: String(username).toLowerCase(),
+      chatId: String(chatId)
+    }, 600);
+
+    // Заодно запоминаем чат менеджера: человек всё равно только что открыл бота.
+    await kvSet('manager_chat:' + String(username).toLowerCase(), String(chatId));
+
+    await sendMessage(chatId, '✅ Вход подтверждён. Возвращайтесь в браузер — страница откроется сама.');
+
+    return;
+  }
+
   // Check if manager
   if (isManager(username)) {
     // Персональный ключ: раньше был один общий слот, и каждый новый
