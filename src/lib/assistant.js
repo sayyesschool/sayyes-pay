@@ -75,7 +75,9 @@ export async function askAssistant(question) {
       headers: {
         'content-type': 'application/json',
         'x-api-key': key,
-        'anthropic-version': '2023-06-01'
+        'anthropic-version': '2023-06-01',
+        // Ключ уровня организации требует явно указать рабочее пространство.
+        ...(process.env.ANTHROPIC_WORKSPACE_ID ? { 'anthropic-workspace-id': process.env.ANTHROPIC_WORKSPACE_ID } : {})
       },
       body: JSON.stringify({
         model: MODEL(),
