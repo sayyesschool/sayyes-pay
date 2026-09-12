@@ -1584,6 +1584,11 @@ async function submitBooking() {
     btn.classList.remove('disabled');
   }
 }
+// Открытие воронки. Первый экран показан сразу разметкой, go() для него никто
+// не вызывает — поэтому шаг landing раньше не считался вообще, и в аналитике
+// выходило, что квиз начали больше людей, чем открыли страницу.
+trackStep(1);
+
 // Init reschedule mode if ?reschedule= param present
 if (isReschedule) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
