@@ -1,7 +1,8 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { SESSION_COOKIE, readSession } from '@/lib/adminAuth';
-import { ADMIN_CSS, SECTIONS, statusTags, whenLabel } from '@/lib/adminUi';
+import { statusTags, whenLabel } from '@/lib/adminUi';
+import { Shell } from '@/lib/adminShell';
 import { loadBookings, slotStartMs, dayKey, today } from '@/lib/analytics';
 
 export const dynamic = 'force-dynamic';
@@ -79,20 +80,7 @@ export default async function WorkPage({ searchParams }) {
   const found = query ? all.filter(booking => matches(booking, query)).slice(0, 40) : [];
 
   return (
-    <>
-      <style dangerouslySetInnerHTML={{ __html: ADMIN_CSS }} />
-      <div className="wrap">
-        <div className="top">
-          <h1>Работа</h1>
-          <div className="who">@{session.username}</div>
-        </div>
-
-        <div className="nav">
-          {SECTIONS.map(item => (
-            <a key={item.key} className={item.key === 'work' ? 'on' : ''} href={item.href}>{item.label}</a>
-          ))}
-        </div>
-
+    <Shell session={session} active="work" title="Работа">
         {message && <div className={'msg' + (message.startsWith('Ошибка') ? ' err' : '')}>{message}</div>}
 
         <form className="card" method="get">
@@ -138,7 +126,6 @@ export default async function WorkPage({ searchParams }) {
             {pending.map(booking => <Row key={booking.id} booking={booking} />)}
           </div>
         )}
-      </div>
-    </>
+    </Shell>
   );
 }
