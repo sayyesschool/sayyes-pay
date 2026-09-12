@@ -89,6 +89,13 @@ h2{font-size:21px;font-weight:700;color:var(--dark);line-height:1.3;margin-botto
 .field input:focus{border-color:var(--purple)}
 .field input::placeholder{color:#bbb}
 
+.plan{background:#fff;border:1px solid var(--purple);border-radius:14px;padding:14px}
+.plan-title{font-size:14px;font-weight:800;color:var(--purple-dark);margin-bottom:2px}
+.plan-sub{font-size:11px;color:var(--gray);margin-bottom:10px}
+.plan-item{display:flex;gap:8px;font-size:13px;line-height:1.55;color:var(--dark);margin-bottom:8px}
+.plan-item span:first-child{flex:0 0 auto}
+.plan-note{font-size:12px;color:var(--purple-dark);background:var(--purple-light);border-radius:10px;padding:8px 10px;line-height:1.5;margin-top:10px}
+
 /* Images */
 .hero-img{width:100%;border-radius:16px;margin-bottom:16px;object-fit:cover}
 .avatar{width:56px;height:56px;border-radius:50%;object-fit:cover;border:3px solid var(--purple-light)}
@@ -611,6 +618,8 @@ h2{font-size:21px;font-weight:700;color:var(--dark);line-height:1.3;margin-botto
     <h2>Остался последний шаг</h2>
     <p class="sub">Куда прислать подтверждение записи?</p>
 
+    <div class="planbox" style="margin-bottom:16px"></div>
+
     <div style="background:var(--purple-light);border-radius:14px;padding:12px 14px;margin-bottom:16px">
       <div style="font-size:12px;font-weight:700;color:var(--purple-dark);margin-bottom:6px">Что дальше:</div>
       <div style="font-size:12px;color:var(--purple-dark);line-height:1.65">
@@ -656,6 +665,8 @@ h2{font-size:21px;font-weight:700;color:var(--dark);line-height:1.3;margin-botto
     </div>
     <h2>Когда вам удобно?</h2>
     <p class="sub">Пробный урок · 30 мин · Zoom</p>
+
+    <div class="planbox" style="margin:12px 0"></div>
 
     <!-- Цена до записи, а не после: человек выбирает время, уже зная,
          сколько стоит продолжение и в какой валюте. -->
@@ -1048,6 +1059,82 @@ function trackStep(stepId) {
   }).catch(() => {});
 }
 
+// Личный план из ответов. Человек прошёл семь экранов — на записи он должен
+// увидеть, что это было не анкетирование, а подготовка урока под него.
+// Каждая строка — не пересказ ответа, а то, что из него следует для урока.
+function planItems() {
+  // quizAnswers объявлен ниже обычным const: в window он не попадает,
+  // поэтому берём его напрямую из области видимости скрипта.
+  const a = (typeof quizAnswers !== 'undefined' && quizAnswers) || {};
+  const items = [];
+  const has = (key, text) => String(a[key] || '').indexOf(text) >= 0;
+
+  if (has('Стаж', 'со школы')) {
+    items.push(['🔍', 'Разберём главное: почему годы учёбы так и не превратились в речь. Обычно дело в двух-трёх привычках, и они чинятся быстрее, чем кажется.']);
+  } else if (has('Стаж', 'Только начинаю')) {
+    items.push(['🌱', 'Начнём с нуля, но сразу с речи: первые фразы вы скажете уже на пробном уроке.']);
+  } else if (a['Стаж']) {
+    items.push(['🔍', 'Проверим, что из выученного уже работает, а что лежит мёртвым грузом и мешает говорить.']);
+  }
+
+  if (has('Уровень', 'нуля')) {
+    items.push(['📌', 'Уровень определим на слух в первые минуты — без тестов и оценок.']);
+  } else if (has('Уровень', 'говорить сложно')) {
+    items.push(['📌', 'Сфокусируемся на разговорном барьере: вы понимаете, но не говорите — это отдельная задача, и решается она не грамматикой.']);
+  } else if (has('Уровень', 'простой разговор')) {
+    items.push(['📌', 'Найдём, где речь стопорится: чаще всего это времена и нехватка активного словаря.']);
+  } else if (has('Уровень', 'Intermediate')) {
+    items.push(['📌', 'Поищем, что мешает перейти от правильной речи к свободной: темп, точность, живые обороты.']);
+  }
+
+  if (has('Цель', 'Работа')) {
+    items.push(['🎯', 'Возьмём язык вашей работы: созвоны, письма, собеседования — а не абстрактные темы из учебника.']);
+  } else if (has('Цель', 'Переезд')) {
+    items.push(['🎯', 'Соберём английский под реальные ситуации за границей: врач, аренда, документы, школа детей.']);
+  } else if (has('Цель', 'Свободное общение')) {
+    items.push(['🎯', 'Упор на спонтанную речь: на уроке говорите вы, а не преподаватель.']);
+  } else if (has('Цель', 'Учёба')) {
+    items.push(['🎯', 'Проверим академическую часть: чтение, письмо и формат экзамена.']);
+  } else if (has('Цель', 'закрыть этот вопрос')) {
+    items.push(['🎯', 'Определим, что для вас значит «закрыть вопрос с английским», и за какой срок это реально.']);
+  }
+
+  if (has('Время в неделю', '1–2')) {
+    items.push(['🗓', 'План рассчитаем на 1–2 часа в неделю: короткие занятия плюс практика между ними.']);
+  } else if (has('Время в неделю', '2–4')) {
+    items.push(['🗓', 'При 2–4 часах в неделю первые изменения в речи обычно слышны через месяц — покажем, за счёт чего.']);
+  } else if (has('Время в неделю', '4+')) {
+    items.push(['🗓', 'Вы готовы к интенсиву — подберём темп, который даёт результат и не выжигает.']);
+  }
+
+  if (has('Формат', 'Индивидуальные')) {
+    items.push(['👩‍🏫', 'Покажем, как устроено индивидуальное занятие и сколько в нём говорите вы.']);
+  } else if (has('Формат', 'Мини-группа')) {
+    items.push(['👩‍👩‍👧', 'Расскажем, как работает мини-группа: сколько человек и как делится время на речь.']);
+  } else if (has('Формат', 'рекомендацию')) {
+    items.push(['💡', 'Формат порекомендуем после урока — когда преподаватель услышит вашу речь, а не по анкете.']);
+  } else if (has('Формат', 'попробовать')) {
+    items.push(['🚀', 'Никакого давления: сначала урок, решение — после него.']);
+  }
+
+  return items.slice(0, 4);
+}
+
+function renderPlan() {
+  const items = planItems();
+  const boxes = document.querySelectorAll('.planbox');
+
+  boxes.forEach(box => {
+    if (!items.length) { box.innerHTML = ''; return; }
+
+    box.className = 'planbox plan';
+    box.innerHTML = '<div class="plan-title">Ваш урок уже собран под вас</div>'
+      + '<div class="plan-sub">Из ваших ответов — вот что преподаватель сделает за 30 минут</div>'
+      + items.map(item => '<div class="plan-item"><span>' + item[0] + '</span><span>' + item[1] + '</span></div>').join('')
+      + '<div class="plan-note">Ваши ответы уходят преподавателю до урока — рассказывать всё заново не придётся.</div>';
+  });
+}
+
 function go(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   const nextScreen = document.getElementById('s' + id);
@@ -1055,6 +1142,7 @@ function go(id) {
   nextScreen.classList.add('active');
   window.scrollTo(0, 0);
   trackStep(id);
+  if (id == 12 || id == 13) renderPlan();
   if (id == 13) loadSlots();
   if (id == '7a') updateProgressChart();
 }
