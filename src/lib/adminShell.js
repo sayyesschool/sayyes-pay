@@ -73,6 +73,26 @@ export const ADMIN_CSS = [
   '.syad th:first-child,.syad td:first-child{text-align:left;white-space:normal}',
   '.syad th{color:#71717a;font-weight:500}',
   '.syad .scroll{overflow-x:auto}',
+  '.syad .calhead{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:10px}',
+  '.syad .calhead b{font-size:15px}',
+  '.syad .calhead a{padding:4px 10px;border:1px solid #e4e4e7;border-radius:8px;color:#3f3f46;font-size:14px}',
+  '.syad .cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}',
+  '.syad .cal .dow{font-size:11px;color:#a1a1aa;text-align:center;padding-bottom:2px}',
+  '.syad .cal .day{display:block;min-height:52px;border:1px solid #f1f1f4;border-radius:10px;padding:5px 6px;color:#3f3f46;font-size:13px;background:#fff}',
+  '.syad .cal .day.empty{border:none;background:transparent}',
+  '.syad .cal .day.has{border-color:#ddd6fe;background:#faf5ff}',
+  '.syad .cal .day.today{border-color:#16161a}',
+  '.syad .cal .day.on{background:#16161a;color:#fff;border-color:#16161a}',
+  '.syad .cal .day .n{font-weight:600}',
+  '.syad .cal .day .c{display:block;font-size:11px;margin-top:2px;color:inherit;opacity:.75}',
+  '.syad details.block{background:#fff;border:1px solid #ececf0;border-radius:14px;margin-bottom:12px;overflow:hidden}',
+  '.syad details.block > summary{padding:13px 14px;font-weight:600;cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center;gap:10px}',
+  '.syad details.block > summary::-webkit-details-marker{display:none}',
+  '.syad details.block > summary::after{content:"▾";color:#a1a1aa;font-size:12px}',
+  '.syad details.block[open] > summary{border-bottom:1px solid #f1f1f4}',
+  '.syad details.block .body{padding:0 14px 12px}',
+  '.syad details.block .count{font-weight:500;color:#71717a;font-size:13px}',
+  '.syad .sub-h{font-size:13px;color:#71717a;margin:12px 0 2px}',
   '.syad .warn{background:#fff7ed;border-color:#fed7aa}',
   '.syad .bad{color:#b91c1c}',
   '.syad .ok{color:#15803d}',
@@ -104,7 +124,7 @@ export function Shell({ session, active, activeTab, title, children }) {
           </a>
 
           <nav className="menu">
-            <a className={active === 'work' ? 'on' : ''} href="/admin/work">Работа</a>
+            <a className={active === 'work' ? 'on' : ''} href="/admin/work">Управление</a>
 
             <details className={'dd' + (active === 'admin' ? ' on' : '')}>
               <summary>Аналитика</summary>
