@@ -1,7 +1,7 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { SESSION_COOKIE, readSession } from '@/lib/adminAuth';
-import { ADMIN_CSS, SECTIONS } from '@/lib/adminUi';
+import { Shell } from '@/lib/adminShell';
 import { getPage, renderMarkdown } from '@/lib/wiki';
 
 export const dynamic = 'force-dynamic';
@@ -20,30 +20,14 @@ export default async function WikiPage({ params, searchParams }) {
 
   if (!page) {
     return (
-      <>
-        <style dangerouslySetInnerHTML={{ __html: ADMIN_CSS }} />
-        <div className="wrap">
-          <p>Такой страницы нет. <a href="/admin/wiki">К списку</a></p>
-        </div>
-      </>
+      <Shell session={session} active="wiki" title="Страница не найдена">
+        <p>Такой страницы нет. <a href="/admin/wiki">К списку</a></p>
+      </Shell>
     );
   }
 
   return (
-    <>
-      <style dangerouslySetInnerHTML={{ __html: ADMIN_CSS }} />
-      <div className="wrap">
-        <div className="top">
-          <h1>{page.title}</h1>
-          <div className="who">@{session.username}</div>
-        </div>
-
-        <div className="nav">
-          {SECTIONS.map(item => (
-            <a key={item.key} className={item.key === 'wiki' ? 'on' : ''} href={item.href}>{item.label}</a>
-          ))}
-        </div>
-
+    <Shell session={session} active="wiki" title={page.title}>
         {message && <div className={'msg' + (message.startsWith('Ошибка') ? ' err' : '')}>{message}</div>}
 
         {!editing && (
@@ -87,7 +71,6 @@ export default async function WikiPage({ params, searchParams }) {
             </form>
           </div>
         )}
-      </div>
-    </>
+    </Shell>
   );
 }
