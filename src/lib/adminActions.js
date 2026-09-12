@@ -143,8 +143,19 @@ export async function rescheduleBooking(bookingId, slotKey, by) {
     mailed24h: false,
     mailed1h: false,
     hostBriefed: false,
+    attendanceAskedStage: 0,
+    // Перенос — это новый урок: старые отметки снимаем, иначе человек
+    // остаётся «не пришедшим» по уроку, которого больше нет.
+    attended: null,
+    attendedBy: null,
+    attendanceMarkedAt: null,
+    attendedSent: false,
+    introExpiresAt: null,
     confirmed: false,
-    attendanceAskedStage: 0
+    confirmedAt: null,
+    confirmedVia: null,
+    reviveStopped: true,
+    reviveStopReason: 'rebooked'
   });
 
   if (booking.chatId) {
