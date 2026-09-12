@@ -3,47 +3,9 @@ import { redirect } from 'next/navigation';
 import { SESSION_COOKIE, readSession } from '@/lib/adminAuth';
 import { buildAnalytics, shiftDay, today } from '@/lib/analytics';
 import { getAdsInsights } from '@/lib/metaAds';
-import { SECTIONS } from '@/lib/adminUi';
+import { Shell } from '@/lib/adminShell';
 
 export const dynamic = 'force-dynamic';
-
-const CSS = [
-  '*{box-sizing:border-box}',
-  'body{margin:0;background:#f6f6f8;color:#16161a;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;font-size:15px;line-height:1.5}',
-  '.wrap{max-width:980px;margin:0 auto;padding:16px 14px 60px}',
-  '.top{display:flex;flex-wrap:wrap;gap:10px;align-items:baseline;justify-content:space-between;margin-bottom:12px}',
-  '.top h1{font-size:20px;margin:0}',
-  '.who{font-size:13px;color:#71717a}',
-  '.tabs{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap}',
-  '.tab{padding:8px 14px;border-radius:999px;background:#fff;border:1px solid #e4e4e7;color:#3f3f46;text-decoration:none;font-size:14px}',
-  '.tab.on{background:#16161a;color:#fff;border-color:#16161a}',
-  '.dates{display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:#fff;border:1px solid #ececf0;border-radius:14px;padding:10px 12px;margin-bottom:12px}',
-  '.dates input{font:inherit;padding:6px 8px;border:1px solid #e4e4e7;border-radius:8px;background:#fff;color:inherit}',
-  '.dates select{font:inherit;padding:6px 8px;border:1px solid #e4e4e7;border-radius:8px;background:#fff;color:inherit}',
-  '.dates button{font:inherit;padding:7px 14px;border:none;border-radius:8px;background:#16161a;color:#fff;cursor:pointer}',
-  '.dates .quick{display:flex;gap:6px;flex-wrap:wrap;margin-left:auto}',
-  '.dates .quick a{font-size:13px;color:#6d28d9;text-decoration:none;padding:4px 6px}',
-  '.card{background:#fff;border:1px solid #ececf0;border-radius:14px;padding:14px;margin-bottom:12px}',
-  '.card h2{font-size:15px;margin:0 0 12px}',
-  '.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));gap:10px}',
-  '.kpi{background:#fafafa;border-radius:10px;padding:10px 12px}',
-  '.kpi b{display:block;font-size:19px;line-height:1.2}',
-  '.kpi span{font-size:12px;color:#71717a}',
-  '.step{margin-bottom:10px}',
-  '.step .line{display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px}',
-  '.step .bar{height:10px;border-radius:6px;background:#ececf0;overflow:hidden}',
-  '.step .bar i{display:block;height:100%;background:#6d28d9}',
-  '.muted{color:#71717a;font-size:13px}',
-  '.topshare{display:inline-block;min-width:52px;text-align:right;margin-left:8px}',
-  'table{width:100%;border-collapse:collapse;font-size:13px}',
-  'th,td{text-align:right;padding:6px 4px;border-bottom:1px solid #f1f1f4;white-space:nowrap}',
-  'th:first-child,td:first-child{text-align:left;white-space:normal}',
-  'th{color:#71717a;font-weight:500}',
-  '.scroll{overflow-x:auto}',
-  '.warn{background:#fff7ed;border-color:#fed7aa}',
-  '.bad{color:#b91c1c}',
-  '.ok{color:#15803d}'
-].join('');
 
 const TABS = [
   { key: 'meta', label: 'Перформанс на Мете', owner: true },
@@ -117,28 +79,7 @@ export default async function AdminPage({ searchParams }) {
   const prevMonth = monthEdges(1);
 
   return (
-    <>
-      <style dangerouslySetInnerHTML={{ __html: CSS }} />
-      <div className="wrap">
-        <div className="top">
-          <h1>SAY YES</h1>
-          <div className="who">@{session.username} · {owner ? 'управляющий' : 'менеджер'}</div>
-        </div>
-
-        <div className="tabs" style={{ marginBottom: 6 }}>
-          {SECTIONS.map(item => (
-            <a key={item.key} className={'tab' + (item.key === 'admin' ? ' on' : '')} href={item.href}>{item.label}</a>
-          ))}
-        </div>
-
-        <div className="tabs">
-          {visible.map(item => (
-            <a key={item.key} className={'tab' + (item.key === tab ? ' on' : '')} href={link(item.key, from, to, source)}>
-              {item.label}
-            </a>
-          ))}
-        </div>
-
+    <Shell session={session} active="admin" activeTab={tab} title="Аналитика">
         <form className="dates" method="get">
           <input type="hidden" name="tab" value={tab} />
           <label className="muted">с</label>
@@ -532,7 +473,6 @@ export default async function AdminPage({ searchParams }) {
           Период: {data.range.from} — {data.range.to} ({data.range.days} дн.). Границы суток — в поясе
           расписания (UTC+3), как в боте. Архивные и тестовые заявки в расчёт не идут.
         </p>
-      </div>
-    </>
+    </Shell>
   );
 }
