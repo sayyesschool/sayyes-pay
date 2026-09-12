@@ -5,6 +5,7 @@ import { sendTrialAttended, sendPurchase } from '@/lib/meta';
 import { getIntroProduct, getIntroProducts, introActive, nextIntroExpiry } from '@/services/intro';
 import { getProducts } from '@/services/stripe';
 import { sendIntroOfferEmail, sendBookingConfirmation } from '@/lib/email';
+import { addMessage } from '@/lib/thread';
 
 // Действия менеджера из веба. Делают ровно то же, что кнопки бота, и теми же
 // полями заявки: иначе две половины системы начнут расходиться в цифрах.
@@ -316,6 +317,7 @@ export async function messageStudent(bookingId, text, by) {
 
   await sendMessage(booking.chatId, text.trim());
 
+  await addMessage(bookingId, { from: 'manager', text: text.trim(), by: '@' + by });
   await updateBooking(bookingId, { lastManagerMessageAt: new Date().toISOString() });
   await notifyManagers('✍️ @' + by + ' написал(а) ученику ' + (booking.name || booking.id) + ':\n\n' + text.trim());
 
