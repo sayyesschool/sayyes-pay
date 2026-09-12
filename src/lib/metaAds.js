@@ -6,12 +6,25 @@ const API = 'https://graph.facebook.com/v21.0';
 const token = () => process.env.META_ADS_TOKEN || '';
 const account = () => String(process.env.META_AD_ACCOUNT_ID || '').replace(/^act_/, '');
 
-function range(days) {
-  const shift = 3 * 60 * 60 * 1000;
-  const to = new Date(Date.now() + shift).toISOString().slice(0, 10);
-  const from = new Date(Date.now() + shift - (days - 1) * 86400000).toISOString().slice(0, 10);
+// Лиды Мета считает по-разному в зависимости от того, как настроена цель.
+// Берём первое, что нашли: пиксельный Lead, лид-форму или полную регистрацию.
+const LEAD_ACTIONS = [
+  'offsite_conversion.fb_pixel_lead',
+  'lead',
+  'leadgen_grouped',
+  'offsite_conversion.fb_pixel_complete_registration'
+];
 
-  return { since: from, until: to };
+function leadsFrom(actions) {
+  if (!Array.isArray(actions)) return 0;
+
+  for (const type of LEAD_ACTIONS) {
+    const hit = actions.find(row => row.action_type === type);
+
+    if (hit) return Number(hit.value || 0);
+  }
+
+  return 0;
 }
 
 async function ask(path, params) {
@@ -29,22 +42,23 @@ async function ask(path, params) {
   return data.data || [];
 }
 
-export async function getAdsInsights(days = 30) {
+export async function getAdsInsights({ from, to } = {}) {
   if (!token() || !account()) {
     return { ok: false, reason: 'Нет доступа к кабинету: не заданы META_ADS_TOKEN и META_AD_ACCOUNT_ID.' };
   }
 
   try {
-    const timeRange = JSON.stringify(range(days));
+    const timeRange = JSON.stringify({ since: from, until: to });
+    const fields = 'spend,clicks,impressions,reach,ctr,cpc,cpm,actions';
     const [byDay, campaigns] = await Promise.all([
       ask('/act_' + account() + '/insights', {
-        fields: 'spend,clicks,impressions,reach',
+        fields,
         time_increment: '1',
         time_range: timeRange,
         limit: '400'
       }),
       ask('/act_' + account() + '/insights', {
-        fields: 'campaign_name,spend,clicks,impressions',
+        fields: 'campaign_name,' + fields,
         level: 'campaign',
         time_range: timeRange,
         limit: '100'
@@ -55,16 +69,23 @@ export async function getAdsInsights(days = 30) {
     let spend = 0;
     let clicks = 0;
     let impressions = 0;
+    let reach = 0;
+    let leads = 0;
 
     for (const row of byDay) {
+      const dayLeads = leadsFrom(row.actions);
+
       perDay[row.date_start] = {
         spend: Number(row.spend || 0),
         clicks: Number(row.clicks || 0),
-        impressions: Number(row.impressions || 0)
+        impressions: Number(row.impressions || 0),
+        leads: dayLeads
       };
       spend += Number(row.spend || 0);
       clicks += Number(row.clicks || 0);
       impressions += Number(row.impressions || 0);
+      reach += Number(row.reach || 0);
+      leads += dayLeads;
     }
 
     return {
@@ -72,13 +93,19 @@ export async function getAdsInsights(days = 30) {
       spend: Math.round(spend * 100) / 100,
       clicks,
       impressions,
+      reach,
+      leads,
+      ctr: impressions ? Math.round((clicks / impressions) * 10000) / 100 : null,
+      cpc: clicks ? Math.round((spend / clicks) * 100) / 100 : null,
+      cpm: impressions ? Math.round((spend / impressions) * 1000 * 100) / 100 : null,
       byDay: perDay,
       campaigns: campaigns
         .map(row => ({
           name: row.campaign_name,
           spend: Math.round(Number(row.spend || 0) * 100) / 100,
           clicks: Number(row.clicks || 0),
-          impressions: Number(row.impressions || 0)
+          impressions: Number(row.impressions || 0),
+          leads: leadsFrom(row.actions)
         }))
         .sort((a, b) => b.spend - a.spend)
     };
