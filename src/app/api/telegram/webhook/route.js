@@ -3,6 +3,7 @@ import { sendBookingConfirmation, mailProvider, sendIntroOfferEmail } from '@/li
 import { getProducts, stripe } from '@/services/stripe';
 import { getIntroProducts, getIntroProduct, introActive, introExpiry, nextIntroExpiry } from '@/services/intro';
 import { isSlotClosed } from '@/lib/capacity';
+import { addMessage } from '@/lib/thread';
 import { reviveTelegram, reviveKeyboard, reviveDueAt } from '@/lib/revive';
 import { clientTimeLine, clientDateLine, clientWhen, localTimeString, localSlot, slotKeyToDate } from '@/lib/time';
 import { sendSchedule, sendTrialAttended, sendTrialConfirmed, sendPurchase } from '@/lib/meta';
@@ -2227,6 +2228,10 @@ async function handleRelayFromUser(chatId, message) {
   const booking = await getBooking(relayBookingId);
   const managerChatIds = await getManagerChatIds();
 
+  // Пишем сообщение в переписку заявки — в админке оно видно в карточке,
+  // а не только в общем чате, где оно теряется за полчаса.
+  if (message.text) await addMessage(relayBookingId, { from: 'student', text: message.text });
+
   // Человек ответил — реанимационная цепочка дальше идти не должна:
   // дальше работает менеджер, а автоматическое «вы не пришли» поверх живого диалога
   // выглядит как безразличие.
@@ -2281,6 +2286,18 @@ async function handleRelayFromManager(managerChatId, message) {
   // Команда — это команда, а не сообщение ученику. Иначе ученик получал
   // «Ответ менеджера: /today» со всем содержимым чужой карточки.
   if (message.text && message.text.trim().startsWith('/')) return false;
+
+  // Ответ менеджера тоже попадает в переписку заявки: карточка должна показывать
+  // диалог целиком, а не половину.
+  const lastBooking = await kvGet('mgr_last:' + managerChatId);
+
+  if (lastBooking && message.text) {
+    await addMessage(lastBooking, {
+      from: 'manager',
+      text: message.text,
+      by: message.from && message.from.username ? '@' + message.from.username : null
+    });
+  }
 
   if (message.text) {
     await sendMessage(targetChatId, `Ответ менеджера:\n\n${message.text}`);
