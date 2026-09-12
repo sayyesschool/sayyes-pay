@@ -103,7 +103,7 @@ function quizValue(booking, field) {
   return answers[field] || null;
 }
 
-export async function buildAnalytics({ from, to } = {}) {
+export async function buildAnalytics({ from, to, source = 'all' } = {}) {
   const last = to || today();
   const first = from || shiftDay(last, -29);
   const dates = dayList(first, last);
@@ -226,9 +226,29 @@ export async function buildAnalytics({ from, to } = {}) {
   }
 
   // --- Деньги ---
-  const paymentRows = payments
+  // Источник оплаты: если платёж привязан к заявке, человек пришёл из воронки,
+  // то есть с рекламы. Всё остальное — школа: старые ученики, счета, переводы
+  // мимо воронки. Смешивать их в одной выручке бессмысленно: реклама окупается
+  // только первыми, а вторые растут сами по себе.
+  const sourceOf = rec => (rec.bookingId ? 'meta' : 'organic');
+  const allRows = payments
     .filter(rec => inRange(dayKey(rec.at)))
+    .map(rec => ({ ...rec, source: sourceOf(rec) }))
     .sort((a, b) => String(b.at).localeCompare(String(a.at)));
+
+  const bySource = {
+    meta: { count: 0, revenue: 0 },
+    organic: { count: 0, revenue: 0 }
+  };
+
+  for (const rec of allRows) {
+    const cell = bySource[rec.source];
+
+    cell.count++;
+    cell.revenue += Number(rec.amount || 0);
+  }
+
+  const paymentRows = source === 'all' ? allRows : allRows.filter(rec => rec.source === source);
   const revenue = paymentRows.reduce((acc, rec) => acc + Number(rec.amount || 0), 0);
   const direct = paymentRows.filter(rec => (rec.via || 'Stripe') !== 'Мимо кассы').length;
 
@@ -256,7 +276,9 @@ export async function buildAnalytics({ from, to } = {}) {
   // Текущий календарный месяц считаем всегда, независимо от выбранного периода:
   // это тот самый вопрос «сколько мы уже заработали в этом месяце».
   const monthPrefix = today().slice(0, 7);
-  const monthRows = payments.filter(rec => String(dayKey(rec.at) || '').startsWith(monthPrefix));
+  const monthRows = payments
+    .filter(rec => String(dayKey(rec.at) || '').startsWith(monthPrefix))
+    .filter(rec => source === 'all' || sourceOf(rec) === source);
 
   // Сколько проходит от урока до оплаты — окно спецпредложения три дня,
   // и полезно видеть, попадают ли люди в первые часы или тянут до конца.
@@ -267,6 +289,8 @@ export async function buildAnalytics({ from, to } = {}) {
     .sort((a, b) => a - b);
 
   const money = {
+    source,
+    bySource,
     payments: paymentRows.length,
     revenue,
     direct,
