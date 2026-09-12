@@ -400,8 +400,25 @@ async function applyNewSlot(bookingId, newSlotKey) {
     slotLocal: localTimeString(booking, newSlotKey),
     reminded24h: false,
     reminded1h: false,
+    mailed24h: false,
+    mailed1h: false,
+    attendanceAskedStage: 0,
     // Урок переехал — карточка ведущей должна прийти заново перед новым временем.
-    hostBriefed: false
+    hostBriefed: false,
+    // Перенос создаёт новый урок, и старые отметки к нему не относятся.
+    // Человек, который не пришёл и перенёс запись, оставался с отметкой
+    // «не пришёл»: он портил доходимость и получал письма реанимации,
+    // хотя просто ждал следующего урока.
+    attended: null,
+    attendedBy: null,
+    attendanceMarkedAt: null,
+    attendedSent: false,
+    introExpiresAt: null,
+    confirmed: false,
+    confirmedAt: null,
+    confirmedVia: null,
+    reviveStopped: true,
+    reviveStopReason: 'rebooked'
   });
 
   if (updated) await fireSchedule(updated);
