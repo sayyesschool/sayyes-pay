@@ -18,6 +18,7 @@ const CSS = [
   '.tab.on{background:#16161a;color:#fff;border-color:#16161a}',
   '.dates{display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:#fff;border:1px solid #ececf0;border-radius:14px;padding:10px 12px;margin-bottom:12px}',
   '.dates input{font:inherit;padding:6px 8px;border:1px solid #e4e4e7;border-radius:8px;background:#fff;color:inherit}',
+  '.dates select{font:inherit;padding:6px 8px;border:1px solid #e4e4e7;border-radius:8px;background:#fff;color:inherit}',
   '.dates button{font:inherit;padding:7px 14px;border:none;border-radius:8px;background:#16161a;color:#fff;cursor:pointer}',
   '.dates .quick{display:flex;gap:6px;flex-wrap:wrap;margin-left:auto}',
   '.dates .quick a{font-size:13px;color:#6d28d9;text-decoration:none;padding:4px 6px}',
@@ -68,8 +69,9 @@ function short(date) {
   return date.slice(8) + '.' + date.slice(5, 7);
 }
 
-function link(tab, from, to) {
-  return '/admin?tab=' + tab + '&from=' + from + '&to=' + to;
+function link(tab, from, to, source) {
+  return '/admin?tab=' + tab + '&from=' + from + '&to=' + to
+    + (source && source !== 'all' ? '&source=' + source : '');
 }
 
 function monthEdges(back) {
@@ -94,7 +96,8 @@ export default async function AdminPage({ searchParams }) {
   const visible = TABS.filter(tab => owner || !tab.owner);
   const tab = visible.some(item => item.key === params?.tab) ? params.tab : visible[0].key;
 
-  const data = await buildAnalytics({ from, to });
+  const source = ['meta', 'organic'].includes(params?.source) ? params.source : 'all';
+  const data = await buildAnalytics({ from, to, source });
   const needAds = owner && (tab === 'meta' || tab === 'funnel');
   const ads = needAds ? await getAdsInsights({ from, to }) : null;
 
@@ -123,7 +126,7 @@ export default async function AdminPage({ searchParams }) {
 
         <div className="tabs">
           {visible.map(item => (
-            <a key={item.key} className={'tab' + (item.key === tab ? ' on' : '')} href={link(item.key, from, to)}>
+            <a key={item.key} className={'tab' + (item.key === tab ? ' on' : '')} href={link(item.key, from, to, source)}>
               {item.label}
             </a>
           ))}
@@ -135,12 +138,19 @@ export default async function AdminPage({ searchParams }) {
           <input type="date" name="from" defaultValue={from} />
           <label className="muted">по</label>
           <input type="date" name="to" defaultValue={to} />
+          {tab === 'money' && (
+            <select name="source" defaultValue={source}>
+              <option value="all">все источники</option>
+              <option value="meta">воронка (Мета)</option>
+              <option value="organic">органика</option>
+            </select>
+          )}
           <button type="submit">Показать</button>
           <span className="quick">
-            <a href={link(tab, shiftDay(today(), -6), today())}>7 дней</a>
-            <a href={link(tab, shiftDay(today(), -29), today())}>30 дней</a>
-            <a href={link(tab, thisMonth.from, thisMonth.to)}>этот месяц</a>
-            <a href={link(tab, prevMonth.from, prevMonth.to)}>прошлый</a>
+            <a href={link(tab, shiftDay(today(), -6), today(), source)}>7 дней</a>
+            <a href={link(tab, shiftDay(today(), -29), today(), source)}>30 дней</a>
+            <a href={link(tab, thisMonth.from, thisMonth.to, source)}>этот месяц</a>
+            <a href={link(tab, prevMonth.from, prevMonth.to, source)}>прошлый</a>
           </span>
         </form>
 
@@ -173,9 +183,9 @@ export default async function AdminPage({ searchParams }) {
                     <div className="kpi"><b>{price(spend, data.totals.bookings)}</b><span>заявка ({data.totals.bookings} в базе)</span></div>
                     <div className="kpi"><b>{price(spend, data.totals.attended)}</b><span>дошедший ({data.totals.attended})</span></div>
                     <div className="kpi"><b>{price(spend, data.totals.paid)}</b><span>оплата ({data.totals.paid})</span></div>
-                    <div className="kpi"><b>{spend ? (data.money.revenue / 100 / spend).toFixed(2) : '—'}</b><span>окупаемость, EUR на EUR</span></div>
+                    <div className="kpi"><b>{spend ? (data.money.bySource.meta.revenue / 100 / spend).toFixed(2) : '—'}</b><span>окупаемость воронки, EUR на EUR</span></div>
                     <div className="kpi"><b>{ads.leads}</b><span>лидов по данным Меты</span></div>
-                    <div className="kpi"><b>{money(data.money.revenue)}</b><span>выручка</span></div>
+                    <div className="kpi"><b>{money(data.money.bySource.meta.revenue)}</b><span>выручка с воронки</span></div>
                   </div>
                   <p className="muted">
                     Лиды Меты и заявки в базе почти никогда не совпадают: пиксель считает браузеры,
@@ -368,6 +378,26 @@ export default async function AdminPage({ searchParams }) {
 
         {tab === 'money' && (
           <>
+            <div className="card">
+              <h2>Откуда деньги</h2>
+              <div className="kpis">
+                <div className="kpi">
+                  <b>{money(data.money.bySource.meta.revenue)}</b>
+                  <span>воронка, {data.money.bySource.meta.count} оплат</span>
+                </div>
+                <div className="kpi">
+                  <b>{money(data.money.bySource.organic.revenue)}</b>
+                  <span>органика, {data.money.bySource.organic.count} оплат</span>
+                </div>
+              </div>
+              <p className="muted">
+                Воронка — оплаты, привязанные к заявке: эти люди пришли с рекламы, и только они
+                имеют отношение к её окупаемости. Органика — старые ученики, счета и переводы
+                мимо воронки. Ниже всё считается по выбранному источнику
+                {source === 'all' ? ' (сейчас — по обоим).' : source === 'meta' ? ' (сейчас — только воронка).' : ' (сейчас — только органика).'}
+              </p>
+            </div>
+
             <div className="card">
               <h2>Деньги за период</h2>
               <div className="kpis">
