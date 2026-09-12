@@ -143,20 +143,22 @@ export function Shell({ session, active, activeTab, title, children }) {
           <nav className="menu">
             <a className={active === 'work' ? 'on' : ''} href="/admin/work">Управление</a>
 
-            <details className={'dd' + (active === 'admin' ? ' on' : '')}>
-              <summary>Аналитика</summary>
-              <div className="pop">
-                {tabs.map(tab => (
-                  <a
-                    key={tab.key}
-                    className={active === 'admin' && activeTab === tab.key ? 'on' : ''}
-                    href={'/admin?tab=' + tab.key}
-                  >
-                    {tab.label}
-                  </a>
-                ))}
-              </div>
-            </details>
+            {owner && (
+              <details className={'dd' + (active === 'admin' ? ' on' : '')}>
+                <summary>Аналитика</summary>
+                <div className="pop">
+                  {tabs.map(tab => (
+                    <a
+                      key={tab.key}
+                      className={active === 'admin' && activeTab === tab.key ? 'on' : ''}
+                      href={'/admin?tab=' + tab.key}
+                    >
+                      {tab.label}
+                    </a>
+                  ))}
+                </div>
+              </details>
+            )}
 
             <a className={active === 'wiki' ? 'on' : ''} href="/admin/wiki">База знаний</a>
             <a className={active === 'ask' ? 'on' : ''} href="/admin/ask">Спросить</a>
