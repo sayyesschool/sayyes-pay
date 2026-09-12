@@ -16,7 +16,8 @@ export async function GET() {
       headers: {
         'content-type': 'application/json',
         'x-api-key': key,
-        'anthropic-version': '2023-06-01'
+        'anthropic-version': '2023-06-01',
+        ...(process.env.ANTHROPIC_WORKSPACE_ID ? { 'anthropic-workspace-id': process.env.ANTHROPIC_WORKSPACE_ID } : {})
       },
       body: JSON.stringify({
         model,
@@ -36,7 +37,7 @@ export async function GET() {
       });
     }
 
-    return NextResponse.json({ hasKey: true, ok: true, model });
+    return NextResponse.json({ hasKey: true, ok: true, model, workspace: Boolean(process.env.ANTHROPIC_WORKSPACE_ID) });
   } catch (e) {
     return NextResponse.json({ hasKey: true, ok: false, model, reason: e.message });
   }
