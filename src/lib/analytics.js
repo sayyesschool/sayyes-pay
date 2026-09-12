@@ -324,9 +324,39 @@ export async function buildAnalytics({ from, to, source = 'all' } = {}) {
       && booking.status !== 'cancelled').length
   };
 
+  // Экран за экраном: общая воронка показывает, что люди не доходят,
+  // но не где именно. Между первым экраном и первым вопросом квиза стоят
+  // два отсекающих экрана, и без разбивки их вклад не виден.
+  const SCREENS = [
+    ['landing', 'Первый экран'],
+    ['language', 'Вопрос про русский язык'],
+    ['russian_only', 'Ответили «не подходит»'],
+    ['country', 'Страна'],
+    ['q_level', 'Уровень'],
+    ['q_goal', 'Цель'],
+    ['social_proof', 'Отзывы'],
+    ['q_time', 'Время в неделю'],
+    ['q_format', 'Формат'],
+    ['q_readiness', 'Готовность'],
+    ['progress_plan', 'План прогресса'],
+    ['q_age', 'Возраст'],
+    ['differentiation', 'Чем отличаемся'],
+    ['value_reinforcement', 'Что на уроке'],
+    ['contacts', 'Контакты'],
+    ['time_slots', 'Выбор времени'],
+    ['confirmation', 'Подтверждение']
+  ];
+
+  const screens = SCREENS.map(([key, label]) => ({
+    key,
+    label,
+    value: dates.reduce((acc, date) => acc + (traffic[date][key] || 0), 0)
+  }));
+
   return {
     range: { from: first, to: last, days: dates.length },
     daily,
+    screens,
     lessons,
     totals,
     funnel,
