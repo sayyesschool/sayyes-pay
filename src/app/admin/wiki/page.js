@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { SESSION_COOKIE, readSession } from '@/lib/adminAuth';
 import { ADMIN_CSS, SECTIONS } from '@/lib/adminUi';
 import { listPages } from '@/lib/wiki';
+import { seedWikiIfEmpty } from '@/lib/wikiSeed';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,7 +15,8 @@ export default async function WikiIndex({ searchParams }) {
 
   const params = await searchParams;
   const message = params?.msg ? String(params.msg) : null;
-  const pages = await listPages();
+  // Первый заход: кладём стартовые страницы, чтобы вики не встречала пустотой.
+  const pages = await seedWikiIfEmpty();
 
   return (
     <>
