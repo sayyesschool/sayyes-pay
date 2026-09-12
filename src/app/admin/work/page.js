@@ -8,6 +8,9 @@ import { loadBookings, slotStartMs, dayKey, today } from '@/lib/analytics';
 export const dynamic = 'force-dynamic';
 
 const DAY = 86400000;
+const DOW = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+const MONTHS = ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь',
+  'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь'];
 
 function matches(booking, query) {
   const q = query.trim().toLowerCase();
@@ -18,7 +21,7 @@ function matches(booking, query) {
     .some(value => String(value || '').toLowerCase().includes(q));
 }
 
-function Row({ booking }) {
+function Row({ booking, time }) {
   return (
     <div className="row">
       <div>
@@ -32,12 +35,18 @@ function Row({ booking }) {
           ))}
         </div>
       </div>
-      <div className="when">{whenLabel(booking)}</div>
+      <div className="when">{time || whenLabel(booking)}</div>
     </div>
   );
 }
 
-export default async function WorkPage({ searchParams }) {
+function List({ items, empty }) {
+  if (!items.length) return <p className="muted">{empty}</p>;
+
+  return items.map(booking => <Row key={booking.id} booking={booking} />);
+}
+
+export default async function ManagePage({ searchParams }) {
   const store = await cookies();
   const session = readSession(store.get(SESSION_COOKIE)?.value);
 
@@ -46,19 +55,60 @@ export default async function WorkPage({ searchParams }) {
   const params = await searchParams;
   const query = String(params?.q || '');
   const message = params?.msg ? String(params.msg) : null;
-  const all = await loadBookings();
-  const now = Date.now();
   const todayKey = today();
+  const month = /^\d{4}-\d{2}$/.test(String(params?.month || '')) ? params.month : todayKey.slice(0, 7);
+  const selected = /^\d{4}-\d{2}-\d{2}$/.test(String(params?.day || '')) ? params.day : todayKey;
 
+  const all = await loadBookings();
   const active = all.filter(booking => booking.status !== 'cancelled');
-  const todays = active
-    .filter(booking => {
-      const start = slotStartMs(booking);
+  const now = Date.now();
 
-      return start && dayKey(start) === todayKey;
-    })
-    .sort((a, b) => slotStartMs(a) - slotStartMs(b));
+  // Раскладываем записи по дням один раз: дальше и календарь, и списки берут отсюда.
+  const byDay = {};
 
+  for (const booking of active) {
+    const start = slotStartMs(booking);
+
+    if (!start) continue;
+
+    const key = dayKey(start);
+
+    (byDay[key] || (byDay[key] = [])).push(booking);
+  }
+
+  for (const key of Object.keys(byDay)) {
+    byDay[key].sort((a, b) => slotStartMs(a) - slotStartMs(b));
+  }
+
+  // --- календарь месяца ---
+  const [year, mon] = month.split('-').map(Number);
+  const firstDay = new Date(Date.UTC(year, mon - 1, 1));
+  const daysInMonth = new Date(Date.UTC(year, mon, 0)).getUTCDate();
+  const shift = (firstDay.getUTCDay() + 6) % 7;
+  const prev = new Date(Date.UTC(year, mon - 2, 1)).toISOString().slice(0, 7);
+  const next = new Date(Date.UTC(year, mon, 1)).toISOString().slice(0, 7);
+  const cells = [];
+
+  for (let i = 0; i < shift; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) {
+    cells.push(month + '-' + String(d).padStart(2, '0'));
+  }
+
+  const dayItems = byDay[selected] || [];
+
+  // --- что требует действий ---
+  const unmarked = active.filter(booking => {
+    const start = slotStartMs(booking);
+
+    return start && start < now && (booking.attended === undefined || booking.attended === null);
+  }).sort((a, b) => slotStartMs(b) - slotStartMs(a));
+
+  const noLink = active.filter(booking => booking.attended === true && !booking.paid && !booking.payLinkSentAt);
+  const waitingPay = active.filter(booking => booking.attended === true && !booking.paid && booking.payLinkSentAt);
+  const noTime = active.filter(booking => !booking.slot || booking.slot === 'no_time');
+  const todo = unmarked.length + noLink.length + waitingPay.length + noTime.length;
+
+  const todays = byDay[todayKey] || [];
   const week = active
     .filter(booking => {
       const start = slotStartMs(booking);
@@ -67,65 +117,105 @@ export default async function WorkPage({ searchParams }) {
     })
     .sort((a, b) => slotStartMs(a) - slotStartMs(b));
 
-  // Долги: урок прошёл, отметки нет. Это первое, что должен видеть менеджер.
-  const unmarked = active
-    .filter(booking => {
-      const start = slotStartMs(booking);
-
-      return start && start < now && (booking.attended === undefined || booking.attended === null);
-    })
-    .sort((a, b) => slotStartMs(b) - slotStartMs(a));
-
-  const pending = active.filter(booking => !booking.slot || booking.slot === 'no_time');
   const found = query ? all.filter(booking => matches(booking, query)).slice(0, 40) : [];
+  const link = (day, m) => '/admin/work?month=' + (m || month) + '&day=' + day;
 
   return (
-    <Shell session={session} active="work" title="Работа">
-        {message && <div className={'msg' + (message.startsWith('Ошибка') ? ' err' : '')}>{message}</div>}
+    <Shell session={session} active="work" title="Управление">
+      {message && <div className={'msg' + (message.startsWith('Ошибка') ? ' err' : '')}>{message}</div>}
 
-        <form className="card" method="get">
-          <div className="field">
-            <label>Поиск по имени, почте, телефону или коду записи</label>
-            <input type="search" name="q" defaultValue={query} placeholder="например, Ирина или tfl1mrpg" />
-          </div>
-          <button className="primary" type="submit">Найти</button>
-        </form>
-
-        {query && (
-          <div className="card">
-            <h2>Найдено: {found.length}</h2>
-            {found.map(booking => <Row key={booking.id} booking={booking} />)}
-            {found.length === 0 && <p className="muted">Ничего не нашлось.</p>}
-          </div>
-        )}
-
-        {unmarked.length > 0 && (
-          <div className="card">
-            <h2>Без отметки — {unmarked.length}</h2>
-            <p className="muted">Урок прошёл, но никто не отметил, состоялся он или нет.</p>
-            {unmarked.slice(0, 20).map(booking => <Row key={booking.id} booking={booking} />)}
-          </div>
-        )}
-
-        <div className="card">
-          <h2>Сегодня — {todays.length}</h2>
-          {todays.map(booking => <Row key={booking.id} booking={booking} />)}
-          {todays.length === 0 && <p className="muted">На сегодня уроков нет.</p>}
+      <div className="card">
+        <div className="calhead">
+          <a href={'/admin/work?month=' + prev + '&day=' + selected}>←</a>
+          <b>{MONTHS[mon - 1]} {year}</b>
+          <a href={'/admin/work?month=' + next + '&day=' + selected}>→</a>
         </div>
 
-        <div className="card">
-          <h2>Ближайшая неделя — {week.length}</h2>
-          {week.map(booking => <Row key={booking.id} booking={booking} />)}
-          {week.length === 0 && <p className="muted">Записей на неделю пока нет.</p>}
+        <div className="cal">
+          {DOW.map(name => <div className="dow" key={name}>{name}</div>)}
+          {cells.map((day, index) => {
+            if (!day) return <span className="day empty" key={'e' + index} />;
+
+            const count = (byDay[day] || []).length;
+            const classes = ['day'];
+
+            if (count) classes.push('has');
+            if (day === todayKey) classes.push('today');
+            if (day === selected) classes.push('on');
+
+            return (
+              <a className={classes.join(' ')} href={link(day)} key={day}>
+                <span className="n">{Number(day.slice(8))}</span>
+                {count ? <span className="c">{count} урок{count > 1 ? 'а' : ''}</span> : null}
+              </a>
+            );
+          })}
         </div>
 
-        {pending.length > 0 && (
-          <div className="card">
-            <h2>Без времени — {pending.length}</h2>
-            <p className="muted">Человек оставил заявку, но не выбрал слот: с ним нужно связаться.</p>
-            {pending.map(booking => <Row key={booking.id} booking={booking} />)}
-          </div>
-        )}
+        <div className="sub-h">
+          Расписание на {selected.slice(8)}.{selected.slice(5, 7)}
+          {selected === todayKey ? ' — сегодня' : ''}
+        </div>
+        <List
+          items={dayItems.map(booking => booking)}
+          empty="В этот день уроков нет."
+        />
+      </div>
+
+      <form className="card" method="get">
+        <div className="field">
+          <label>Поиск по имени, почте, телефону или коду записи</label>
+          <input type="search" name="q" defaultValue={query} placeholder="например, Ирина или tfl1mrpg" />
+        </div>
+        <button className="primary" type="submit">Найти</button>
+      </form>
+
+      {query && (
+        <div className="card">
+          <h2>Найдено: {found.length}</h2>
+          <List items={found} empty="Ничего не нашлось." />
+        </div>
+      )}
+
+      <details className="block" open={todo > 0}>
+        <summary>
+          <span>Требуют действий</span>
+          <span className="count">{todo}</span>
+        </summary>
+        <div className="body">
+          <div className="sub-h">Уроки без отметки — {unmarked.length}</div>
+          <List items={unmarked.slice(0, 20)} empty="Все уроки отмечены." />
+
+          <div className="sub-h">Пришли, но ссылка на оплату не отправлена — {noLink.length}</div>
+          <List items={noLink} empty="Таких нет." />
+
+          <div className="sub-h">Ссылка отправлена, оплаты пока нет — {waitingPay.length}</div>
+          <List items={waitingPay} empty="Таких нет." />
+
+          <div className="sub-h">Заявки без выбранного времени — {noTime.length}</div>
+          <List items={noTime} empty="Таких нет." />
+        </div>
+      </details>
+
+      <details className="block">
+        <summary>
+          <span>Записи на сегодня</span>
+          <span className="count">{todays.length}</span>
+        </summary>
+        <div className="body">
+          <List items={todays} empty="На сегодня уроков нет." />
+        </div>
+      </details>
+
+      <details className="block">
+        <summary>
+          <span>Записи на ближайшие 7 дней</span>
+          <span className="count">{week.length}</span>
+        </summary>
+        <div className="body">
+          <List items={week} empty="Записей на неделю пока нет." />
+        </div>
+      </details>
     </Shell>
   );
 }
