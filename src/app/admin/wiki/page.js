@@ -1,7 +1,7 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { SESSION_COOKIE, readSession } from '@/lib/adminAuth';
-import { ADMIN_CSS, SECTIONS } from '@/lib/adminUi';
+import { Shell } from '@/lib/adminShell';
 import { listPages } from '@/lib/wiki';
 import { seedWikiIfEmpty } from '@/lib/wikiSeed';
 
@@ -19,20 +19,7 @@ export default async function WikiIndex({ searchParams }) {
   const pages = await seedWikiIfEmpty();
 
   return (
-    <>
-      <style dangerouslySetInnerHTML={{ __html: ADMIN_CSS }} />
-      <div className="wrap">
-        <div className="top">
-          <h1>База знаний</h1>
-          <div className="who">@{session.username}</div>
-        </div>
-
-        <div className="nav">
-          {SECTIONS.map(item => (
-            <a key={item.key} className={item.key === 'wiki' ? 'on' : ''} href={item.href}>{item.label}</a>
-          ))}
-        </div>
-
+    <Shell session={session} active="wiki" title="База знаний">
         {message && <div className={'msg' + (message.startsWith('Ошибка') ? ' err' : '')}>{message}</div>}
 
         <div className="card">
@@ -70,7 +57,6 @@ export default async function WikiIndex({ searchParams }) {
             <button className="primary" type="submit">Создать</button>
           </form>
         </div>
-      </div>
-    </>
+    </Shell>
   );
 }
