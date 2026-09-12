@@ -3,11 +3,23 @@ import { redirect } from 'next/navigation';
 import { SESSION_COOKIE, readSession } from '@/lib/adminAuth';
 import { statusTags } from '@/lib/adminUi';
 import { Shell } from '@/lib/adminShell';
-import { getBooking } from '@/lib/redis';
+import { getBooking, getBookedSlots } from '@/lib/redis';
+import { isSlotClosed } from '@/lib/capacity';
+import { today, shiftDay, slotStartMs } from '@/lib/analytics';
 import { listPacks } from '@/lib/adminActions';
 import { introActive, introExpiry } from '@/services/intro';
 
 export const dynamic = 'force-dynamic';
+
+// Сетка расписания в базовом поясе: с 10:00 до 20:00 каждые полчаса.
+const GRID = [];
+
+for (let h = 10; h <= 20; h++) {
+  GRID.push(String(h).padStart(2, '0') + ':00');
+  if (h < 20) GRID.push(String(h).padStart(2, '0') + ':30');
+}
+
+const DOW = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
 
 function fmt(value) {
   if (!value) return '—';
@@ -42,6 +54,10 @@ export default async function ClientPage({ params, searchParams }) {
 
   const back = '/admin/client/' + id;
   const packs = await listPacks(booking);
+  const booked = await getBookedSlots();
+  const days = [];
+
+  for (let i = 0; i < 14; i++) days.push(shiftDay(today(), i));
   const answers = booking.quizAnswers || {};
   const offerUntil = introExpiry(booking);
 
@@ -113,20 +129,70 @@ export default async function ClientPage({ params, searchParams }) {
           </p>
         </div>
 
-        <div className="card">
-          <h2>Перенести</h2>
-          <form method="post" action="/api/admin/action">
-            <input type="hidden" name="action" value="reschedule" />
-            <input type="hidden" name="id" value={booking.id} />
-            <input type="hidden" name="back" value={back} />
-            <div className="field">
-              <label>Новое время в поясе расписания, формат 2026-09-15_17:00</label>
-              <input type="text" name="slot" placeholder="2026-09-15_17:00" defaultValue={booking.slot && booking.slot !== 'no_time' ? booking.slot : ''} />
-            </div>
-            <button className="primary" type="submit">Перенести</button>
-          </form>
-          <p className="muted">Ученику уйдёт новое время в бот и на почту, напоминания пересчитаются.</p>
-        </div>
+        <details className="block">
+          <summary>
+            <span>Перенести</span>
+            <span className="count">{booking.slotDate ? booking.slotDate + ' ' + (booking.slotMsk || '') : 'времени нет'}</span>
+          </summary>
+          <div className="body">
+            {days.map(day => {
+              const free = GRID.filter(time => {
+                const key = day + '_' + time;
+
+                return !isSlotClosed(key) && slotStartMs({ slot: key }) > Date.now();
+              });
+
+              if (!free.length) return null;
+
+              const label = new Date(day + 'T00:00:00Z');
+
+              return (
+                <div key={day}>
+                  <div className="sub-h">
+                    {day.slice(8)}.{day.slice(5, 7)}, {DOW[label.getUTCDay()]}
+                  </div>
+                  <div className="slots">
+                    {free.map(time => {
+                      const key = day + '_' + time;
+                      const mine = key === booking.slot;
+                      const taken = booked.includes(key) && !mine;
+
+                      if (taken) return <span className="slot off" key={key}>{time}</span>;
+                      if (mine) return <span className="slot mine" key={key}>{time}</span>;
+
+                      return (
+                        <form method="post" action="/api/admin/action" key={key}>
+                          <input type="hidden" name="action" value="reschedule" />
+                          <input type="hidden" name="id" value={booking.id} />
+                          <input type="hidden" name="back" value={back} />
+                          <input type="hidden" name="slot" value={key} />
+                          <button className="slot" type="submit">{time}</button>
+                        </form>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+
+            <p className="muted">
+              Серым и зачёркнутым — занятые слоты, их видно, чтобы не предлагать ученику
+              то, что уже отдано. Закрытые дни в сетке не показываются вовсе.
+              Время в поясе расписания (UTC+3).
+            </p>
+
+            <form method="post" action="/api/admin/action">
+              <input type="hidden" name="action" value="reschedule" />
+              <input type="hidden" name="id" value={booking.id} />
+              <input type="hidden" name="back" value={back} />
+              <div className="field">
+                <label>Другое время вне сетки, формат 2026-09-15_17:00</label>
+                <input type="text" name="slot" placeholder="2026-09-15_17:00" />
+              </div>
+              <button className="primary" type="submit">Перенести</button>
+            </form>
+          </div>
+        </details>
 
         <div className="card">
           <h2>Оплата</h2>
