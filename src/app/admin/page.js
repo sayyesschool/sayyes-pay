@@ -52,6 +52,10 @@ export default async function AdminPage({ searchParams }) {
   if (!session) redirect('/admin/login');
 
   const owner = session.role === 'owner';
+
+  // Аналитика — только для управляющих. Менеджерам туда не нужно,
+  // и скрыть пункт в меню недостаточно: адрес можно набрать руками.
+  if (!owner) redirect('/admin/work');
   const params = await searchParams;
   const valid = value => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
   const to = valid(params?.to) ? params.to : today();
