@@ -276,6 +276,37 @@ export default async function AdminPage({ searchParams }) {
             </div>
 
             <div className="card">
+              <h2>Экран за экраном</h2>
+              <div className="scroll">
+                <table>
+                  <thead><tr><th>Экран</th><th>Людей</th><th>От первого</th><th>С прошлого</th></tr></thead>
+                  <tbody>
+                    {data.screens.map((row, index) => {
+                      const first = data.screens[0].value;
+                      const prev = index === 0 ? null : data.screens[index - 1].value;
+
+                      if (!row.value && index > 2) return null;
+
+                      return (
+                        <tr key={row.key}>
+                          <td>{row.label}</td>
+                          <td><b>{row.value}</b></td>
+                          <td>{first ? Math.round((row.value / first) * 1000) / 10 + '%' : '—'}</td>
+                          <td>{prev ? Math.round((row.value / prev) * 1000) / 10 + '%' : '—'}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <p className="muted">
+                Каждая строка — экран, который человек реально увидел. Здесь видно, какой именно
+                экран съедает людей: до 12 сентября первый экран не считался, в старых периодах
+                проценты от него смысла не имеют.
+              </p>
+            </div>
+
+            <div className="card">
               <h2>Шаги воронки по дням</h2>
               <div className="scroll">
                 <table>
