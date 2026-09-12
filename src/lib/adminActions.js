@@ -1,4 +1,4 @@
-import { getBooking, updateBooking, addBookedSlot, removeBookedSlot, getBookedSlots, kvSet } from '@/lib/redis';
+import { getBooking, updateBooking, addBookedSlot, removeBookedSlot, getBookedSlots, kvSet, kvGet, kvKeys } from '@/lib/redis';
 import { sendMessage, formatManagerCard } from '@/lib/telegram';
 import { notifyManagers } from '@/lib/managers';
 import { sendTrialAttended, sendPurchase } from '@/lib/meta';
@@ -271,6 +271,39 @@ export async function markPaid(bookingId, amountEuro, packId, by) {
     + formatManagerCard({ ...booking, paid: true, paidAmount: amount, paidPack: pack }));
 
   return { ok: true, message: 'Оплата проведена' };
+}
+
+// --- Убрать старые хвосты ---
+// Не удаление, а архив: запись пропадает из списков, сводок и аналитики,
+// но остаётся в поиске и возвращается командой /cleanup undo. Ученикам и в общий
+// чат ничего не уходит намеренно: это уборка, а не событие.
+export async function archiveUnmarked(olderThanDays, by) {
+  const days = Number(olderThanDays) || 30;
+  const edge = Date.now() - days * 24 * 60 * 60 * 1000;
+  const keys = await kvKeys('booking:*');
+  let archived = 0;
+
+  for (const key of keys) {
+    const booking = await kvGet(key);
+
+    if (!booking || booking.archived) continue;
+    if (booking.attended === true || booking.attended === false) continue;
+
+    const start = slotStartMs(booking);
+
+    if (!start || start > edge) continue;
+
+    await updateBooking(booking.id, {
+      archived: true,
+      archivedAt: new Date().toISOString(),
+      archivedBy: '@' + by,
+      archivedReason: 'старые уроки без отметки'
+    });
+
+    archived++;
+  }
+
+  return { ok: true, message: 'В архив ушло записей: ' + archived };
 }
 
 // --- Сообщение ученику ---
