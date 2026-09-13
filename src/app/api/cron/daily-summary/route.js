@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getAllActiveBookings, kvGet, getManagerChatId } from '@/lib/redis';
+import { getAllActiveBookings, kvGet, kvKeys, getManagerChatId } from '@/lib/redis';
 import { sendMessage } from '@/lib/telegram';
 import { getManagerChatIds } from '@/lib/managers';
 import { slotKeyToDate } from '@/lib/time';
@@ -101,21 +101,37 @@ export async function GET(request) {
   }
 
   try {
-    const today = new Date().toISOString().slice(0, 10);
-    // Архив — заявки до запуска рекламы. В сводке они только портят цифры.
-    const bookings = (await getAllActiveBookings()).filter(b => !b.archived);
+    // Сутки считаем в базовом поясе расписания (UTC+3), как /today и вся аналитика.
+    // Раньше здесь была дата по UTC, а крон уходит в 22:00 МСК — заявки, сделанные
+    // между полуночью и тремя часами ночи, попадали во вчерашние сутки и в сводку
+    // не входили вовсе. Из-за этого сводка расходилась с ботом на две-три заявки.
+    const TZ_SHIFT = 3 * 60 * 60 * 1000;
+    const dayOf = value => {
+      const ms = value ? new Date(value).getTime() : 0;
 
-    // Today's new bookings
-    const todayBookings = bookings.filter(b => {
-      const created = b.createdAt ? b.createdAt.slice(0, 10) : '';
-      return created === today;
-    });
+      return ms ? new Date(ms + TZ_SHIFT).toISOString().slice(0, 10) : '';
+    };
+    const today = dayOf(Date.now());
+
+    // Берём все заявки, а не только активные: отменённые за день тоже надо показать,
+    // иначе цифра «заявок сегодня» молча не сходится с тем, что видно в боте.
+    const keys = await kvKeys('booking:*');
+    const everything = [];
+
+    for (const key of keys) {
+      const booking = await kvGet(key);
+
+      if (booking && !booking.archived && !booking.introTest) everything.push(booking);
+    }
+
+    const bookings = everything.filter(b => !b.status || b.status === 'confirmed');
+    const todayBookings = everything.filter(b => dayOf(b.createdAt) === today);
+    const cancelledToday = todayBookings.filter(b => b.status === 'cancelled').length;
 
     const totalToday = todayBookings.length;
-    const withoutTg = todayBookings.filter(b => {
-      const tg = b.telegram || '';
-      return tg.startsWith('+') || /^\d{7,}$/.test(tg.replace(/\s/g, ''));
-    }).length;
+    // Ник и телефон одинаково годятся: по обоим менеджер может написать человеку.
+    // Раньше телефон считался «отсутствием телеграма», и цифра пугала зря.
+    const withoutTg = todayBookings.filter(b => !String(b.telegram || '').trim()).length;
     // Раньше здесь было общее число активных записей — в него попадали и давно
     // прошедшие уроки, и цифра только росла. Считаем то, что реально впереди.
     const now = Date.now();
@@ -141,7 +157,8 @@ export async function GET(request) {
       `<b>Выбрали конкретный слот:</b> ${pickedSlot}\n` +
       `<b>Нажали «Нет удобного времени»:</b> ${noTime}\n` +
       `<b>Запустили бота («Начать»):</b> ${startedBot} из ${totalToday}\n` +
-      `<b>Из них без Telegram аккаунта:</b> ${withoutTg}\n` +
+      `<b>Оставили только почту, без телеграма:</b> ${withoutTg}\n` +
+      `<b>Отменили запись:</b> ${cancelledToday}\n` +
       `<b>Предстоящих уроков:</b> ${upcomingCount}\n` +
       `<b>Ждут подбора времени:</b> ${awaitingTime}\n\n` +
       funnelBlock(trackData);
