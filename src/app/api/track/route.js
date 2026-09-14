@@ -18,7 +18,7 @@ function cleanSource(value) {
 
 export async function POST(request) {
   try {
-    const { step, src } = await request.json();
+    const { step, src, ad } = await request.json();
 
     if (!step) return NextResponse.json({ error: 'Missing step' }, { status: 400 });
 
@@ -34,6 +34,16 @@ export async function POST(request) {
     const bucket = name + '|' + cleanSource(src);
 
     data[bucket] = (data[bucket] || 0) + 1;
+
+    // Разрез по объявлению — третий набор ключей, через собаку: landing@120253052490740019.
+    // Появляется только у тех объявлений, где в параметрах ссылки есть макрос ad_id.
+    const adId = String(ad || '').replace(/[^0-9]/g, '').slice(0, 20);
+
+    if (adId) {
+      const adBucket = name + '@' + adId;
+
+      data[adBucket] = (data[adBucket] || 0) + 1;
+    }
 
     await kvSet(key, data, 60 * 60 * 24 * 90);
 
