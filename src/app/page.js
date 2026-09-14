@@ -237,7 +237,12 @@ export default function Home() {
 				description="Мы свяжемся с вами, запишем на урок, ответим на вопросы и расскажем о курсах"
 				centered
 			>
-				<div className="card card--yellow">
+				{/* overflow снят намеренно: у .card в общих стилях школы стоит hidden
+				    ради скруглённых углов, и он обрезал последний пункт выпадающего списка
+				    — «Позвоните мне в Telegram» было не видно. Фон у карточки сплошной,
+				    скруглению border-radius хватает и без обрезки. Стиль инлайном,
+				    потому что shared.css подключается после наших стилей и перебил бы класс. */}
+				<div className="card card--yellow" style={{ overflow: 'visible' }}>
 					<div className="card__body">
 						<RequestForm onSubmit={() => setIsRequestModalOpen(true)} />
 					</div>
