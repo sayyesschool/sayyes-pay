@@ -176,7 +176,9 @@ h2{font-size:21px;font-weight:700;color:var(--dark);line-height:1.3;margin-botto
 .review-extra-name{font-size:12px;font-weight:700;color:var(--dark)}
 .review-extra-text{font-size:11px;color:var(--purple-dark);line-height:1.5;font-style:italic;margin-top:2px}
 </style>
-<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
+<!-- Turnstile грузился на КАЖДОМ открытии воронки, хотя window.TURNSTILE_SITE_KEY нигде не задан,
+     то есть капча не работала ни разу. Код вызова в submit оставлен: чтобы включить капчу,
+     нужно задать ключ и вернуть сюда этот скрипт. -->
 </head>
 <body>
 <main>
@@ -187,7 +189,7 @@ h2{font-size:21px;font-weight:700;color:var(--dark);line-height:1.3;margin-botto
   <div class="logo"><span class="logo-text">SAY YES!</span> <span style="font-size:11px;color:var(--gray)">English School</span></div>
   <div class="content">
     <h2>Сколько лет вы учите английский?</h2>
-    <p class="sub">Ответьте на 7 коротких вопросов — подберём формат и время бесплатного урока. Это 2 минуты.</p>
+    <p class="sub">Несколько коротких вопросов — подберём формат и время бесплатного урока. Это 2 минуты.</p>
     <div class="options" style="margin-top:12px">
       <div class="opt" onclick="pick(this,9)"><span class="opt-icon">🌱</span>Только начинаю</div>
       <div class="opt" onclick="pick(this,9)"><span class="opt-icon">📗</span>1–3 года</div>
@@ -229,7 +231,7 @@ h2{font-size:21px;font-weight:700;color:var(--dark);line-height:1.3;margin-botto
 
 <!-- ======= S3: LEVEL ======= -->
 <div class="screen" id="s3">
-  <div class="progress-wrap"><div class="progress-track"><div class="progress-fill" style="width:28%"></div></div><div class="progress-label">2 из 7</div></div>
+  <div class="progress-wrap"><div class="progress-track"><div class="progress-fill" style="width:30%"></div></div><div class="progress-label">3 из 10</div></div>
   <div class="nav"><button class="back-btn" onclick="go(9)">← Назад</button></div>
   <div class="content">
     <h2>Как бы вы оценили свой уровень английского?</h2>
@@ -245,7 +247,7 @@ h2{font-size:21px;font-weight:700;color:var(--dark);line-height:1.3;margin-botto
 
 <!-- ======= S4: GOAL ======= -->
 <div class="screen" id="s4">
-  <div class="progress-wrap"><div class="progress-track"><div class="progress-fill" style="width:42%"></div></div><div class="progress-label">3 из 7</div></div>
+  <div class="progress-wrap"><div class="progress-track"><div class="progress-fill" style="width:40%"></div></div><div class="progress-label">4 из 10</div></div>
   <div class="nav"><button class="back-btn" onclick="go(3)">← Назад</button></div>
   <div class="content">
     <h2>Зачем вам английский сейчас?</h2>
@@ -289,7 +291,7 @@ h2{font-size:21px;font-weight:700;color:var(--dark);line-height:1.3;margin-botto
         <div class="review-head">
           <div class="review-avatar" style="background:#7c3aed">
             <span class="review-initials">АК</span>
-            <img class="review-photo" src="https://randomuser.me/api/portraits/women/44.jpg" alt="" onerror="this.remove()">
+            <img class="review-photo" loading="lazy" decoding="async" src="https://randomuser.me/api/portraits/women/44.jpg" alt="" onerror="this.remove()">
           </div>
           <div><div class="review-name">Анастасия К.</div><div class="review-stars">★★★★★</div></div>
         </div>
@@ -302,7 +304,7 @@ h2{font-size:21px;font-weight:700;color:var(--dark);line-height:1.3;margin-botto
         <div class="review-head">
           <div class="review-avatar" style="background:#e91e8c">
             <span class="review-initials">ДМ</span>
-            <img class="review-photo" src="https://randomuser.me/api/portraits/women/26.jpg" alt="" onerror="this.remove()">
+            <img class="review-photo" loading="lazy" decoding="async" src="https://randomuser.me/api/portraits/women/26.jpg" alt="" onerror="this.remove()">
           </div>
           <div><div class="review-name">Дарья М.</div><div class="review-stars">★★★★★</div></div>
         </div>
@@ -315,7 +317,7 @@ h2{font-size:21px;font-weight:700;color:var(--dark);line-height:1.3;margin-botto
         <div class="review-head">
           <div class="review-avatar" style="background:#5b21b6">
             <span class="review-initials">НЗ</span>
-            <img class="review-photo" src="https://randomuser.me/api/portraits/women/65.jpg" alt="" onerror="this.remove()">
+            <img class="review-photo" loading="lazy" decoding="async" src="https://randomuser.me/api/portraits/women/65.jpg" alt="" onerror="this.remove()">
           </div>
           <div><div class="review-name">Наталья З.</div><div class="review-stars">★★★★★</div></div>
         </div>
@@ -328,7 +330,7 @@ h2{font-size:21px;font-weight:700;color:var(--dark);line-height:1.3;margin-botto
         <div class="review-head">
           <div class="review-avatar" style="background:#be185d">
             <span class="review-initials">ГР</span>
-            <img class="review-photo" src="https://randomuser.me/api/portraits/women/31.jpg" alt="" onerror="this.remove()">
+            <img class="review-photo" loading="lazy" decoding="async" src="https://randomuser.me/api/portraits/women/31.jpg" alt="" onerror="this.remove()">
           </div>
           <div><div class="review-name">Галина Р.</div><div class="review-stars">★★★★★</div></div>
         </div>
@@ -341,7 +343,7 @@ h2{font-size:21px;font-weight:700;color:var(--dark);line-height:1.3;margin-botto
         <div class="review-head">
           <div class="review-avatar" style="background:#6d28d9">
             <span class="review-initials">ВФ</span>
-            <img class="review-photo" src="https://randomuser.me/api/portraits/women/57.jpg" alt="" onerror="this.remove()">
+            <img class="review-photo" loading="lazy" decoding="async" src="https://randomuser.me/api/portraits/women/57.jpg" alt="" onerror="this.remove()">
           </div>
           <div><div class="review-name">Виктория Ф.</div><div class="review-stars">★★★★★</div></div>
         </div>
@@ -354,7 +356,7 @@ h2{font-size:21px;font-weight:700;color:var(--dark);line-height:1.3;margin-botto
         <div class="review-head">
           <div class="review-avatar" style="background:#c026d3">
             <span class="review-initials">ТС</span>
-            <img class="review-photo" src="https://randomuser.me/api/portraits/women/8.jpg" alt="" onerror="this.remove()">
+            <img class="review-photo" loading="lazy" decoding="async" src="https://randomuser.me/api/portraits/women/8.jpg" alt="" onerror="this.remove()">
           </div>
           <div><div class="review-name">Тата С.</div><div class="review-stars">★★★★★</div></div>
         </div>
@@ -411,7 +413,7 @@ h2{font-size:21px;font-weight:700;color:var(--dark);line-height:1.3;margin-botto
 
 <!-- ======= S5: TIME COMMITMENT ======= -->
 <div class="screen" id="s5">
-  <div class="progress-wrap"><div class="progress-track"><div class="progress-fill" style="width:57%"></div></div><div class="progress-label">4 из 7</div></div>
+  <div class="progress-wrap"><div class="progress-track"><div class="progress-fill" style="width:50%"></div></div><div class="progress-label">5 из 10</div></div>
   <div class="nav"><button class="back-btn" onclick="go('4a')">← Назад</button></div>
   <div class="content">
     <h2>Сколько времени в неделю вы готовы уделять обучению?</h2>
@@ -426,7 +428,7 @@ h2{font-size:21px;font-weight:700;color:var(--dark);line-height:1.3;margin-botto
 
 <!-- ======= S6: FORMAT ======= -->
 <div class="screen" id="s6">
-  <div class="progress-wrap"><div class="progress-track"><div class="progress-fill" style="width:71%"></div></div><div class="progress-label">5 из 7</div></div>
+  <div class="progress-wrap"><div class="progress-track"><div class="progress-fill" style="width:60%"></div></div><div class="progress-label">6 из 10</div></div>
   <div class="nav"><button class="back-btn" onclick="go(5)">← Назад</button></div>
   <div class="content">
     <h2>Какой формат вам ближе?</h2>
@@ -441,7 +443,7 @@ h2{font-size:21px;font-weight:700;color:var(--dark);line-height:1.3;margin-botto
 
 <!-- ======= S7: READINESS ======= -->
 <div class="screen" id="s7">
-  <div class="progress-wrap"><div class="progress-track"><div class="progress-fill" style="width:85%"></div></div><div class="progress-label">6 из 7</div></div>
+  <div class="progress-wrap"><div class="progress-track"><div class="progress-fill" style="width:70%"></div></div><div class="progress-label">7 из 10</div></div>
   <div class="nav"><button class="back-btn" onclick="go(6)">← Назад</button></div>
   <div class="content">
     <h2>Готовы ли вы сейчас к регулярному обучению английскому?</h2>
@@ -514,7 +516,7 @@ h2{font-size:21px;font-weight:700;color:var(--dark);line-height:1.3;margin-botto
 
 <!-- ======= S8: AGE ======= -->
 <div class="screen" id="s8">
-  <div class="progress-wrap"><div class="progress-track"><div class="progress-fill" style="width:100%"></div></div><div class="progress-label">7 из 7 ✓</div></div>
+  <div class="progress-wrap"><div class="progress-track"><div class="progress-fill" style="width:80%"></div></div><div class="progress-label">8 из 10</div></div>
   <div class="nav"><button class="back-btn" onclick="go('7a')">← Назад</button></div>
   <div class="content">
     <h2>Ваш возраст</h2>
@@ -530,7 +532,7 @@ h2{font-size:21px;font-weight:700;color:var(--dark);line-height:1.3;margin-botto
 
 <!-- ======= S9: COUNTRY ======= -->
 <div class="screen" id="s9">
-  <div class="progress-wrap"><div class="progress-track"><div class="progress-fill" style="width:14%"></div></div><div class="progress-label">1 из 7</div></div>
+  <div class="progress-wrap"><div class="progress-track"><div class="progress-fill" style="width:20%"></div></div><div class="progress-label">2 из 10</div></div>
   <div class="nav"><button class="back-btn" onclick="go(1)">← Назад</button></div>
   <div class="content">
     <h2>Где вы сейчас живёте?</h2>
@@ -547,6 +549,7 @@ h2{font-size:21px;font-weight:700;color:var(--dark);line-height:1.3;margin-botto
 
 <!-- ======= S10: COMMUNICATION LANGUAGE ======= -->
 <div class="screen" id="s10">
+  <div class="progress-wrap"><div class="progress-track"><div class="progress-fill" style="width:100%"></div></div><div class="progress-label">10 из 10 ✓</div></div>
   <div class="nav"><button class="back-btn" onclick="go(11)">← Назад</button></div>
   <div class="content">
     <h2>💬 Сейчас основная коммуникация в школе проходит на русском языке. Вам это подходит?</h2>
@@ -574,6 +577,7 @@ h2{font-size:21px;font-weight:700;color:var(--dark);line-height:1.3;margin-botto
 <!-- Вопрос про деньги стоит до записи: он готовит человека к цене
      и даёт ведущей пробного понятный ориентир ещё до звонка. -->
 <div class="screen" id="s2b">
+  <div class="progress-wrap"><div class="progress-track"><div class="progress-fill" style="width:90%"></div></div><div class="progress-label">9 из 10</div></div>
   <div class="nav"><button class="back-btn" onclick="go(2)">← Назад</button></div>
   <div class="content">
     <h2>Сколько готовы вкладывать в английский в месяц?</h2>
@@ -750,7 +754,7 @@ const STEP_NAMES = {
   '4a':'social_proof','5':'q_time','6':'q_format','7':'q_readiness',
   '7a':'progress_plan','8':'q_age','2':'differentiation',
   '11':'value_reinforcement','12':'contacts','13':'time_slots','14':'confirmation',
-  '10n':'russian_only'
+  '2b':'budget','10n':'russian_only'
 };
 
 // ===== Идентификаторы клика для Conversions API =====
@@ -1035,7 +1039,7 @@ function updateProgressChart() {
 
 // Порядок экранов для step_number: по нему считается отвал
 const STEP_ORDER = ['landing','country','q_level','q_goal','social_proof',
-  'q_time','q_format','q_readiness','progress_plan','q_age','differentiation',
+  'q_time','q_format','q_readiness','progress_plan','q_age','differentiation','budget',
   'value_reinforcement','language','contacts','time_slots','confirmation'];
 const FUNNEL_VERSION = 'v2';
 
