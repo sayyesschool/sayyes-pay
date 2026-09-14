@@ -1077,6 +1077,20 @@ const VISIT_SOURCE = (function () {
   }
 })();
 
+// Какое объявление привело человека. Метку ad_id Мета подставляет сама через
+// макрос {{ad.id}} в параметрах ссылки объявления — без неё все креативы
+// сливаются в один столбец и сравнить первый экран по роликам нельзя.
+// Берём только из URL этого захода: сохранённый ad_id рассказал бы про прошлый клик.
+const VISIT_AD = (function () {
+  try {
+    const id = new URLSearchParams(window.location.search).get('ad_id') || '';
+
+    return id.replace(/[^0-9]/g, '').slice(0, 20);
+  } catch (e) {
+    return '';
+  }
+})();
+
 function trackStep(stepId) {
   const stepName = STEP_NAMES[stepId] || ('step_' + stepId);
   const stepNumber = STEP_ORDER.indexOf(stepName) + 1;
@@ -1098,7 +1112,7 @@ function trackStep(stepId) {
   fetch('/api/track', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ step: stepName, src: VISIT_SOURCE, ts: Date.now() })
+    body: JSON.stringify({ step: stepName, src: VISIT_SOURCE, ad: VISIT_AD, ts: Date.now() })
   }).catch(() => {});
 }
 
