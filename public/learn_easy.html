@@ -1039,6 +1039,40 @@ const STEP_ORDER = ['landing','country','q_level','q_goal','social_proof',
   'value_reinforcement','language','contacts','time_slots','confirmation'];
 const FUNNEL_VERSION = 'v2';
 
+// Источник ИМЕННО ЭТОГО захода, а не сохранённого в ATTRIBUTION за 90 дней.
+// Без него знаменатель первого экрана врёт: открытия с рекламы, переходы
+// с сайта школы и возвраты по ссылке переноса конвертят совершенно по-разному,
+// а в счётчике landing они лежали одной кучей.
+const VISIT_SOURCE = (function () {
+  try {
+    const params = new URLSearchParams(window.location.search);
+
+    // Перенос — это не новый визит, человек уже записан. Считать его открытием
+    // воронки нельзя, иначе каждый перенос портит конверсию первого экрана.
+    if (params.get('reschedule')) return 'reschedule';
+
+    // Мета дописывает fbclid к каждому клику по объявлению, поэтому он надёжнее
+    // referrer: во встроенном браузере Инстаграма referrer часто пустой.
+    if (params.get('fbclid') || params.get('campaign_id') || params.get('ad_id')) return 'meta';
+
+    const utm = (params.get('utm_source') || '').toLowerCase();
+
+    if (utm === 'meta' || utm === 'facebook' || utm === 'instagram' || utm === 'ig') return 'meta';
+    if (utm) return utm.replace(/[^a-z0-9_-]/g, '').slice(0, 20) || 'other';
+
+    const ref = (document.referrer || '').toLowerCase();
+
+    if (!ref) return 'direct';
+    if (ref.includes('facebook.') || ref.includes('instagram.')) return 'meta';
+    if (ref.includes('google.') || ref.includes('yandex.') || ref.includes('bing.')) return 'search';
+    if (ref.includes(window.location.hostname)) return 'site';
+
+    return 'referral';
+  } catch (e) {
+    return 'unknown';
+  }
+})();
+
 function trackStep(stepId) {
   const stepName = STEP_NAMES[stepId] || ('step_' + stepId);
   const stepNumber = STEP_ORDER.indexOf(stepName) + 1;
@@ -1060,7 +1094,7 @@ function trackStep(stepId) {
   fetch('/api/track', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ step: stepName, ts: Date.now() })
+    body: JSON.stringify({ step: stepName, src: VISIT_SOURCE, ts: Date.now() })
   }).catch(() => {});
 }
 
