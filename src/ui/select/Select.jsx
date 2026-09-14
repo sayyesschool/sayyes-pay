@@ -7,6 +7,7 @@ export default function Select({
     value,
     options,
     defaultValue,
+    placeholder = 'Выберите вариант',
     onChange
 }) {
     const rootRef = useRef(null);
@@ -76,9 +77,11 @@ export default function Select({
             </label>
 
             <button className="select__button" type="button" onClick={() => setActive(!active)}>
-                {selectedOption &&
-                    <span className="select__value">{selectedOption.label}</span>
-                }
+                {/* Без этого кнопка стояла пустой, если defaultValue не совпадал
+                    ни с одним вариантом — человек видел пустое поле и не понимал, что тут выбор. */}
+                <span className="select__value">
+                    {selectedOption ? selectedOption.label : placeholder}
+                </span>
 
                 <span className="select__arrow">
                     <svg width="12" height="8" viewBox="0 0 12 8" fill="none" xmlns="http://www.w3.org/2000/svg">
