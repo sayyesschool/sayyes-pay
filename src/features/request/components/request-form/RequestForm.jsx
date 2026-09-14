@@ -42,17 +42,19 @@ export default function RequestForm({ onSubmit }) {
                 <Input name="phone" type="tel" placeholder="Телефон*" required />
 
                 <div className="request-form__communication">
+                    {/* defaultValue был "call" — такого варианта в списке нет, поэтому поле
+                        выглядело пустым, а в заявку уходило несуществующее значение. */}
                     <Select
                         label="Выберите удобный способ связи:"
                         name="communication"
-                        defaultValue="call"
+                        defaultValue=""
                         options={[
                             { value: 'whatsapp', label: 'Напишите мне в WhatsApp' },
                             { value: 'whatsapp-call', label: 'Позвоните мне в WhatsApp' },
                             { value: 'telegram', label: 'Напишите мне в Telegram' },
                             { value: 'telegram-call', label: 'Позвоните мне в Telegram' },
                         ]}
-                        onChange={event => console.log('Select changed:', event.target.value)}
+
                     />
                 </div>
 
