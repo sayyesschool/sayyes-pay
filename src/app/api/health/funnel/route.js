@@ -15,8 +15,22 @@ const STEPS = [
   'time_slots', 'confirmation'
 ];
 
+// Перенос — возврат уже записанного человека, а не открытие воронки.
+// В общей конверсии он только шумит, поэтому в основной расчёт не берётся.
+const NOT_A_VISIT = ['reschedule'];
+
 function dayKey(ms) {
   return new Date(ms + TZ_OFFSET_MS).toISOString().slice(0, 10);
+}
+
+function funnelOf(counts) {
+  const base = counts.landing || 0;
+
+  return STEPS.map(step => ({
+    step,
+    count: counts[step] || 0,
+    ofLanding: base ? Math.round((counts[step] || 0) / base * 1000) / 10 : null
+  }));
 }
 
 export async function GET(request) {
@@ -29,40 +43,61 @@ export async function GET(request) {
 
     const byDay = {};
     const totals = {};
+    const bySource = {};
 
     for (const date of dates) {
       const raw = await kvGet('track:' + date);
       const row = raw && typeof raw === 'object' ? raw : {};
       const clean = {};
 
-      for (const step of STEPS) {
-        const value = Number(row[step] || 0);
-
-        if (value) clean[step] = value;
-        totals[step] = (totals[step] || 0) + value;
-      }
-
-      // Всё, чего нет в STEPS: старые названия экранов и russian_only.
       for (const key of Object.keys(row)) {
-        if (!STEPS.includes(key)) clean[key] = Number(row[key] || 0);
+        const value = Number(row[key] || 0);
+
+        if (!value) continue;
+
+        clean[key] = value;
+
+        // Ключи вида landing|meta пишет трекер с 14.09. Всё без разделителя —
+        // общий счётчик шага, он же единственный в данных до этой даты.
+        const bar = key.indexOf('|');
+
+        if (bar === -1) {
+          totals[key] = (totals[key] || 0) + value;
+          continue;
+        }
+
+        const step = key.slice(0, bar);
+        const source = key.slice(bar + 1);
+
+        if (!bySource[source]) bySource[source] = {};
+        bySource[source][step] = (bySource[source][step] || 0) + value;
       }
 
       byDay[date] = clean;
     }
 
-    const base = totals.landing || 0;
-    const funnel = STEPS.map(step => ({
-      step,
-      count: totals[step] || 0,
-      ofLanding: base ? Math.round((totals[step] || 0) / base * 1000) / 10 : null
-    }));
+    // «Живые» заходы: всё, кроме возвратов на перенос.
+    const real = {};
+
+    for (const source of Object.keys(bySource)) {
+      if (NOT_A_VISIT.includes(source)) continue;
+
+      for (const step of Object.keys(bySource[source])) {
+        real[step] = (real[step] || 0) + bySource[source][step];
+      }
+    }
 
     return NextResponse.json({
       timezone: 'UTC+3',
-      note: 'landing — открытие воронки, дальше экраны в порядке прохождения',
+      note: 'landing — открытие воронки, дальше экраны в порядке прохождения; split по источникам ведётся с 14.09.2026',
       days: byDay,
       totals,
-      funnel
+      funnel: funnelOf(totals),
+      sources: Object.keys(bySource).sort().reduce((acc, key) => {
+        acc[key] = { counts: bySource[key], funnel: funnelOf(bySource[key]) };
+        return acc;
+      }, {}),
+      excludingReschedule: { counts: real, funnel: funnelOf(real) }
     }, { headers: { 'Access-Control-Allow-Origin': '*' } });
   } catch (e) {
     return NextResponse.json({ error: e.message }, { status: 500 });
