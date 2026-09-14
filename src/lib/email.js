@@ -605,3 +605,46 @@ export async function sendReviveEmail(booking, step, startedAt) {
         'revive-' + step
     );
 }
+
+// Заявка с формы на главной странице. Письмо уходит в школу, а не клиенту:
+// форма собирает только имя, телефон и удобный способ связи — почты человека
+// там нет. Адрес переопределяется REQUEST_NOTIFY_EMAIL.
+const REQUEST_CHANNELS = {
+  whatsapp: 'Написать в WhatsApp',
+  'whatsapp-call': 'Позвонить в WhatsApp',
+  telegram: 'Написать в Telegram',
+  'telegram-call': 'Позвонить в Telegram'
+};
+
+export async function sendSiteRequestEmail(lead) {
+  const to = process.env.REQUEST_NOTIFY_EMAIL || 'info@sayyes.school';
+  const name = String((lead && lead.name) || '').trim().slice(0, 120);
+  const phone = String((lead && lead.phone) || '').trim().slice(0, 60);
+  const raw = String((lead && lead.channel) || '').trim();
+  const channel = REQUEST_CHANNELS[raw] || (raw ? raw : 'не выбран');
+
+  // Время в поясе расписания — в нём живут бот, сводка и админка.
+  const when = new Date(Date.now() + 3 * 60 * 60 * 1000)
+    .toISOString().replace('T', ' ').slice(0, 16);
+
+  const html = layout(
+    '<tr><td style="font-size:20px;font-weight:800;padding-bottom:16px">Заявка с сайта</td></tr>'
+    + '<tr><td style="font-size:15px;line-height:2;color:#333">'
+    + '<b>Имя:</b> ' + esc(name || 'не указано') + '<br>'
+    + '<b>Телефон:</b> ' + esc(phone || 'не указан') + '<br>'
+    + '<b>Как связаться:</b> ' + esc(channel) + '<br>'
+    + '<b>Когда оставлена:</b> ' + esc(when) + ' (МСК)'
+    + '</td></tr>'
+    + '<tr><td style="font-size:12px;color:#888;line-height:1.6;padding-top:16px">'
+    + 'Письмо отправлено формой на главной странице sayyestoenglish.com.</td></tr>'
+  );
+
+  return deliver({
+    from: parseFrom(MAIL_FROM()),
+    to,
+    replyTo: MAIL_REPLY_TO(),
+    subject: 'Заявка с сайта: ' + (name || 'без имени') + ', ' + (phone || 'без телефона'),
+    html,
+    ics: null
+  }, 'site-request');
+}
