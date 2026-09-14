@@ -44,6 +44,7 @@ export async function GET(request) {
     const byDay = {};
     const totals = {};
     const bySource = {};
+    const byAd = {};
 
     for (const date of dates) {
       const raw = await kvGet('track:' + date);
@@ -59,10 +60,23 @@ export async function GET(request) {
 
         // Ключи вида landing|meta пишет трекер с 14.09. Всё без разделителя —
         // общий счётчик шага, он же единственный в данных до этой даты.
+        // Ключ шага может нести разрез: через палку — источник (landing|meta),
+        // через собаку — объявление (landing@120253052490740019). Без разделителя
+        // это общий счётчик шага, он же единственный в данных до 14.09.
         const bar = key.indexOf('|');
+        const at = key.indexOf('@');
 
-        if (bar === -1) {
+        if (bar === -1 && at === -1) {
           totals[key] = (totals[key] || 0) + value;
+          continue;
+        }
+
+        if (at > -1) {
+          const adStep = key.slice(0, at);
+          const adId = key.slice(at + 1);
+
+          if (!byAd[adId]) byAd[adId] = {};
+          byAd[adId][adStep] = (byAd[adId][adStep] || 0) + value;
           continue;
         }
 
@@ -95,6 +109,10 @@ export async function GET(request) {
       funnel: funnelOf(totals),
       sources: Object.keys(bySource).sort().reduce((acc, key) => {
         acc[key] = { counts: bySource[key], funnel: funnelOf(bySource[key]) };
+        return acc;
+      }, {}),
+      ads: Object.keys(byAd).sort().reduce((acc, key) => {
+        acc[key] = { counts: byAd[key], funnel: funnelOf(byAd[key]) };
         return acc;
       }, {}),
       excludingReschedule: { counts: real, funnel: funnelOf(real) }
