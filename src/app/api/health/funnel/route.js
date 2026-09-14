@@ -11,7 +11,7 @@ const DAY = 24 * 60 * 60 * 1000;
 const STEPS = [
   'landing', 'country', 'q_level', 'q_goal', 'social_proof',
   'q_time', 'q_format', 'q_readiness', 'progress_plan', 'q_age',
-  'differentiation', 'value_reinforcement', 'language', 'contacts',
+  'differentiation', 'budget', 'value_reinforcement', 'language', 'contacts',
   'time_slots', 'confirmation'
 ];
 
