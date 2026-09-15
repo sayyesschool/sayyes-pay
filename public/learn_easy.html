@@ -754,7 +754,7 @@ const STEP_NAMES = {
   '4a':'social_proof','5':'q_time','6':'q_format','7':'q_readiness',
   '7a':'progress_plan','8':'q_age','2':'differentiation',
   '11':'value_reinforcement','12':'contacts','13':'time_slots','14':'confirmation',
-  '2b':'budget','10n':'russian_only'
+  '2b':'budget','10n':'russian_only','1r':'landing_repeat'
 };
 
 // ===== Идентификаторы клика для Conversions API =====
@@ -1733,7 +1733,28 @@ async function submitBooking() {
 // Открытие воронки. Первый экран показан сразу разметкой, go() для него никто
 // не вызывает — поэтому шаг landing раньше не считался вообще, и в аналитике
 // выходило, что квиз начали больше людей, чем открыли страницу.
-trackStep(1);
+//
+// Считаем один раз на вкладку. trackStep срабатывает на каждую загрузку, а
+// встроенный браузер Инстаграма перезагружает страницу при возврате в приложение
+// и умеет подгружать её заранее — из-за этого открытий выходило вдвое больше,
+// чем кликов по рекламе. Повторные загрузки не выбрасываем, а пишем отдельным
+// шагом: по нему видно, насколько часто люди возвращаются.
+(function () {
+  try {
+    const KEY = 'sy_opened';
+
+    if (sessionStorage.getItem(KEY)) {
+      trackStep('1r');
+      return;
+    }
+
+    sessionStorage.setItem(KEY, String(Date.now()));
+  } catch (e) {
+    // Приватный режим блокирует хранилище: тогда считаем как раньше.
+  }
+
+  trackStep(1);
+})();
 
 // Init reschedule mode if ?reschedule= param present
 if (isReschedule) {
