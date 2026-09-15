@@ -134,16 +134,36 @@ export async function buildAnalytics({ from, to, source = 'all' } = {}) {
   const inRange = date => Boolean(date) && date >= first && date <= last;
 
   // --- Заявки по дате заявки ---
-  const daily = dates.map(date => ({
-    date,
-    visits: traffic[date].landing || 0,
-    quiz: traffic[date].q_level || 0,
-    contacts: traffic[date].contacts || 0,
-    slots: traffic[date].time_slots || 0,
-    bookings: 0,
-    confirmed: 0,
-    cancelled: 0
-  }));
+  // Счётчик экранов пишет три набора ключей: общий (landing), по источнику
+  // захода (landing|meta) и по объявлению (landing@...). Когда разрез есть,
+  // в воронку от клика по рекламе берём только рекламные заходы: органика
+  // и возвраты на перенос к рекламному клику отношения не имеют, а раньше
+  // лежали в той же куче — оттого открытий выходило больше, чем кликов.
+  const pick = (row, step) => {
+    const split = row[step + '|meta'];
+
+    return Number((split === undefined ? row[step] : split) || 0);
+  };
+  const hasSplit = date => Object.keys(traffic[date] || {}).some(key => key.includes('|'));
+
+  const daily = dates.map(date => {
+    const row = traffic[date] || {};
+    const all = Number(row.landing || 0);
+    const ads = hasSplit(date) ? pick(row, 'landing') : all;
+
+    return {
+      date,
+      visits: ads,
+      visitsAll: all,
+      organic: Math.max(0, all - ads),
+      quiz: pick(row, 'q_level'),
+      contacts: pick(row, 'contacts'),
+      slots: pick(row, 'time_slots'),
+      bookings: 0,
+      confirmed: 0,
+      cancelled: 0
+    };
+  });
   const byDate = Object.fromEntries(daily.map(row => [row.date, row]));
 
   for (const booking of bookings) {
@@ -187,6 +207,8 @@ export async function buildAnalytics({ from, to, source = 'all' } = {}) {
   const sum = (rows, field) => rows.reduce((acc, row) => acc + (row[field] || 0), 0);
   const totals = {
     visits: sum(daily, 'visits'),
+    visitsAll: sum(daily, 'visitsAll'),
+    organic: sum(daily, 'organic'),
     quiz: sum(daily, 'quiz'),
     contacts: sum(daily, 'contacts'),
     slots: sum(daily, 'slots'),
