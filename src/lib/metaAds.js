@@ -27,6 +27,17 @@ function leadsFrom(actions) {
   return 0;
 }
 
+// Клик по ссылке и «клик» — разные вещи. В поле clicks Мета складывает всё:
+// лайки, тапы по профилю, раскрытие текста. За неделю 7–13.09 это 944 против
+// 650 настоящих переходов. В верх воронки годится только link_click.
+function linkClicksFrom(actions) {
+  if (!Array.isArray(actions)) return 0;
+
+  const hit = actions.find(row => row.action_type === 'link_click');
+
+  return hit ? Number(hit.value || 0) : 0;
+}
+
 async function ask(path, params) {
   const url = new URL(API + path);
 
@@ -68,21 +79,25 @@ export async function getAdsInsights({ from, to } = {}) {
     const perDay = {};
     let spend = 0;
     let clicks = 0;
+    let linkClicks = 0;
     let impressions = 0;
     let reach = 0;
     let leads = 0;
 
     for (const row of byDay) {
       const dayLeads = leadsFrom(row.actions);
+      const dayLinkClicks = linkClicksFrom(row.actions);
 
       perDay[row.date_start] = {
         spend: Number(row.spend || 0),
         clicks: Number(row.clicks || 0),
+        linkClicks: dayLinkClicks,
         impressions: Number(row.impressions || 0),
         leads: dayLeads
       };
       spend += Number(row.spend || 0);
       clicks += Number(row.clicks || 0);
+      linkClicks += dayLinkClicks;
       impressions += Number(row.impressions || 0);
       reach += Number(row.reach || 0);
       leads += dayLeads;
@@ -92,6 +107,7 @@ export async function getAdsInsights({ from, to } = {}) {
       ok: true,
       spend: Math.round(spend * 100) / 100,
       clicks,
+      linkClicks,
       impressions,
       reach,
       leads,
@@ -104,6 +120,7 @@ export async function getAdsInsights({ from, to } = {}) {
           name: row.campaign_name,
           spend: Math.round(Number(row.spend || 0) * 100) / 100,
           clicks: Number(row.clicks || 0),
+          linkClicks: linkClicksFrom(row.actions),
           impressions: Number(row.impressions || 0),
           leads: leadsFrom(row.actions)
         }))
