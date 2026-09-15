@@ -1,4 +1,5 @@
 import {
+  stripe,
   SESSION_COMPLETED_EVENT,
   getWebhookEvent,
   getCheckoutSessionDataForPurchase
@@ -26,6 +27,22 @@ export async function POST(request) {
 
       if (pi.invoice || orderRef.startsWith('in_') || orderRef.startsWith('cs_')) {
         return new Response('ok', { status: 200 });
+      }
+
+      // Главная проверка на дубль. Одна оплата по ссылке из бота порождает ДВА
+      // события: сессию Checkout и payment_intent.succeeded. Приходят они почти
+      // одновременно, поэтому сверка по уже записанным платежам ниже гонку
+      // не ловит: платёж сессии может быть ещё не записан. Спрашиваем у Stripe
+      // напрямую — есть ли сессия Checkout у этого намерения. Есть, значит
+      // человек платил по нашей ссылке и об оплате сообщит ветка сессии.
+      try {
+        const sessions = await stripe.checkout.sessions.list({ payment_intent: pi.id, limit: 1 });
+
+        if (sessions && sessions.data && sessions.data.length) {
+          return new Response('ok', { status: 200 });
+        }
+      } catch (e) {
+        console.error('Checkout session lookup error:', e);
       }
       const key = 'payment:pi_' + pi.id;
       const known = await kvGet(key);
@@ -106,11 +123,11 @@ export async function POST(request) {
         });
 
         await notifyManagers(
-          '💰 <b>Оплата вне кассы бота</b> · Stripe\n' +
+          '💰 <b>Оплата напрямую в Stripe</b>\n' +
           (email ? email + '\n' : '') +
           label + ' — ' + Math.round(Number(pi.amount_received || pi.amount || 0) / 100) + ' ' +
           String(pi.currency || '').toUpperCase() + '\n' +
-          'Привязано к заявке <code>' + matchedId + '</code> — оплата прямая, отмечать руками не нужно.'
+          'Ссылкой из бота не пользовались. Привязано к заявке <code>' + matchedId + '</code>, отмечать руками не нужно.'
         );
       }
 
