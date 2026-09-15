@@ -270,8 +270,28 @@ export async function buildAnalytics({ from, to, source = 'all' } = {}) {
   // то есть с рекламы. Всё остальное — школа: старые ученики, счета, переводы
   // мимо воронки. Смешивать их в одной выручке бессмысленно: реклама окупается
   // только первыми, а вторые растут сами по себе.
+  // Оплаты начала сентября отмечались в боте, когда записей payment:* ещё
+  // не существовало: флаг стоял в самой заявке, а в отчёте о деньгах их
+  // не было видно вообще. Достраиваем недостающие записи из заявок, чтобы
+  // выручка сходилась с тем, что менеджер реально отметил.
+  const paidWithRecord = new Set(payments.map(rec => rec.bookingId).filter(Boolean));
+  const restored = bookings
+    .filter(booking => booking.paid && !paidWithRecord.has(booking.id))
+    .map(booking => ({
+      at: booking.paidAt || booking.attendanceMarkedAt || booking.createdAt,
+      bookingId: booking.id,
+      email: booking.email || '',
+      label: booking.paidPack || null,
+      amount: Number(booking.paidAmount || 0),
+      currency: booking.paidCurrency || 'eur',
+      via: booking.paidVia === 'manual' ? 'Мимо кассы' : 'Stripe',
+      restored: true
+    }))
+    .filter(rec => rec.at);
+  const ledger = payments.concat(restored);
+
   const sourceOf = rec => (rec.bookingId ? 'meta' : 'organic');
-  const allRows = payments
+  const allRows = ledger
     .filter(rec => inRange(dayKey(rec.at)))
     .map(rec => ({ ...rec, source: sourceOf(rec) }))
     .sort((a, b) => String(b.at).localeCompare(String(a.at)));
@@ -316,7 +336,7 @@ export async function buildAnalytics({ from, to, source = 'all' } = {}) {
   // Текущий календарный месяц считаем всегда, независимо от выбранного периода:
   // это тот самый вопрос «сколько мы уже заработали в этом месяце».
   const monthPrefix = today().slice(0, 7);
-  const monthRows = payments
+  const monthRows = ledger
     .filter(rec => String(dayKey(rec.at) || '').startsWith(monthPrefix))
     .filter(rec => source === 'all' || sourceOf(rec) === source);
 
