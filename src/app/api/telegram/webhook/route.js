@@ -40,9 +40,11 @@ function generateAvailableSlots(bookedSlots) {
     const date = new Date(now);
     date.setDate(date.getDate() + dayOffset);
 
-    // Skip weekends
+    // Рабочие дни школы: понедельник–суббота. Сетка здесь должна совпадать
+    // с воронкой (getNextWeekdays в learn_easy.html) — иначе при переносе
+    // человек видит не те дни, что при записи.
     const dow = date.getDay();
-    if (dow === 0 || dow === 6) continue;
+    if (dow === 0) continue;
 
     const dateStr = date.toISOString().split('T')[0]; // 2026-06-15
 
