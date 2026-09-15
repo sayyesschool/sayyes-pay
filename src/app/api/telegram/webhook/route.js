@@ -7,6 +7,7 @@ import { addMessage } from '@/lib/thread';
 import { reviveTelegram, reviveKeyboard, reviveDueAt } from '@/lib/revive';
 import { clientTimeLine, clientDateLine, clientWhen, localTimeString, localSlot, slotKeyToDate } from '@/lib/time';
 import { sendSchedule, sendTrialAttended, sendTrialConfirmed, sendPurchase } from '@/lib/meta';
+import { countEventsByDay } from '@/lib/metaEvents';
 import {
   getBooking, updateBooking, getBookedSlots, removeBookedSlot, addBookedSlot,
   setUserBooking, getUserBooking, clearUserBooking,
@@ -1189,6 +1190,16 @@ async function handleCapiCommand(chatId, text) {
   }
 
   if (code === 'list') {
+    // Сутки считаем в поясе расписания — в том же, в котором сворачиваем
+    // события Меты, иначе оплата ночью уедет на день и сравнение соврёт.
+    const dayOfIso = value => {
+      const ms = new Date(value || 0).getTime();
+
+      if (!ms || Number.isNaN(ms)) return '';
+
+      return new Date(ms + 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    };
+
     const keys = await kvKeys('booking:*');
     const rows = [];
 
@@ -1197,16 +1208,11 @@ async function handleCapiCommand(chatId, text) {
 
       if (!b || !b.paid || b.archived) continue;
 
-      // Оплаты через Stripe уходят в рекламу самим вебхуком — их досылать нечего.
-      const auto = Boolean(b.paidSessionId || b.paidPi);
-      const when = String(b.paidAt || '').slice(0, 10);
-
       rows.push({
         id: b.id,
         name: b.name || 'без имени',
-        when,
+        when: dayOfIso(b.paidAt),
         amount: Math.round(Number(b.paidAmount || 0) / 100),
-        auto,
         done: Boolean(b.capiResent),
         canMatch: Boolean(b.email || b.telegram || (b.attribution && (b.attribution.fbc || b.attribution.fbp)))
       });
@@ -1214,19 +1220,53 @@ async function handleCapiCommand(chatId, text) {
 
     rows.sort((a, b) => String(a.when).localeCompare(String(b.when)));
 
-    const lines = rows.map(r =>
-      (r.done ? '✅' : (r.auto ? '⚙️' : '⚠️')) + ' <code>' + r.id + '</code> · ' +
-      r.when + ' · ' + r.amount + ' € · ' + r.name +
-      (r.canMatch ? '' : ' · нечем сматчить')
-    );
+    if (!rows.length) {
+      await sendMessage(chatId, 'Оплат в базе нет.');
+
+      return;
+    }
+
+    // Спрашиваем у Меты, сколько Purchase она приняла в эти дни. Сравниваем
+    // не по одной оплате (событие по идентификатору не запросишь), а по суткам:
+    // если за день оплат больше, чем событий, значит какая-то не дошла.
+    const times = rows.map(r => new Date(r.when + 'T00:00:00Z').getTime()).filter(ms => ms && !Number.isNaN(ms));
+    const stats = await countEventsByDay('Purchase', Math.min(...times) - 2 * 86400000, Date.now());
+    const main = stats.ok ? (stats.pixels.find(p => p.main && p.ok) || stats.pixels.find(p => p.ok)) : null;
+
+    const paidPerDay = {};
+
+    for (const r of rows) paidPerDay[r.when] = (paidPerDay[r.when] || 0) + 1;
+
+    const lines = rows.map(r => {
+      let mark = '❓';
+
+      if (main) {
+        const inPixel = Number((main.byDay || {})[r.when] || 0);
+
+        mark = inPixel >= paidPerDay[r.when] ? '✅' : '⚠️';
+      }
+
+      return mark + ' <code>' + r.id + '</code> · ' + r.when + ' · ' + r.amount + ' € · ' + r.name +
+        (r.canMatch ? '' : ' · нечем сматчить') +
+        (r.done ? ' · досылали' : '');
+    });
+
+    const misses = main
+      ? Object.keys(paidPerDay).filter(day => Number((main.byDay || {})[day] || 0) < paidPerDay[day])
+      : [];
+
+    const tail = main
+      ? (misses.length
+        ? '\n\n⚠️ — за этот день оплат больше, чем Purchase в пикселе. Дослать: <code>/capi код</code>'
+        : '\n\n✅ Все оплаты есть в пикселе, досылать нечего.')
+      : '\n\n❓ Мету спросить не удалось: ' +
+        ((stats.pixels || []).map(p => p.reason).filter(Boolean)[0] || stats.reason || 'нет ответа') +
+        '\nБез этого сказать, дошло событие или нет, нельзя — гадать не буду.';
 
     await sendMessage(chatId,
-      '<b>Оплаты в базе: ' + rows.length + '</b>\n\n' +
-      (lines.join('\n') || 'пусто') +
-      '\n\n⚙️ — ушло в рекламу вебхуком Stripe, досылать нечего.' +
-      '\n⚠️ — отмечено руками, Purchase мог не уйти.' +
-      '\n✅ — уже досылали.' +
-      '\n\nДослать: <code>/capi код</code>'
+      '<b>Оплаты в базе: ' + rows.length + '</b>' +
+      (main ? ' · пиксель ' + main.id : '') + '\n\n' +
+      lines.join('\n') + tail
     );
 
     return;
