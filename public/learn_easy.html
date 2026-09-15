@@ -1242,6 +1242,13 @@ function ymd(date) {
   return date.getFullYear() + '-' + m + '-' + d;
 }
 
+// Рабочие дни школы: понедельник–суббота, воскресенье выходной.
+// Раньше здесь было Пн–Пт, и это нельзя было побороть из админки: кнопка
+// «открыть слот» только убирает время из занятых, а субботы в сетке не было вообще —
+// убирать было нечего, и действие молча ничего не делало.
+// Отдельную субботу закрываем через DAY_HOURS в src/lib/capacity.js:
+// пустой список часов закрывает день целиком и в воронке, и в боте.
+//
 // Начинаем с СЕГОДНЯ, если в нём ещё остались слоты минимум через 3 часа.
 // Чем меньше разрыв между записью и уроком, тем выше доходимость.
 function getNextWeekdays(count) {
@@ -1252,7 +1259,7 @@ function getNextWeekdays(count) {
   const LAST_MSK_MIN = 19 * 60 + 30;
   for (let guard = 0; days.length < count && guard < 40; guard++) {
     const dow = d.getDay();
-    if (dow >= 1 && dow <= 5) {
+    if (dow >= 1 && dow <= 6) {
       const isToday = ymd(d) === ymd(now);
       if (!isToday || mskMinutesToLocal(LAST_MSK_MIN, d) - now > 3 * 60 * 60 * 1000) {
         days.push(new Date(d));
