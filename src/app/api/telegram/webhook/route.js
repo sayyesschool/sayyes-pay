@@ -1188,6 +1188,50 @@ async function handleCapiCommand(chatId, text) {
     return;
   }
 
+  if (code === 'list') {
+    const keys = await kvKeys('booking:*');
+    const rows = [];
+
+    for (const key of keys) {
+      const b = await kvGet(key);
+
+      if (!b || !b.paid || b.archived) continue;
+
+      // Оплаты через Stripe уходят в рекламу самим вебхуком — их досылать нечего.
+      const auto = Boolean(b.paidSessionId || b.paidPi);
+      const when = String(b.paidAt || '').slice(0, 10);
+
+      rows.push({
+        id: b.id,
+        name: b.name || 'без имени',
+        when,
+        amount: Math.round(Number(b.paidAmount || 0) / 100),
+        auto,
+        done: Boolean(b.capiResent),
+        canMatch: Boolean(b.email || b.telegram || (b.attribution && (b.attribution.fbc || b.attribution.fbp)))
+      });
+    }
+
+    rows.sort((a, b) => String(a.when).localeCompare(String(b.when)));
+
+    const lines = rows.map(r =>
+      (r.done ? '✅' : (r.auto ? '⚙️' : '⚠️')) + ' <code>' + r.id + '</code> · ' +
+      r.when + ' · ' + r.amount + ' € · ' + r.name +
+      (r.canMatch ? '' : ' · нечем сматчить')
+    );
+
+    await sendMessage(chatId,
+      '<b>Оплаты в базе: ' + rows.length + '</b>\n\n' +
+      (lines.join('\n') || 'пусто') +
+      '\n\n⚙️ — ушло в рекламу вебхуком Stripe, досылать нечего.' +
+      '\n⚠️ — отмечено руками, Purchase мог не уйти.' +
+      '\n✅ — уже досылали.' +
+      '\n\nДослать: <code>/capi код</code>'
+    );
+
+    return;
+  }
+
   const booking = await getBooking(code);
 
   if (!booking) {
