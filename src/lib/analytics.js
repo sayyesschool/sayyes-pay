@@ -75,7 +75,25 @@ export async function loadPayments() {
     if (rec && rec.at) out.push(rec);
   }
 
-  return out;
+  // Один платёж мог записаться дважды: событием сессии Checkout и событием
+  // payment_intent. В вебхуке это починено, но старые двойные записи остались,
+  // а деньги в отчёте считаются по этому списку — и сумма задваивалась.
+  // Ключ дедупликации — идентификатор платёжного намерения.
+  const seen = new Set();
+  const unique = [];
+
+  for (const rec of out) {
+    const pi = rec.pi ? String(rec.pi) : null;
+
+    if (pi) {
+      if (seen.has(pi)) continue;
+      seen.add(pi);
+    }
+
+    unique.push(rec);
+  }
+
+  return unique;
 }
 
 // Свой трекер пишет счётчики по экранам воронки: track:YYYY-MM-DD.
