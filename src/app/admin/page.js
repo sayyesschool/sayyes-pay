@@ -70,7 +70,10 @@ export default async function AdminPage({ searchParams }) {
 
   // Верхняя точка воронки — клик по рекламе, если кабинет доступен. Иначе
   // открытие страницы: выше этого мы ничего не видим.
-  const steps = (ads && ads.ok ? [{ key: 'clicks', label: 'Клик по рекламе', value: ads.clicks }] : [])
+  // Берём именно клики по ссылке. Поле clicks у Меты — это всё вместе с лайками
+  // и тапами по профилю, оно раздувало верх воронки почти вдвое.
+  const adClicks = ads && ads.ok ? Number(ads.linkClicks || 0) : 0;
+  const steps = (ads && ads.ok ? [{ key: 'clicks', label: 'Клик по ссылке в рекламе', value: adClicks }] : [])
     .concat(data.funnel);
   const head = steps[0] ? steps[0].value || 1 : 1;
   const chain = steps.map((step, index) => ({
@@ -217,7 +220,8 @@ export default async function AdminPage({ searchParams }) {
               <p className="muted">
                 Жирный процент справа — доля от самой верхней точки: сколько людей из ста дошло
                 до этого шага. Серый — переход с предыдущего шага.
-                {ads && ads.ok ? ' Верх воронки — клики по рекламе.' : ' Кабинет недоступен, верх воронки — открытия страницы.'}
+                {ads && ads.ok ? ' Верх воронки — клики по ссылке в объявлении, без лайков и тапов по профилю.' : ' Кабинет недоступен, верх воронки — открытия страницы.'}
+                {data.totals.organic > 0 && ' Шаги воронки — только заходы с рекламы; из других источников за период пришло ещё ' + data.totals.organic + '.'}
               </p>
               {data.totals.visits < data.totals.quiz && (
                 <p className="muted bad">
