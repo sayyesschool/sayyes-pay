@@ -1165,6 +1165,79 @@ async function handleSyncStripeCommand(chatId, text) {
   );
 }
 
+// Досыл Purchase в рекламу по уже отмеченной оплате.
+//
+// Оплаты начала сентября помечались, когда отправки Purchase из ручной отметки
+// ещё не было: в базе они есть, в пикселе их нет. Для обучения это дороже, чем
+// для отчётности — покупок в датасете единицы, и каждая потерянная заметна.
+//
+// Время события Мета принимает не старше семи дней, поэтому досыл уходит
+// сегодняшним числом. Для отчётов по дням это неточно, зато идентификаторы
+// клика (fbc/fbp) берутся из самой заявки — те же, что были в день клика,
+// так что человека и объявление Мета узнает.
+async function handleCapiCommand(chatId, text) {
+  const code = String(text || '').trim().split(/\s+/)[1];
+
+  if (!code) {
+    await sendMessage(chatId,
+      'Досыл покупки в рекламу: <code>/capi код</code>\n\n' +
+      'Нужен, только если оплата отмечена в базе, а Purchase в пиксель не ушёл. ' +
+      'Обычные оплаты уходят сами.'
+    );
+
+    return;
+  }
+
+  const booking = await getBooking(code);
+
+  if (!booking) {
+    await sendMessage(chatId, 'Заявка не найдена: ' + code);
+
+    return;
+  }
+
+  if (!booking.paid) {
+    await sendMessage(chatId, 'По этой заявке оплаты нет. Сначала отметьте её: <code>/paid ' + code + ' сумма</code>');
+
+    return;
+  }
+
+  if (booking.capiResent) {
+    await sendMessage(chatId, 'Покупку по этой заявке уже досылали ' + booking.capiResent + '. Второй раз не шлю.');
+
+    return;
+  }
+
+  let result = null;
+
+  try {
+    result = await sendPurchase({
+      bookingId: booking.id,
+      eventId: 'repur_' + booking.id,
+      email: booking.email,
+      phone: booking.telegram,
+      value: Number(booking.paidAmount || 0) / 100,
+      currency: booking.paidCurrency || 'EUR',
+      contentName: booking.paidPack || 'intro',
+      orderId: booking.id
+    });
+  } catch (e) {
+    await sendMessage(chatId, 'Не отправилось: ' + e.message);
+
+    return;
+  }
+
+  const ok = result && !result.skipped && !result.error;
+
+  if (ok) await updateBooking(booking.id, { capiResent: new Date().toISOString() });
+
+  await sendMessage(chatId,
+    (ok ? 'Покупка ушла в рекламу' : 'Мета не приняла') + ': ' + (booking.name || code) + ' — ' +
+    Math.round(Number(booking.paidAmount || 0) / 100) + ' ' + String(booking.paidCurrency || 'EUR').toUpperCase() +
+    '\n' + JSON.stringify(result).slice(0, 300)
+  );
+}
+
 async function handlePaymentsCommand(chatId) {
   const keys = await kvKeys('payment:*');
   let rows = [];
@@ -2527,6 +2600,11 @@ export async function POST(request) {
 
         if (text && text.startsWith('/syncstripe')) {
           await handleSyncStripeCommand(chatId, text);
+          return NextResponse.json({ ok: true });
+        }
+
+        if (text && text.startsWith('/capi')) {
+          await handleCapiCommand(chatId, text);
           return NextResponse.json({ ok: true });
         }
 
