@@ -1,4 +1,4 @@
-import { kvGet, kvKeys } from '@/lib/redis';
+import { kvGet, kvKeys, kvMGet } from '@/lib/redis';
 
 // Всё считаем в базовом поясе расписания (UTC+3) — том же, в котором живут
 // слоты и команды бота. Иначе «сегодня» в админке и в /today разъезжаются.
@@ -52,8 +52,12 @@ export async function loadBookings() {
   const keys = await kvKeys('booking:*');
   const out = [];
 
-  for (const key of keys) {
-    const booking = await kvGet(key);
+  // Одним запросом вместо двухсот шестидесяти восьми: раньше каждая заявка
+  // читалась отдельно, и одно открытие аналитики стоило столько же обращений
+  // к хранилищу. Именно так школа встала 16.09.2026.
+  const values = await kvMGet(keys);
+
+  for (const booking of values) {
 
     // Архив — заявки до запуска рекламы, introTest — проверки спецпредложения.
     // И то и другое портит любую конверсию, поэтому в аналитику не берём.
@@ -68,10 +72,9 @@ export async function loadBookings() {
 export async function loadPayments() {
   const keys = await kvKeys('payment:*');
   const out = [];
+  const values = await kvMGet(keys);
 
-  for (const key of keys) {
-    const rec = await kvGet(key);
-
+  for (const rec of values) {
     if (rec && rec.at) out.push(rec);
   }
 
@@ -99,12 +102,13 @@ export async function loadPayments() {
 // Свой трекер пишет счётчики по экранам воронки: track:YYYY-MM-DD.
 export async function loadTraffic(days) {
   const out = {};
+  const values = await kvMGet(days.map(date => 'track:' + date));
 
-  for (const date of days) {
-    const rec = await kvGet('track:' + date);
+  days.forEach((date, index) => {
+    const rec = values[index];
 
     out[date] = rec && typeof rec === 'object' ? rec : {};
-  }
+  });
 
   return out;
 }
