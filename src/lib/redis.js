@@ -279,12 +279,16 @@ export async function getManagerChatId() {
 export async function getAllActiveBookings() {
   const keys = await kvKeys('booking:*');
   const bookings = [];
-  for (const key of keys) {
-    const booking = await kvGet(key);
+
+  // Её дёргают напоминания по расписанию, то есть по несколько раз в час без участия
+  // человека. Старый поштучный перебор жёг больше всего: сотни чтений каждый запуск,
+  // круглые сутки, независимо от того, есть ли вообще уроки в ближайшее время.
+  for (const booking of await kvMGet(keys)) {
     if (booking && booking.status === 'confirmed') {
       bookings.push(booking);
     }
   }
+
   return bookings;
 }
 
