@@ -13,7 +13,7 @@ import {
   setUserBooking, getUserBooking, clearUserBooking,
   getPendingBooking, clearPendingBooking,
   setManagerChatId, getManagerChatId,
-  getAllActiveBookings, kvSet, kvGet, kvDel, kvKeys,
+  getAllActiveBookings, kvSet, kvGet, kvMGet, kvDel, kvKeys,
   createBooking, setPendingBooking
 } from '@/lib/redis';
 import {
@@ -843,9 +843,8 @@ async function handleStatsCommand(chatId, text) {
   const keys = await kvKeys('booking:*');
   const all = [];
 
-  for (const key of keys) {
-    const booking = await kvGet(key);
-
+  // Пачкой: раньше каждая заявка стоила отдельного обращения к хранилищу.
+  for (const booking of await kvMGet(keys)) {
     if (!booking) continue;
     // Архив — это заявки до запуска рекламы. Они портили доходимость
     // фальшивыми отметками «пришёл» из старого бага.
@@ -972,9 +971,7 @@ async function handleReviveCommand(chatId, text) {
     if (!booking) {
       const keys = await kvKeys('booking:*');
 
-      for (const key of keys) {
-        const b = await kvGet(key);
-
+      for (const b of await kvMGet(keys)) {
         if (b && b.attended === false && !b.reviveStopped) { booking = b; break; }
       }
     }
@@ -1004,9 +1001,7 @@ async function handleReviveCommand(chatId, text) {
   let stopped = 0;
   let done = 0;
 
-  for (const key of keys) {
-    const b = await kvGet(key);
-
+  for (const b of await kvMGet(keys)) {
     if (!b || b.attended !== false || b.archived) continue;
     if (b.reviveStopped) { stopped++; continue; }
     if ((b.reviveStep || 0) >= 3) { done++; continue; }
@@ -1069,18 +1064,14 @@ async function handleSyncStripeCommand(chatId, text) {
   const known = new Set();
   const keys = await kvKeys('payment:*');
 
-  for (const key of keys) {
-    const rec = await kvGet(key);
-
+  for (const rec of await kvMGet(keys)) {
     if (rec && rec.pi) known.add(String(rec.pi));
   }
 
   const bookingKeys = await kvKeys('booking:*');
   const bookings = [];
 
-  for (const key of bookingKeys) {
-    const b = await kvGet(key);
-
+  for (const b of await kvMGet(bookingKeys)) {
     if (b && b.status !== 'cancelled') bookings.push(b);
   }
 
@@ -1205,9 +1196,7 @@ async function handleCapiCommand(chatId, text) {
     const keys = await kvKeys('booking:*');
     const rows = [];
 
-    for (const key of keys) {
-      const b = await kvGet(key);
-
+    for (const b of await kvMGet(keys)) {
       if (!b || !b.paid || b.archived) continue;
 
       rows.push({
@@ -1326,18 +1315,26 @@ async function handleCapiCommand(chatId, text) {
 
 async function handlePaymentsCommand(chatId) {
   const keys = await kvKeys('payment:*');
+  const bookingKeys = await kvKeys('booking:*');
+
+  // Четыре запроса к хранилищу вместо трёх сотен. Раньше читалась каждая оплата,
+  // каждая заявка, да ещё и отдельный getBooking на каждую строку ради имени.
+  const payments = await kvMGet(keys);
+  const bookings = await kvMGet(bookingKeys);
+  const byId = new Map();
+
+  for (const b of bookings) if (b && b.id) byId.set(b.id, b);
+
   let rows = [];
   const seen = new Set();
 
-  for (const key of keys) {
-    const p = await kvGet(key);
-
+  for (const p of payments) {
     if (!p || !p.at) continue;
 
     let name = '';
 
     if (p.bookingId) {
-      const b = await getBooking(p.bookingId);
+      const b = byId.get(p.bookingId);
 
       if (b) name = b.name || '';
       seen.add(p.bookingId);
@@ -1354,11 +1351,7 @@ async function handlePaymentsCommand(chatId) {
     });
   }
 
-  const bookingKeys = await kvKeys('booking:*');
-
-  for (const key of bookingKeys) {
-    const b = await kvGet(key);
-
+  for (const b of bookings) {
     if (!b || !b.paid || !b.paidAt) continue;
     if (seen.has(b.id)) continue;
 
@@ -1549,9 +1542,7 @@ async function handleRestoreCommand(chatId, text) {
   const keys = await kvKeys('booking:*');
   const found = [];
 
-  for (const key of keys) {
-    const b = await kvGet(key);
-
+  for (const b of await kvMGet(keys)) {
     if (!b || !b.releasedUnconfirmed) continue;
     if (b.releasedAt && new Date(b.releasedAt).getTime() < since) continue;
 
@@ -1973,8 +1964,7 @@ async function handleFindCommand(chatId, query) {
   const keys = await kvKeys('booking:*');
   const found = [];
 
-  for (const key of keys) {
-    const booking = await kvGet(key);
+  for (const booking of await kvMGet(keys)) {
     if (!booking) continue;
 
     const haystack = [booking.id, booking.name, booking.telegram, booking.phone, booking.email]
