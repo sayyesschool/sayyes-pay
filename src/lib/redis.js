@@ -2,6 +2,96 @@
 const KV_URL = process.env.KV_REST_API_URL;
 const KV_TOKEN = process.env.KV_REST_API_TOKEN;
 
+// Последняя ошибка хранилища. Нужна потому, что все функции ниже ловят сбой
+// и возвращают пусто: 16.09.2026 кончился лимит бесплатного тарифа, чтения
+// начали отклоняться, и это выглядело как «база стёрлась» — школа несколько
+// минут считала, что потеряла все заявки. Теперь причина видна снаружи.
+let lastError = null;
+
+export function kvLastError() {
+  return lastError;
+}
+
+function note(where, detail) {
+  lastError = { at: new Date().toISOString(), where, detail: String(detail).slice(0, 300) };
+  console.error('KV ' + where + ':', detail);
+}
+
+// Upstash отдаёт значение строкой, иногда дважды закодированной.
+function decode(raw) {
+  if (raw === null || raw === undefined) return null;
+
+  try {
+    const parsed = JSON.parse(raw);
+
+    if (typeof parsed === 'string') {
+      try { return JSON.parse(parsed); } catch (e) { return parsed; }
+    }
+
+    return parsed;
+  } catch (e) {
+    return raw;
+  }
+}
+
+// Чтение пачкой. Конвейер Upstash считается за ОДИН запрос, сколько бы команд
+// в нём ни было. Раньше каждая заявка читалась отдельно, и одна загрузка
+// админки при 268 заявках стоила 268 обращений к хранилищу. За месяц так
+// набежало 980 тысяч чтений при 13 тысячах записей — и база встала на лимите.
+export async function kvMGet(keys) {
+  if (!KV_URL || !KV_TOKEN || !Array.isArray(keys) || !keys.length) return [];
+
+  const out = [];
+  const CHUNK = 200;
+
+  for (let i = 0; i < keys.length; i += CHUNK) {
+    const part = keys.slice(i, i + CHUNK);
+    const blanks = () => { for (let n = 0; n < part.length; n++) out.push(null); };
+
+    try {
+      const resp = await fetch(KV_URL + '/pipeline', {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer ' + KV_TOKEN,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(part.map(key => ['GET', key]))
+      });
+
+      if (!resp.ok) {
+        const text = await resp.text().catch(() => '');
+
+        note('mget http ' + resp.status, text.slice(0, 200));
+        blanks();
+        continue;
+      }
+
+      const data = await resp.json();
+
+      if (!Array.isArray(data)) {
+        note('mget shape', JSON.stringify(data).slice(0, 200));
+        blanks();
+        continue;
+      }
+
+      for (const row of data) {
+        if (row && row.error) {
+          note('mget row', row.error);
+          out.push(null);
+          continue;
+        }
+
+        out.push(decode(row ? row.result : null));
+      }
+    } catch (e) {
+      note('mget error', e.message || e);
+      blanks();
+    }
+  }
+
+  return out;
+}
+
 async function kvGet(key) {
   if (!KV_URL || !KV_TOKEN) return null;
   try {
@@ -19,7 +109,7 @@ async function kvGet(key) {
       return parsed;
     } catch { return data.result; }
   } catch (e) {
-    console.error('KV get error:', key, e);
+    note('get error ' + key, e.message || e);
     return null;
   }
 }
@@ -85,9 +175,18 @@ async function kvKeys(pattern) {
       headers: { Authorization: `Bearer ${KV_TOKEN}` }
     });
     const data = await resp.json();
+
+    // Отказ хранилища раньше выглядел как пустой список ключей — то есть как
+    // пустая база. Отличить одно от другого снаружи было невозможно.
+    if (data.error) {
+      note('keys ' + pattern, data.error);
+
+      return [];
+    }
+
     return data.result || [];
   } catch (e) {
-    console.error('KV keys error:', pattern, e);
+    note('keys error ' + pattern, e.message || e);
     return [];
   }
 }
