@@ -5,7 +5,7 @@ import {
   markAttendance, cancelBooking, rescheduleBooking,
   sendPayLink, markPaid, messageStudent, archiveUnmarked
 } from '@/lib/adminActions';
-import { blockSlots, openSlots } from '@/lib/schedule';
+import { blockSlots, openSlots, setWeekHours } from '@/lib/schedule';
 
 // Все действия менеджера приходят сюда обычной формой, без единой строчки
 // клиентского JS: так админка работает на любом телефоне и не ломается,
@@ -35,6 +35,19 @@ export async function POST(request) {
     else if (action === 'archive-unmarked') result = await archiveUnmarked(form.get('days'), by);
     // Расписанием распоряжаются только управляющие: это не ежедневная работа,
     // а решение про загрузку школы.
+    // Часы работы на день недели: задаётся раз, действует на все будущие
+    // такие дни. До этого короткий день приходилось собирать вручную каждую неделю.
+    else if (action === 'week-hours') {
+      if (session.role !== 'owner') {
+        result = { ok: false, error: 'Расписание меняют только управляющие' };
+      } else {
+        result = await setWeekHours(
+          form.get('dow'),
+          String(form.get('from') || ''),
+          String(form.get('to') || '')
+        );
+      }
+    }
     else if (action === 'slot-close' || action === 'slot-open') {
       if (session.role !== 'owner') {
         result = { ok: false, error: 'Расписание меняют только управляющие' };
