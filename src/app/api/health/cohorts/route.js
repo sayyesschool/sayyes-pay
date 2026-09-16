@@ -73,6 +73,10 @@ export async function GET(request) {
 
     for (const field of quizFields) groups.quiz[field] = {};
 
+    // Коды записей из спорной ячейки — не подтвердили, но пришли. Имена и контакты
+    // сюда не кладём: эндпоинт открытый. По коду карточка открывается в админке.
+    const attendedUnconfirmed = [];
+
     let total = 0;
     let confirmedCount = 0;
     let cancelledByRule = 0;
@@ -119,6 +123,16 @@ export async function GET(request) {
       put(groups.source, attr.utm_source || (attr.fbclid || attr.ad_id ? 'meta' : 'без метки'));
       put(groups.ad, attr.ad_id || 'без объявления');
 
+      if (!booking.confirmed && attended === true) {
+        attendedUnconfirmed.push({
+          id: booking.id,
+          slot: booking.slot || null,
+          createdAt: booking.createdAt || null,
+          leadHours: leadHours === null ? null : Math.round(leadHours),
+          paid: Boolean(booking.paid)
+        });
+      }
+
       const answers = booking.quizAnswers || {};
 
       for (const field of quizFields) put(groups.quiz[field], answers[field]);
@@ -133,6 +147,7 @@ export async function GET(request) {
       days,
       lessons: total,
       cancelled: { снятоавтоматикой: cancelledByRule, отменено: cancelledOther },
+      attendedUnconfirmed,
       confirmedPct: total ? Math.round((confirmedCount / total) * 1000) / 10 : null,
       confirmation: finish(groups.confirmation),
       bot: finish(groups.bot),
