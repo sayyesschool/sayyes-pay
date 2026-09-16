@@ -65,6 +65,8 @@ export async function GET(request) {
       leadTime: {},
       source: {},
       ad: {},
+      unconfirmedByLead: {},
+      confirmedByLead: {},
       quiz: {}
     };
     const quizFields = ['Страна', 'Возраст', 'Уровень', 'Цель', 'Формат', 'Готовность', 'Бюджет', 'Стаж', 'Время в неделю'];
@@ -109,6 +111,11 @@ export async function GET(request) {
       put(groups.confirmation, booking.confirmed ? 'подтвердил' : 'не подтвердил');
       put(groups.bot, booking.chatId ? 'открыл бота' : 'без бота');
       put(groups.leadTime, bucketLead(leadHours));
+
+      // Главная проверка для правила снятия: правило не трогает тех, кто записался
+      // меньше чем за 8 часов. Если все дошедшие без подтверждения сидят именно там,
+      // значит правило никого живого не снимает и его можно держать включённым.
+      put(booking.confirmed ? groups.confirmedByLead : groups.unconfirmedByLead, bucketLead(leadHours));
       put(groups.source, attr.utm_source || (attr.fbclid || attr.ad_id ? 'meta' : 'без метки'));
       put(groups.ad, attr.ad_id || 'без объявления');
 
@@ -130,6 +137,8 @@ export async function GET(request) {
       confirmation: finish(groups.confirmation),
       bot: finish(groups.bot),
       leadTime: finish(groups.leadTime),
+      unconfirmedByLead: finish(groups.unconfirmedByLead),
+      confirmedByLead: finish(groups.confirmedByLead),
       source: finish(groups.source),
       ad: finish(groups.ad),
       quiz
