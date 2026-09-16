@@ -76,6 +76,8 @@ export async function GET(request) {
     // Коды записей из спорной ячейки — не подтвердили, но пришли. Имена и контакты
     // сюда не кладём: эндпоинт открытый. По коду карточка открывается в админке.
     const attendedUnconfirmed = [];
+    const reach = {};
+    const via = {};
 
     let total = 0;
     let confirmedCount = 0;
@@ -123,6 +125,19 @@ export async function GET(request) {
       put(groups.source, attr.utm_source || (attr.fbclid || attr.ad_id ? 'meta' : 'без метки'));
       put(groups.ad, attr.ad_id || 'без объявления');
 
+      const reachKey = booking.chatId ? 'bot' : 'email-only';
+
+      if (!reach[reachKey]) reach[reachKey] = { total: 0, confirmed: 0, attended: 0 };
+      reach[reachKey].total++;
+      if (booking.confirmed) reach[reachKey].confirmed++;
+      if (attended === true) reach[reachKey].attended++;
+
+      if (booking.confirmed) {
+        const viaKey = String(booking.confirmedVia || 'not-recorded');
+
+        via[viaKey] = (via[viaKey] || 0) + 1;
+      }
+
       if (!booking.confirmed && attended === true) {
         attendedUnconfirmed.push({
           id: booking.id,
@@ -148,6 +163,8 @@ export async function GET(request) {
       lessons: total,
       cancelled: { снятоавтоматикой: cancelledByRule, отменено: cancelledOther },
       attendedUnconfirmed,
+      confirmReach: reach,
+      confirmVia: via,
       confirmedPct: total ? Math.round((confirmedCount / total) * 1000) / 10 : null,
       confirmation: finish(groups.confirmation),
       bot: finish(groups.bot),
