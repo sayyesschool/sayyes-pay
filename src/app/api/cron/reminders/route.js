@@ -152,8 +152,14 @@ export async function GET(request) {
       const createdAtMs = booking.createdAt ? new Date(booking.createdAt).getTime() : null;
       const leadHours = createdAtMs ? (slotDate.getTime() - createdAtMs) / (1000 * 60 * 60) : 999;
 
+      // Вернули руками — больше не трогаем. 16.09.2026 это стоило трёх живых уроков:
+      // Дима вернул записи через /restore, а крон в ту же минуту снял их снова — урок
+      // ближе шести часов, подтверждения нет, условие сошлось. Получилась петля,
+      // и ученикам каждый раз уходило письмо «мы освободили ваше время».
+      // Решение человека всегда старше автоматики.
       if (!booking.confirmed
         && !booking.releasedUnconfirmed
+        && !booking.restoredAt
         && booking.status !== 'cancelled'
         && leadHours >= 8
         && hoursUntil > 0 && hoursUntil < 6) {
