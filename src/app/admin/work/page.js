@@ -6,7 +6,6 @@ import { Shell } from '@/lib/adminShell';
 import { loadBookings, slotStartMs, dayKey, today } from '@/lib/analytics';
 import { getBookedSlots } from '@/lib/redis';
 import { getBlocked } from '@/lib/schedule';
-import { isSlotClosed } from '@/lib/capacity';
 
 // Та же сетка, что в карточке ученика: 10:00–20:00 через полчаса.
 const GRID = [];
@@ -187,36 +186,41 @@ export default async function ManagePage({ searchParams }) {
               Закрытый слот исчезает из воронки и из бота сразу — его нельзя выбрать нигде.
               Слот с уроком закрыть нельзя: сначала перенесите запись.
             </p>
-            <div className="slots">
-              {GRID.map(time => {
-                const key = selected + '_' + time;
-                const isBlocked = blocked.includes(key);
-                const isBusy = booked.includes(key) && !isBlocked;
-                const isClosed = isSlotClosed(key);
-                const lesson = (byDay[selected] || []).find(item => item.slot === key);
+            <form method="post" action="/api/admin/action">
+              <input type="hidden" name="back" value={'/admin/work?month=' + month + '&day=' + selected} />
 
-                if (isBusy || lesson) {
+              <div className="slots">
+                {GRID.map(time => {
+                  const key = selected + '_' + time;
+                  const isBlocked = blocked.includes(key);
+                  const isBusy = booked.includes(key) && !isBlocked;
+                  const lesson = (byDay[selected] || []).find(item => item.slot === key);
+
+                  if (isBusy || lesson) {
+                    return (
+                      <a className="slot off" key={key} href={lesson ? '/admin/client/' + lesson.id : undefined}>
+                        {time}
+                      </a>
+                    );
+                  }
+
+                  // Галочка вместо кнопки: отметить можно сколько угодно времён,
+                  // страница при этом не перезагружается. Раньше каждый слот был
+                  // отдельной формой, и после клика экран прыгал обратно наверх.
                   return (
-                    <a className="slot off" key={key} href={lesson ? '/admin/client/' + lesson.id : undefined}>
-                      {time}
-                    </a>
-                  );
-                }
-
-                if (isClosed) return <span className="slot off" key={key}>{time}</span>;
-
-                return (
-                  <form method="post" action="/api/admin/action" key={key}>
-                    <input type="hidden" name="action" value={isBlocked ? 'slot-open' : 'slot-close'} />
-                    <input type="hidden" name="slot" value={key} />
-                    <input type="hidden" name="back" value={'/admin/work?month=' + month + '&day=' + selected} />
-                    <button className={'slot' + (isBlocked ? ' mine' : '')} type="submit">
+                    <label className={'slot' + (isBlocked ? ' mine' : '')} key={key}>
+                      <input type="checkbox" name="slot" value={key} />
                       {time}{isBlocked ? ' ✕' : ''}
-                    </button>
-                  </form>
-                );
-              })}
-            </div>
+                    </label>
+                  );
+                })}
+              </div>
+
+              <div className="btns">
+                <button type="submit" name="action" value="slot-close">Закрыть отмеченные</button>
+                <button type="submit" name="action" value="slot-open">Открыть отмеченные</button>
+              </div>
+            </form>
 
             <div className="btns">
               <form method="post" action="/api/admin/action">
@@ -239,8 +243,33 @@ export default async function ManagePage({ searchParams }) {
             </div>
 
             <p className="muted">
-              Крестиком помечены слоты, закрытые вручную, — нажатие открывает их обратно.
-              Серые без крестика — уроки и дни с ограничениями из расписания школы.
+              Отметьте нужные времена и нажмите «Закрыть отмеченные» — можно сразу несколько.
+              Крестик значит, что слот уже закрыт вручную; отметьте его и нажмите «Открыть отмеченные».
+              Серые без крестика — уроки, их сначала нужно перенести.
+            </p>
+
+            <div className="field" style={{ marginTop: 14 }}>
+              <label>Часы работы на день недели — действует на все будущие такие дни</label>
+            </div>
+            <form method="post" action="/api/admin/action" className="btns">
+              <input type="hidden" name="action" value="week-hours" />
+              <input type="hidden" name="back" value={'/admin/work?month=' + month + '&day=' + selected} />
+              <select name="dow" defaultValue={String(new Date(selected + 'T00:00:00').getDay())}>
+                {['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота'].map((name, index) => (
+                  <option value={String(index)} key={name}>{name}</option>
+                ))}
+              </select>
+              <select name="from" defaultValue="10:00">
+                {GRID.map(time => <option value={time} key={time}>{time}</option>)}
+              </select>
+              <select name="to" defaultValue="20:30">
+                {GRID.concat(['20:30']).map(time => <option value={time} key={time}>{time}</option>)}
+              </select>
+              <button type="submit">Применить</button>
+            </form>
+            <p className="muted">
+              Всё, что вне интервала, закроется на восемь недель вперёд; внутри —
+              откроется, кроме занятых уроками. Чтобы снять правило, поставьте одинаковые время начала и конца.
             </p>
           </div>
         </details>
