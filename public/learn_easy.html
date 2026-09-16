@@ -1714,6 +1714,16 @@ async function submitBooking() {
       // Lead — событие дня 0, по нему оптимизируются кампании.
       // Тот же leadEventId ушёл на сервер, Мета склеит браузерное и серверное.
       if (typeof fbq === 'function') {
+        // Вес события. Серверная копия считает его из ответа про бюджет
+        // (budgetValue в src/lib/meta.js) — браузерная обязана считать так же.
+        // Мета склеивает две копии по eventID и берёт ту, что пришла первой:
+        // если здесь оставить ноль, серверный вес до обучения не доедет.
+        const budgetAnswer = String(quizAnswers['Бюджет'] || '');
+        const leadValue = budgetAnswer.startsWith('Больше 150') ? 150
+          : (budgetAnswer.startsWith('50–150') || budgetAnswer.startsWith('50-150')) ? 100
+          : budgetAnswer.startsWith('До 50') ? 50
+          : 10;
+
         fbq('track', 'Lead', {
           content_name: 'trial_booking',
           content_category: 'funnel',
@@ -1721,7 +1731,8 @@ async function submitBooking() {
           lead_goal: quizAnswers['Цель'] || '',
           lead_country: quizAnswers['Страна'] || '',
           lead_format: quizAnswers['Формат'] || '',
-          value: 0,
+          lead_budget: budgetAnswer,
+          value: leadValue,
           currency: 'EUR'
         }, { eventID: leadEventId });
       }
