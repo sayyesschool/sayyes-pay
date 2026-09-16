@@ -238,7 +238,8 @@ export async function sendLead(booking, extra = {}) {
       lead_goal: answers['Цель'] || '',
       lead_country: answers['Страна'] || '',
       lead_format: answers['Формат'] || '',
-      value: 0,
+      lead_budget: answers['Бюджет'] || '',
+      value: budgetValue(booking),
       currency: 'EUR'
     }
   });
@@ -248,11 +249,44 @@ export async function sendLead(booking, extra = {}) {
  * Schedule — человек подтвердил запись в боте. Оптимизация, этап 2.
  * hours_to_lesson нужен, чтобы проверить гипотезу «чем ближе слот, тем выше доходимость».
  */
+// Вес записи для Меты. До 16.09.2026 во всех событиях стояло value: 0 — для
+// алгоритма все записи были одинаковы, и он честно искал тех, кто чаще всего
+// записывается. А записаться на бесплатное ничего не стоит: половина таких
+// не приходит.
+//
+// Берём ответ про бюджет: он единственный в квизе предсказывает и явку,
+// и оплату. За 19 дней сентября назвавшие сумму доходили в 33–75% случаев,
+// «пока не решил» — 17,6% и ни одной оплаты.
+//
+// Шкалой, а не признаком «назвал или нет»: алгоритму нужен порядок, тогда он
+// отличает дорогого от среднего, а не только годного от негодного.
+const BUDGET_VALUE = [
+  ['Больше 150', 150],
+  ['50–150', 100],
+  ['50-150', 100],
+  ['До 50', 50]
+];
+
+function budgetValue(booking) {
+  const answers = (booking && booking.quizAnswers) || {};
+  const raw = String(answers['Бюджет'] || '').trim();
+
+  if (!raw) return 10;
+
+  for (const [prefix, value] of BUDGET_VALUE) {
+    if (raw.startsWith(prefix)) return value;
+  }
+
+  // «Пока не решил» и всё непонятное — минимальный вес, но не ноль:
+  // ноль Мета трактует как отсутствие ценности и может выкинуть событие из обучения.
+  return 10;
+}
+
 export async function sendSchedule(booking, extra = {}) {
   if (!booking) return { skipped: 'no booking' };
   const custom = {
     content_name: 'trial_confirmed',
-    value: 0,
+    value: budgetValue(booking),
     currency: 'EUR'
   };
   if (extra.slotIso) custom.slot_datetime = extra.slotIso;
@@ -280,7 +314,7 @@ export async function sendTrialConfirmed(booking, extra = {}) {
 
   const custom = {
     content_name: 'trial_will_attend',
-    value: 0,
+    value: budgetValue(booking),
     currency: 'EUR'
   };
 
@@ -310,7 +344,7 @@ export async function sendTrialAttended(booking, extra = {}) {
   if (!booking) return { skipped: 'no booking' };
   const custom = {
     content_name: 'trial_attended',
-    value: 0,
+    value: budgetValue(booking),
     currency: 'EUR'
   };
   if (typeof extra.hoursToLesson === 'number') custom.hours_to_lesson = extra.hoursToLesson;
