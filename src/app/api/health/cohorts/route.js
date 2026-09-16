@@ -73,11 +73,23 @@ export async function GET(request) {
 
     let total = 0;
     let confirmedCount = 0;
+    let cancelledByRule = 0;
+    let cancelledOther = 0;
 
     for (const booking of bookings) {
       const start = slotStartMs(booking);
 
       if (!start || start < since || start > now) continue;
+
+      // Отменённая запись — не урок. Отметки у неё не бывает по определению,
+      // и если считать её наравне с прошедшими, получается фальшивая гора «без отметки».
+      // Снятые автоматикой считаем отдельно: это не выбор человека, а наше решение.
+      if (booking.status === 'cancelled') {
+        if (booking.releasedUnconfirmed) cancelledByRule++;
+        else cancelledOther++;
+
+        continue;
+      }
 
       total++;
       if (booking.confirmed) confirmedCount++;
@@ -113,6 +125,7 @@ export async function GET(request) {
       note: 'Только уроки, которые уже прошли. Доходимость считается от отмеченных.',
       days,
       lessons: total,
+      cancelled: { снятоавтоматикой: cancelledByRule, отменено: cancelledOther },
       confirmedPct: total ? Math.round((confirmedCount / total) * 1000) / 10 : null,
       confirmation: finish(groups.confirmation),
       bot: finish(groups.bot),
