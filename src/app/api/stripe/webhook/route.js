@@ -4,7 +4,7 @@ import {
   getWebhookEvent,
   getCheckoutSessionDataForPurchase
 } from '@/services/stripe';
-import { getBooking, updateBooking, kvSet, kvGet, kvKeys } from '@/lib/redis';
+import { getBooking, updateBooking, kvSet, kvGet, kvMGet, kvKeys } from '@/lib/redis';
 import { notifyManagers } from '@/lib/managers';
 import { sendPurchase } from '@/lib/meta';
 
@@ -54,9 +54,7 @@ export async function POST(request) {
       if (!duplicate) {
         const keys = await kvKeys('payment:*');
 
-        for (const k of keys) {
-          const rec = await kvGet(k);
-
+        for (const rec of await kvMGet(keys)) {
           if (rec && rec.pi && rec.pi === pi.id) { duplicate = true; break; }
         }
       }
@@ -78,9 +76,7 @@ export async function POST(request) {
             const bookingKeys = await kvKeys('booking:*');
             let best = null;
 
-            for (const bk of bookingKeys) {
-              const b = await kvGet(bk);
-
+            for (const b of await kvMGet(bookingKeys)) {
               if (!b || b.status === 'cancelled') continue;
               if (String(b.email || '').trim().toLowerCase() !== target) continue;
               if (!best || String(b.createdAt || '') > String(best.createdAt || '')) best = b;
