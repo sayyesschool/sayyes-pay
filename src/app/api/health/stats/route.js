@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-import { kvKeys, kvGet } from '@/lib/redis';
+import { kvKeys, kvMGet } from '@/lib/redis';
 
 // Сводка по дням в том же виде, в каком её считает бот. Нужна, чтобы сверять
 // цифры с рекламным кабинетом, не дёргая человека в Telegram.
@@ -53,9 +53,11 @@ export async function GET(request) {
 
     let archived = 0;
 
-    for (const key of keys) {
-      const booking = await kvGet(key);
+    // Одним запросом: раньше каждая проверка сводки читала все заявки
+    // поодиночке. Этот эндпоинт открыт, то есть стоимость умножалась на число заходов.
+    const bookings = await kvMGet(keys);
 
+    for (const booking of bookings) {
       if (!booking) continue;
 
       if (booking.archived) {
