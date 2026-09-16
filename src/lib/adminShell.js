@@ -105,6 +105,13 @@ export const ADMIN_CSS = [
   '.syad button.slot:hover{background:#16161a;color:#fff;border-color:#16161a}',
   '.syad .slot.off{opacity:.45;background:#f4f4f5;text-decoration:line-through;cursor:default}',
   '.syad .slot.mine{background:#f3e8ff;border-color:#ddd6fe;color:#5b21b6;font-weight:600}',
+  // Выбор слотов галочками: сам чекбокс не показываем, кликается подпись.
+  // Так можно отметить сразу несколько времён и отправить одним действием,
+  // не перезагружая страницу после каждого клика.
+  '.syad .slot input{position:absolute;opacity:0;width:0;height:0}',
+  '.syad label.slot:hover{border-color:#16161a}',
+  '.syad label.slot:has(input:checked){background:#16161a;border-color:#16161a;color:#fff;font-weight:600}',
+  '.syad .slot.mine:has(input:checked){background:#16161a;border-color:#16161a;color:#fff}',
   '.syad .thread{display:flex;flex-direction:column;gap:8px;margin-bottom:10px}',
   '.syad .bubble{max-width:80%;padding:8px 11px;border-radius:12px;font-size:14px;line-height:1.45}',
   '.syad .bubble.in{align-self:flex-start;background:#f4f4f5}',
