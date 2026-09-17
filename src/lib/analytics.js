@@ -63,6 +63,10 @@ export async function loadBookings() {
     // И то и другое портит любую конверсию, поэтому в аналитику не берём.
     if (!booking || booking.archived || booking.introTest) continue;
 
+    // Запись без кода открыть нельзя и сделать с ней ничего нельзя — в списках
+    // она только сбивает с толку и ведёт на /admin/client/undefined.
+    if (!/^[a-z0-9]{4,16}$/.test(String(booking.id || ''))) continue;
+
     out.push(booking);
   }
 
