@@ -215,7 +215,15 @@ export async function removeBookedSlot(slotKey) {
 // --- Booking CRUD ---
 
 export async function createBooking(booking) {
-  await kvSet(`booking:${booking.id}`, booking);
+  // Без этой проверки заявка с пустым id ложится под ключ booking:undefined:
+  // такая запись видна в списках, но ни отменить, ни отметить её нельзя.
+  // Одна такая уже попала в базу — падать сразу честнее, чем копить мусор.
+  if (!/^[a-z0-9]{4,16}$/.test(String(booking && booking.id || ''))) {
+    throw new Error('createBooking: неверный код заявки');
+  }
+
+  await kvSet('booking:' + booking.id, booking);
+
   return booking;
 }
 
