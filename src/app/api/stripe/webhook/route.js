@@ -31,6 +31,11 @@ export async function POST(request) {
         return new Response('ok', { status: 200 });
       }
 
+      // Эту оплату уже отвязали руками как «не нашу» — второй раз не подбираем.
+      if (await kvGet('payskip:' + pi.id)) {
+        return new Response('ok', { status: 200 });
+      }
+
       // Главная проверка на дубль. Одна оплата по ссылке из бота порождает ДВА
       // события: сессию Checkout и payment_intent.succeeded. Приходят они почти
       // одновременно, поэтому сверка по уже записанным платежам ниже гонку
