@@ -7,6 +7,7 @@ import {
 import { getBooking, updateBooking, kvSet, kvGet, kvMGet, kvKeys } from '@/lib/redis';
 import { notifyManagers } from '@/lib/managers';
 import { sendPurchase } from '@/lib/meta';
+import { payerEmail, paymentLabel } from '@/lib/stripePayments';
 
 export async function POST(request) {
   try {
@@ -19,13 +20,14 @@ export async function POST(request) {
     if (event.type === 'payment_intent.succeeded') {
       const pi = event.data.object || {};
 
-      // В этом же аккаунте Stripe школа выставляет счета постоянным ученикам:
-      // «Payment for Invoice» к пробным урокам отношения не имеет, и уведомлять
-      // о нём менеджеров воронки — чистый шум. Оплаты через Checkout приезжают
-      // отдельным событием сессии, дублировать их здесь тоже незачем.
+      // Оплаты через Checkout приезжают отдельным событием сессии — дублировать
+      // их здесь незачем. А вот счета мы больше не выбрасываем: школа выставляет
+      // их и постоянным ученикам, и людям из воронки. Фильтр по pi.invoice съедал
+      // вторых вместе с первыми — так пропала оплата 17 сентября. Лишнее отсекает
+      // проверка ниже: нет заявки с такой почтой — значит, оплата не наша, молчим.
       const orderRef = String((pi.payment_details && pi.payment_details.order_reference) || '');
 
-      if (pi.invoice || orderRef.startsWith('in_') || orderRef.startsWith('cs_')) {
+      if (orderRef.startsWith('cs_')) {
         return new Response('ok', { status: 200 });
       }
 
@@ -60,10 +62,10 @@ export async function POST(request) {
       }
 
       if (!duplicate) {
-        const email = (pi.receipt_email)
-          || (pi.charges && pi.charges.data && pi.charges.data[0] && pi.charges.data[0].billing_details && pi.charges.data[0].billing_details.email)
-          || '';
-        const label = pi.description || 'Оплата в Stripe';
+        // При оплате по счёту receipt_email пуст: почту знают только счёт
+        // и карточка клиента. Спрашиваем их — иначе сверять нечем.
+        const email = await payerEmail(pi);
+        const label = paymentLabel(pi);
 
         // Оплата пришла не по ссылке из бота, кода заявки в ней нет. Пробуем найти
         // человека по почте: иначе прямая оплата навсегда остаётся «без заявки»,
