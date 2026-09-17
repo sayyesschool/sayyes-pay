@@ -6,7 +6,7 @@ import {
   sendPayLink, markPaid, messageStudent, archiveUnmarked
 } from '@/lib/adminActions';
 import { blockSlots, openSlots, setWeekHours } from '@/lib/schedule';
-import { attachPayment } from '@/lib/stripePayments';
+import { attachPayment, detachPayment, unskipPayment } from '@/lib/stripePayments';
 
 // Все действия менеджера приходят сюда обычной формой, без единой строчки
 // клиентского JS: так админка работает на любом телефоне и не ломается,
@@ -41,6 +41,17 @@ export async function POST(request) {
         result = { ok: false, error: 'Оплаты привязывают только управляющие' };
       } else {
         result = await attachPayment(String(form.get('pi') || ''), id, by);
+      }
+    }
+    // И наоборот: счёт постоянному ученику мог совпасть по почте с заявкой.
+    // К воронке он отношения не имеет, и метка держит его отвязанным навсегда.
+    else if (action === 'detach-pi' || action === 'unskip-pi') {
+      if (session.role !== 'owner') {
+        result = { ok: false, error: 'Оплаты привязывают только управляющие' };
+      } else {
+        const pi = String(form.get('pi') || '');
+
+        result = action === 'detach-pi' ? await detachPayment(pi, by) : await unskipPayment(pi);
       }
     }
     // Расписанием распоряжаются только управляющие: это не ежедневная работа,
