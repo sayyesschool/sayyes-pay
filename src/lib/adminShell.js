@@ -55,6 +55,9 @@ export const ADMIN_CSS = [
   '.syad textarea{min-height:90px;max-width:none}',
   '.syad .field{margin-bottom:10px}',
   '.syad .field label{display:block;font-size:12px;color:#71717a;margin-bottom:4px}',
+  // Ссылка на оплату: длинная, её выделяют тройным кликом и копируют.
+  '.syad input.link{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;max-width:none;background:#fafafa}',
+  '.syad input.link:focus{background:#fff}',
   '.syad .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));gap:10px}',
   '.syad .kpi{display:block;background:#fafafa;border-radius:10px;padding:10px 12px;color:inherit;text-decoration:none}',
   '.syad a.kpi:hover{background:#f3e8ff}',
