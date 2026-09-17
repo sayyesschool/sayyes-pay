@@ -7,7 +7,7 @@ import { getBooking, getBookedSlots } from '@/lib/redis';
 import { isSlotClosed } from '@/lib/capacity';
 import { today, shiftDay, slotStartMs } from '@/lib/analytics';
 import { getThread } from '@/lib/thread';
-import { listPacks } from '@/lib/adminActions';
+import { listPacks, payLink } from '@/lib/adminActions';
 import { introActive, introExpiry } from '@/services/intro';
 
 export const dynamic = 'force-dynamic';
@@ -220,6 +220,25 @@ export default async function ClientPage({ params, searchParams }) {
               </p>
             )}
           </form>
+
+          {/* Ссылка руками: бот есть не у всех — кому-то пишем в WhatsApp или почтой.
+              Клиентского JS в админке нет, поэтому показываем готовые ссылки на все
+              доступные пакеты, а не пересобираем одну по выбору в списке выше. */}
+          <details className="sub" style={{ marginBottom: 14 }}>
+            <summary>Скопировать ссылку вручную</summary>
+            <p className="muted">
+              Те же ссылки, что уходят кнопкой выше. Нужны, когда пишете ученику не из бота.
+            </p>
+            {packs.length === 0 && <p className="muted">Прайс не загрузился, ссылок нет.</p>}
+            {packs.map(pack => (
+              <div className="field" key={pack.id}>
+                <label>
+                  {(pack.intro ? '🎁 ' : '') + pack.name + ' · ' + Math.round(pack.amount / 100) + ' EUR'}
+                </label>
+                <input className="link" type="text" readOnly value={payLink(booking.id, pack.id)} />
+              </div>
+            ))}
+          </details>
 
           <form method="post" action="/api/admin/action">
             <input type="hidden" name="action" value="paid" />
