@@ -8,6 +8,16 @@ import { sendPurchase } from '@/lib/meta';
 // человек платил не по нашей ссылке) — деньги есть, а в заявке их нет.
 // Здесь мы спрашиваем Stripe напрямую и показываем всё, что он знает.
 
+// Оплату, помеченную «не наша», больше не подбираем ни вебхуком, ни сверкой.
+// Ключ нарочно не payment:*, иначе он попал бы в выручку как обычная запись.
+const SKIP = 'payskip:';
+
+export async function skippedIds() {
+  const keys = await kvKeys(SKIP + '*');
+
+  return new Set(keys.map(key => String(key).slice(SKIP.length)));
+}
+
 // Почта плательщика. По ссылке из бота она лежит в receipt_email, а при оплате
 // по счёту его нет вовсе: почту знают только сам счёт и карточка клиента.
 // Ровно на этом месте терялись оплаты по счетам — сверять было нечем.
@@ -78,6 +88,7 @@ export async function listStripePayments(days = 30) {
     if (record && record.pi) known.set(String(record.pi), record);
   }
 
+  const skipped = await skippedIds();
   const bookings = [];
 
   for (const booking of await kvMGet(await kvKeys('booking:*'))) {
@@ -88,10 +99,11 @@ export async function listStripePayments(days = 30) {
 
   for (const pi of paid) {
     const record = known.get(pi.id) || null;
+    const skip = skipped.has(pi.id);
     // Почту спрашиваем только у непривязанных: у привязанных она уже записана,
     // а каждый такой вопрос — отдельный запрос в Stripe.
     const email = record ? String(record.email || '') : await payerEmail(pi);
-    const guess = record ? null : matchBooking(email, bookings);
+    const guess = (record || skip) ? null : matchBooking(email, bookings);
 
     rows.push({
       id: pi.id,
@@ -103,6 +115,7 @@ export async function listStripePayments(days = 30) {
       email,
       bookingId: record ? (record.bookingId || null) : null,
       linked: Boolean(record),
+      skipped: skip,
       guessId: guess ? guess.id : '',
       guessName: guess ? (guess.name || 'без имени') : ''
     });
@@ -171,6 +184,9 @@ export async function attachPayment(piId, bookingId, by) {
   // Оставить обе записи — значит посчитать деньги дважды.
   for (const key of manual) await kvDel(key);
 
+  // Привязали осознанно — значит, метка «не наша» с неё снимается.
+  await kvDel(SKIP + id);
+
   await updateBooking(booking.id, {
     paid: true,
     paidAt: at,
@@ -201,4 +217,65 @@ export async function attachPayment(piId, bookingId, by) {
     ok: true,
     message: 'Оплата привязана' + (manual.length ? ' · ручная отметка убрана' : '')
   };
+}
+
+// Обратное действие: оплата к воронке отношения не имеет. Так бывает со счетами
+// постоянным ученикам — почта та же, а деньги не за пробный урок. Просто удалить
+// запись мало: следующая сверка привяжет её заново, поэтому ставим метку.
+export async function detachPayment(piId, by) {
+  const id = String(piId || '').trim();
+
+  if (!/^pi_[A-Za-z0-9]+$/.test(id)) return { ok: false, error: 'Неверный код платежа' };
+
+  const keys = await kvKeys('payment:*');
+  const records = await kvMGet(keys);
+  let bookingId = null;
+
+  for (let i = 0; i < records.length; i++) {
+    const record = records[i];
+
+    if (!record || record.pi !== id) continue;
+    bookingId = record.bookingId || null;
+    await kvDel(keys[i]);
+  }
+
+  // В заявке отметка об оплате осталась бы висеть и после отвязки.
+  // Снимаем её только если она пришла именно из этого платежа.
+  if (bookingId) {
+    const booking = await getBooking(bookingId);
+
+    if (booking && booking.paidPi === id) {
+      await updateBooking(bookingId, {
+        paid: false,
+        paidAt: null,
+        paidAmount: null,
+        paidCurrency: null,
+        paidVia: null,
+        paidPi: null,
+        paidBy: null
+      });
+    }
+  }
+
+  await kvSet(SKIP + id, { at: new Date().toISOString(), by: '@' + by, bookingId });
+
+  await notifyManagers(
+    '↩️ <b>Оплата отвязана от воронки</b>\n' +
+    '<code>' + id + '</code>' +
+    (bookingId ? '\nБыла привязана к заявке <code>' + bookingId + '</code>' : '') +
+    '\nОтвязал @' + by + '. Больше её не подберут ни вебхук, ни сверка.'
+  );
+
+  return { ok: true, message: 'Оплата отвязана' + (bookingId ? ' от заявки ' + bookingId : '') };
+}
+
+// Передумали: метку снимаем, оплата снова участвует в сверке.
+export async function unskipPayment(piId) {
+  const id = String(piId || '').trim();
+
+  if (!/^pi_[A-Za-z0-9]+$/.test(id)) return { ok: false, error: 'Неверный код платежа' };
+
+  await kvDel(SKIP + id);
+
+  return { ok: true, message: 'Оплата вернулась в сверку' };
 }
