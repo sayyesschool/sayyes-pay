@@ -41,9 +41,10 @@ export default async function StripePage({ searchParams }) {
     error = e.message;
   }
 
-  const loose = rows.filter(row => !row.linked && !row.skipped);
+  // Отвязанные лежат тут же, а не отдельным списком: Дима просил один блок.
+  // Отличает их только метка «не наша» и кнопка возврата вместо привязки.
+  const loose = rows.filter(row => !row.linked);
   const linked = rows.filter(row => row.linked);
-  const skipped = rows.filter(row => !row.linked && row.skipped);
   const sum = list => Math.round(list.reduce((acc, row) => acc + Number(row.amount || 0), 0) / 100);
 
   return (
@@ -68,6 +69,12 @@ export default async function StripePage({ searchParams }) {
       <div className="card">
         <h2>Без заявки · {loose.length} на {sum(loose)} EUR</h2>
         {loose.length === 0 && <p className="muted">Все оплаты разнесены по заявкам.</p>}
+        {loose.some(row => row.skipped) && (
+          <p className="muted">
+            Помеченные «не наша» в выручку не идут — это счета школы, совпавшие по почте.
+            Вебхук и сверка их больше не подбирают.
+          </p>
+        )}
         {loose.map(row => (
           <div className="row" key={row.id}>
             <div>
@@ -75,20 +82,33 @@ export default async function StripePage({ searchParams }) {
               <div className="sub">
                 {fmt(row.at)} · {row.email || 'почты нет'} {row.invoice ? '· по счёту' : ''}
               </div>
-              <div className="sub"><code>{row.id}</code></div>
+              <div className="sub">
+                <code>{row.id}</code> {row.skipped && <span className="tag">не наша</span>}
+              </div>
               {row.guessId && (
                 <div className="sub">Похоже на заявку {row.guessName} · <code>{row.guessId}</code></div>
               )}
             </div>
-            <form method="post" action="/api/admin/action">
-              <input type="hidden" name="action" value="attach-pi" />
-              <input type="hidden" name="pi" value={row.id} />
-              <input type="hidden" name="back" value={back} />
-              <input type="text" name="id" placeholder="код заявки" defaultValue={row.guessId} />
-              <div className="btns">
-                <button className="primary" type="submit">Привязать</button>
-              </div>
-            </form>
+            {row.skipped ? (
+              <form method="post" action="/api/admin/action">
+                <input type="hidden" name="action" value="unskip-pi" />
+                <input type="hidden" name="pi" value={row.id} />
+                <input type="hidden" name="back" value={back} />
+                <div className="btns">
+                  <button type="submit">Вернуть в сверку</button>
+                </div>
+              </form>
+            ) : (
+              <form method="post" action="/api/admin/action">
+                <input type="hidden" name="action" value="attach-pi" />
+                <input type="hidden" name="pi" value={row.id} />
+                <input type="hidden" name="back" value={back} />
+                <input type="text" name="id" placeholder="код заявки" defaultValue={row.guessId} />
+                <div className="btns">
+                  <button className="primary" type="submit">Привязать</button>
+                </div>
+              </form>
+            )}
           </div>
         ))}
       </div>
@@ -117,32 +137,6 @@ export default async function StripePage({ searchParams }) {
                 </div>
               </form>
             </div>
-          </div>
-        ))}
-      </div>
-
-      <div className="card">
-        <h2>Не наши · {skipped.length} на {sum(skipped)} EUR</h2>
-        <p className="muted">
-          Отвязанные оплаты: счета школы, попавшие в воронку по совпадению почты.
-          В выручку не идут, вебхук и сверка их больше не подбирают.
-        </p>
-        {skipped.length === 0 && <p className="muted">Пока ничего.</p>}
-        {skipped.map(row => (
-          <div className="row" key={row.id}>
-            <div>
-              <div className="name">{Math.round(row.amount / 100)} {row.currency} · {row.label}</div>
-              <div className="sub">{fmt(row.at)} · {row.email || 'почты нет'}</div>
-              <div className="sub"><code>{row.id}</code></div>
-            </div>
-            <form method="post" action="/api/admin/action">
-              <input type="hidden" name="action" value="unskip-pi" />
-              <input type="hidden" name="pi" value={row.id} />
-              <input type="hidden" name="back" value={back} />
-              <div className="btns">
-                <button type="submit">Вернуть в сверку</button>
-              </div>
-            </form>
           </div>
         ))}
       </div>
