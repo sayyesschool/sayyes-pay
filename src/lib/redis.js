@@ -219,8 +219,17 @@ export async function createBooking(booking) {
   return booking;
 }
 
+// Код заявки — восемь строчных букв и цифр. Проверка нужна потому, что в базе
+// обнаружилась запись под ключом booking:undefined — её карточка открывалась,
+// но любое действие по ней падало. Лучше честное «не найдено», чем карточка-призрак.
+function validBookingId(value) {
+  return /^[a-z0-9]{4,16}$/.test(String(value || ''));
+}
+
 export async function getBooking(bookingId) {
-  return await kvGet(`booking:${bookingId}`);
+  if (!validBookingId(bookingId)) return null;
+
+  return await kvGet('booking:' + bookingId);
 }
 
 export async function updateBooking(bookingId, updates) {
