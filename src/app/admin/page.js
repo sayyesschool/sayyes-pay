@@ -350,15 +350,17 @@ export default async function AdminPage({ searchParams }) {
 
             <div className={'card' + (data.health.unmarkedOld ? ' warn' : '')}>
               <h2>Что требует внимания</h2>
+              {/* Каждая цифра — ссылка в «Управление» с тем же фильтром:
+                  увидеть счётчик мало, нужно посмотреть, кто за ним стоит. */}
               <div className="kpis">
-                <div className="kpi"><b className={data.health.unmarkedOld ? 'bad' : ''}>{data.health.unmarkedOld}</b><span>уроков без отметки старше суток</span></div>
-                <div className="kpi"><b>{data.health.pending}</b><span>заявок без времени</span></div>
-                <div className="kpi"><b>{data.health.reviveQueue}</b><span>в очереди реанимации</span></div>
-                <div className="kpi"><b>{data.health.noChat}</b><span>без чата с ботом</span></div>
-                <div className="kpi"><b>{data.health.noEmail}</b><span>без почты</span></div>
-                <div className="kpi"><b className={data.health.noContact ? 'bad' : ''}>{data.health.noContact}</b><span>вообще без контактов</span></div>
+                <a className="kpi" href="/admin/work?filter=unmarked-old"><b className={data.health.unmarkedOld ? 'bad' : ''}>{data.health.unmarkedOld}</b><span>уроков без отметки старше суток</span></a>
+                <a className="kpi" href="/admin/work?filter=pending"><b>{data.health.pending}</b><span>заявок без времени</span></a>
+                <a className="kpi" href="/admin/work?filter=revive"><b>{data.health.reviveQueue}</b><span>в очереди реанимации</span></a>
+                <a className="kpi" href="/admin/work?filter=no-chat"><b>{data.health.noChat}</b><span>без чата с ботом</span></a>
+                <a className="kpi" href="/admin/work?filter=no-email"><b>{data.health.noEmail}</b><span>без почты</span></a>
+                <a className="kpi" href="/admin/work?filter=no-contact"><b className={data.health.noContact ? 'bad' : ''}>{data.health.noContact}</b><span>вообще без контактов</span></a>
               </div>
-              <p className="muted">Эти счётчики — по всей базе, а не только за выбранный период.</p>
+              <p className="muted">Эти счётчики — по всей базе, а не только за выбранный период. Нажмите на число, чтобы увидеть список.</p>
             </div>
           </>
         )}
