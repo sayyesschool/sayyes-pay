@@ -8,7 +8,7 @@ import { reviveTelegram, reviveKeyboard, reviveDueAt } from '@/lib/revive';
 import { clientTimeLine, clientDateLine, clientWhen, localTimeString, localSlot, slotKeyToDate } from '@/lib/time';
 import { sendSchedule, sendTrialAttended, sendTrialConfirmed, sendPurchase } from '@/lib/meta';
 import { countEventsByDay } from '@/lib/metaEvents';
-import { payerEmail } from '@/lib/stripePayments';
+import { payerEmail, skippedIds } from '@/lib/stripePayments';
 import {
   getBooking, updateBooking, getBookedSlots, removeBookedSlot, addBookedSlot,
   setUserBooking, getUserBooking, clearUserBooking,
@@ -1068,6 +1068,9 @@ async function handleSyncStripeCommand(chatId, text) {
   for (const rec of await kvMGet(keys)) {
     if (rec && rec.pi) known.add(String(rec.pi));
   }
+
+  // Отвязанные руками оплаты школы: сверка не должна тащить их обратно.
+  for (const id of await skippedIds()) known.add(id);
 
   const bookingKeys = await kvKeys('booking:*');
   const bookings = [];
