@@ -379,7 +379,10 @@ export async function buildAnalytics({ from, to, source = 'all' } = {}) {
       return start && start < now - DAY && booking.status !== 'cancelled'
         && (booking.attended === undefined || booking.attended === null);
     }).length,
-    noContact: bookings.filter(booking => !booking.email && !booking.telegram).length,
+    // Телефон — такой же контакт, как почта и телеграм: по нему менеджер человека найдёт.
+    // Без этого счётчик показывал «вообще без контактов» у тех, кто оставил номер, —
+    // ровно та же ошибка, что была в сводке бота.
+    noContact: bookings.filter(booking => !booking.email && !booking.telegram && !booking.phone).length,
     noEmail: bookings.filter(booking => !booking.email).length,
     noChat: bookings.filter(booking => !booking.chatId).length,
     reviveQueue: bookings.filter(booking => booking.attended === false
