@@ -76,6 +76,52 @@ export default async function ManagePage({ searchParams }) {
   const active = all.filter(booking => booking.status !== 'cancelled');
   const now = Date.now();
 
+  // Цифры из «Что требует внимания» кликабельны и приводят сюда с фильтром:
+  // видеть счётчик и не иметь возможности посмотреть, кто за ним стоит, —
+  // полдела. Определения совпадают с health в analytics.js: если правится там,
+  // править и здесь, иначе число и список разойдутся.
+  const FILTERS = {
+    'no-contact': {
+      title: 'Вообще без контактов',
+      empty: 'У всех есть хотя бы один способ связи.',
+      test: booking => !booking.email && !booking.telegram && !booking.phone
+    },
+    'no-chat': {
+      title: 'Без чата с ботом',
+      empty: 'Все открыли бота.',
+      test: booking => !booking.chatId
+    },
+    'no-email': {
+      title: 'Без почты',
+      empty: 'Почта есть у всех.',
+      test: booking => !booking.email
+    },
+    'revive': {
+      title: 'В очереди реанимации',
+      empty: 'Очередь пуста.',
+      test: booking => booking.attended === false && !booking.reviveStopped && (booking.reviveStep || 0) < 3
+    },
+    'unmarked-old': {
+      title: 'Уроки без отметки старше суток',
+      empty: 'Таких уроков нет.',
+      test: booking => {
+        const start = slotStartMs(booking);
+
+        return start && start < Date.now() - 86400000 && booking.status !== 'cancelled'
+          && (booking.attended === undefined || booking.attended === null);
+      }
+    },
+    'pending': {
+      title: 'Заявки без выбранного времени',
+      empty: 'Все заявки со временем.',
+      test: booking => (!booking.slot || booking.slot === 'no_time') && booking.status !== 'cancelled'
+    }
+  };
+
+  const filterKey = FILTERS[String(params?.filter || '')] ? String(params.filter) : '';
+  const filtered = filterKey ? all.filter(FILTERS[filterKey].test) : [];
+
+
   // Раскладываем записи по дням один раз: дальше и календарь, и списки берут отсюда.
   const byDay = {};
 
@@ -282,6 +328,15 @@ export default async function ManagePage({ searchParams }) {
         </div>
         <button className="primary" type="submit">Найти</button>
       </form>
+
+      {filterKey && (
+        <div className="card">
+          <h2>{FILTERS[filterKey].title}: {filtered.length}</h2>
+          <List items={filtered.slice(0, 100)} empty={FILTERS[filterKey].empty} />
+          {filtered.length > 100 && <p className="muted">Показаны первые 100.</p>}
+          <p className="muted"><a href="/admin/work">Убрать фильтр</a></p>
+        </div>
+      )}
 
       {query && (
         <div className="card">
