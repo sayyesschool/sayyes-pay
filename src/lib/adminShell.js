@@ -171,6 +171,7 @@ export function Shell({ session, active, activeTab, title, children }) {
               </details>
             )}
 
+            {owner && <a className={active === 'stripe' ? 'on' : ''} href="/admin/stripe">Оплаты</a>}
             <a className={active === 'wiki' ? 'on' : ''} href="/admin/wiki">База знаний</a>
             <a className={active === 'ask' ? 'on' : ''} href="/admin/ask">Спросить</a>
           </nav>
