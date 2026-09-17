@@ -6,6 +6,7 @@ import {
   sendPayLink, markPaid, messageStudent, archiveUnmarked
 } from '@/lib/adminActions';
 import { blockSlots, openSlots, setWeekHours } from '@/lib/schedule';
+import { attachPayment } from '@/lib/stripePayments';
 
 // Все действия менеджера приходят сюда обычной формой, без единой строчки
 // клиентского JS: так админка работает на любом телефоне и не ломается,
@@ -33,6 +34,15 @@ export async function POST(request) {
     else if (action === 'paid') result = await markPaid(id, form.get('amount'), String(form.get('pack') || ''), by);
     else if (action === 'message') result = await messageStudent(id, String(form.get('text') || ''), by);
     else if (action === 'archive-unmarked') result = await archiveUnmarked(form.get('days'), by);
+    // Оплата есть в Stripe, а заявке о ней ничего не известно: счёт выставили
+    // руками, вебхук не дошёл, платили не по нашей ссылке. Связываем их здесь.
+    else if (action === 'attach-pi') {
+      if (session.role !== 'owner') {
+        result = { ok: false, error: 'Оплаты привязывают только управляющие' };
+      } else {
+        result = await attachPayment(String(form.get('pi') || ''), id, by);
+      }
+    }
     // Расписанием распоряжаются только управляющие: это не ежедневная работа,
     // а решение про загрузку школы.
     // Часы работы на день недели: задаётся раз, действует на все будущие
