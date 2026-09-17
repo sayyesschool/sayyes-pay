@@ -8,6 +8,7 @@ import { reviveTelegram, reviveKeyboard, reviveDueAt } from '@/lib/revive';
 import { clientTimeLine, clientDateLine, clientWhen, localTimeString, localSlot, slotKeyToDate } from '@/lib/time';
 import { sendSchedule, sendTrialAttended, sendTrialConfirmed, sendPurchase } from '@/lib/meta';
 import { countEventsByDay } from '@/lib/metaEvents';
+import { payerEmail } from '@/lib/stripePayments';
 import {
   getBooking, updateBooking, getBookedSlots, removeBookedSlot, addBookedSlot,
   setUserBooking, getUserBooking, clearUserBooking,
@@ -1082,16 +1083,11 @@ async function handleSyncStripeCommand(chatId, text) {
   for (const pi of paid) {
     if (known.has(pi.id)) continue;
 
-    // Через этот же аккаунт Stripe школа выставляет счета постоянным ученикам.
-    // К пробным урокам они отношения не имеют и в сводку воронки не идут.
-    const ref = String((pi.payment_details && pi.payment_details.order_reference) || '');
-
-    if (pi.invoice || ref.startsWith('in_')) {
-      foreign++;
-      continue;
-    }
-
-    const email = String(pi.receipt_email || '').trim().toLowerCase();
+    // Счета больше не выбрасываем: школа выставляет их и людям из воронки.
+    // Лишнее отсекает проверка по заявке ниже — нет заявки с такой почтой,
+    // значит оплата не наша. При оплате по счёту receipt_email пуст, почту
+    // знают только сам счёт и карточка клиента: за ней и идём.
+    const email = String(await payerEmail(pi)).trim().toLowerCase();
     let match = null;
 
     for (const b of bookings) {
@@ -1120,7 +1116,7 @@ async function handleSyncStripeCommand(chatId, text) {
       at: new Date(pi.created * 1000).toISOString(),
       bookingId: match ? match.id : null,
       pi: pi.id,
-      email: pi.receipt_email || '',
+      email,
       label: pi.description || 'Оплата в Stripe',
       amount: pi.amount_received || pi.amount || 0,
       currency: pi.currency || 'eur',
