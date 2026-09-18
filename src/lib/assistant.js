@@ -1,4 +1,5 @@
 import { listPages } from '@/lib/wiki';
+import { syncSeed } from '@/lib/wikiSeed';
 import { buildAnalytics, loadBookings, slotStartMs, dayKey, today, shiftDay } from '@/lib/analytics';
 
 // Помощник по проекту. Видит три вещи: базу знаний, сводные цифры
@@ -11,7 +12,10 @@ const SYSTEM = [
   'Отвечай только из данных ниже. Если данных не хватает — так и скажи,',
   'что именно неизвестно и где это посмотреть. Ничего не выдумывай.',
   'Цифры называй точно так, как они в данных, и говори, за какой они период.',
-  'Если вопрос про порядок работы — опирайся на базу знаний дословно.'
+  'Если вопрос про порядок работы — опирайся на базу знаний дословно.',
+  'Не придумывай кнопок, команд и экранов, которых нет в базе знаний.',
+  'Если нужного способа там не описано — скажи, что в инструкции этого нет,',
+  'и предложи спросить у Димы. Выдуманный путь хуже честного «не знаю».'
 ].join(' ');
 
 function shortBooking(booking) {
@@ -30,6 +34,10 @@ function shortBooking(booking) {
 }
 
 export async function buildContext() {
+  // Помощник отвечает строго по базе знаний, поэтому перед ответом убеждаемся,
+  // что она не старее кода. Если версия совпадает, это один запрос в базу.
+  await syncSeed();
+
   const to = today();
   const from = shiftDay(to, -29);
   const [pages, data, bookings] = await Promise.all([listPages(), buildAnalytics({ from, to }), loadBookings()]);
