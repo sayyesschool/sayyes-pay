@@ -22,11 +22,30 @@ const BOT_LINK_BASE = 'https://t.me/SY_school_bot';
 const MAIL_FROM = () => process.env.MAIL_FROM || 'SAY YES <hello@sayyestoenglish.com>';
 const MAIL_REPLY_TO = () => process.env.MAIL_REPLY_TO || '';
 
+const KEY_FOR = {
+  postmark: () => process.env.POSTMARK_TOKEN,
+  zeptomail: () => process.env.ZEPTOMAIL_TOKEN,
+  sendgrid: () => process.env.SENDGRID_API_KEY,
+  resend: () => process.env.RESEND_API_KEY
+};
+
+// Порядок по умолчанию. Но когда провайдер ломается (18.09.2026 у ZeptoMail
+// кончились кредиты, а пополнение упёрлось в трёхдневную проверку аккаунта),
+// переключиться нужно за минуту — а старый ключ из Vercel никто удалять не захочет:
+// он ещё пригодится. Поэтому есть прямое указание MAIL_PROVIDER, оно сильнее порядка.
+const ORDER = ['postmark', 'zeptomail', 'sendgrid', 'resend'];
+
 function provider() {
-  if (process.env.POSTMARK_TOKEN) return 'postmark';
-  if (process.env.ZEPTOMAIL_TOKEN) return 'zeptomail';
-  if (process.env.SENDGRID_API_KEY) return 'sendgrid';
-  if (process.env.RESEND_API_KEY) return 'resend';
+  const forced = String(process.env.MAIL_PROVIDER || '').trim().toLowerCase();
+
+  // Указали провайдера, но забыли положить его ключ — молча свалиться на другого
+  // хуже: письма пойдут не от того отправителя и без нужной подписи домена.
+  if (forced) return KEY_FOR[forced] && KEY_FOR[forced]() ? forced : null;
+
+  for (const name of ORDER) {
+    if (KEY_FOR[name]()) return name;
+  }
+
   return null;
 }
 
