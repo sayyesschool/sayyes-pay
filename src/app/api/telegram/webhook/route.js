@@ -9,6 +9,7 @@ import { clientTimeLine, clientDateLine, clientWhen, localTimeString, localSlot,
 import { sendSchedule, sendTrialAttended, sendTrialConfirmed, sendPurchase } from '@/lib/meta';
 import { countEventsByDay } from '@/lib/metaEvents';
 import { payerEmail, skippedIds } from '@/lib/stripePayments';
+import { restoreBooking } from '@/lib/adminActions';
 import {
   getBooking, updateBooking, getBookedSlots, removeBookedSlot, addBookedSlot,
   setUserBooking, getUserBooking, clearUserBooking,
@@ -1535,6 +1536,18 @@ async function handleReviveLater(chatId, bookingId, callbackQueryId, messageId) 
 // но снять двух живых учеников оно успело — команда возвращает и запись, и слот.
 async function handleRestoreCommand(chatId, text) {
   const args = String(text || '').trim().split(/\s+/).slice(1);
+
+  // /restore код — вернуть ровно одного человека. Так нужно чаще всего:
+  // автоматика сняла нескольких, а вернуть просят одного. Без кода команда
+  // работает как раньше — возвращает всех снятых за период.
+  if (args[0] && /^[a-z0-9]{4,16}$/.test(args[0]) && args[0] !== 'yes') {
+    const result = await restoreBooking(args[0], 'бот');
+
+    await sendMessage(chatId, (result.ok ? '↩️ ' : '⚠️ ') + (result.ok ? result.message : result.error));
+
+    return;
+  }
+
   const apply = args[0] === 'yes';
   const hours = Number(args[apply ? 1 : 0]) || 48;
   const since = Date.now() - hours * 60 * 60 * 1000;
