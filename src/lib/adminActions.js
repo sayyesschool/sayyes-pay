@@ -169,12 +169,16 @@ export async function resendConfirmation(bookingId, by) {
   return { ok: true, message: 'Письмо отправлено на ' + booking.email };
 }
 
-// Разом по всем, кого задело. Счёт небольшой — это разовая уборка после аварии,
-// а не рассылка: шлём по одному и честно считаем, сколько не ушло снова.
-export async function resendAllConfirmations(by) {
-  const list = await listMailResend();
+// Пачкой, но не обязательно всем: менеджер отмечает галочками, кому слать.
+// Без списка ids шлём всем подходящим. Счёт небольшой — это разовая уборка
+// после аварии, а не рассылка: шлём по одному и честно считаем неудачи.
+export async function resendAllConfirmations(by, ids = null) {
+  const all = await listMailResend();
+  const picked = Array.isArray(ids) && ids.length ? ids.map(String) : null;
+  const list = picked ? all.filter(booking => picked.includes(booking.id)) : all;
 
-  if (!list.length) return { ok: true, message: 'Некому отправлять: все письма дошли' };
+  if (!all.length) return { ok: true, message: 'Некому отправлять: все письма дошли' };
+  if (!list.length) return { ok: false, error: 'Никто не отмечен' };
 
   let sent = 0;
   const failed = [];
