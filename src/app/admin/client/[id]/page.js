@@ -124,6 +124,14 @@ export default async function ClientPage({ params, searchParams }) {
               <input type="hidden" name="back" value={back} />
               <button type="submit">Отменить запись</button>
             </form>
+            {(booking.releasedUnconfirmed || booking.status === 'cancelled') && (
+              <form method="post" action="/api/admin/action">
+                <input type="hidden" name="action" value="restore" />
+                <input type="hidden" name="id" value={booking.id} />
+                <input type="hidden" name="back" value={back} />
+                <button className="primary" type="submit">Вернуть запись</button>
+              </form>
+            )}
           </div>
           <p className="muted">
             Отметить можно только после начала урока. Повторное нажатие снимает отметку —
