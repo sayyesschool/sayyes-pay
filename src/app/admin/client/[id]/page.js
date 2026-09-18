@@ -77,6 +77,11 @@ export default async function ClientPage({ params, searchParams }) {
             <div><b>Telegram</b> {booking.telegram || '—'}</div>
             <div><b>Телефон</b> {booking.phone || '—'}</div>
             <div><b>Почта</b> {booking.email || '—'}</div>
+            {booking.emailOk === false && (
+              <div>
+                <b>Письмо</b> не дошло{booking.emailNote ? ' · ' + booking.emailNote : ''}
+              </div>
+            )}
             <div><b>Заявка</b> {fmt(booking.createdAt)}</div>
             <div><b>Отметка</b> {booking.attendanceMarkedAt ? fmt(booking.attendanceMarkedAt) + ' · ' + (booking.attendedBy || '') : '—'}</div>
             <div><b>Оплата</b> {booking.paid
@@ -124,6 +129,14 @@ export default async function ClientPage({ params, searchParams }) {
               <input type="hidden" name="back" value={back} />
               <button type="submit">Отменить запись</button>
             </form>
+            {booking.email && (
+              <form method="post" action="/api/admin/action">
+                <input type="hidden" name="action" value="resend-mail" />
+                <input type="hidden" name="id" value={booking.id} />
+                <input type="hidden" name="back" value={back} />
+                <button type="submit">Дослать письмо</button>
+              </form>
+            )}
             {(booking.releasedUnconfirmed || booking.status === 'cancelled') && (
               <form method="post" action="/api/admin/action">
                 <input type="hidden" name="action" value="restore" />
