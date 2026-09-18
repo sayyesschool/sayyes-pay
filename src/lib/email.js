@@ -15,7 +15,7 @@ import { ZOOM_JOIN_URL, ZOOM_MEETING_ID, ZOOM_PASSCODE } from '@/lib/zoom';
 
 import { localSlot, tzNoteFor } from '@/lib/time';
 import { reviveEmailBody, reviveSubject } from '@/lib/revive';
-import { kvSet } from '@/lib/redis';
+import { kvSet, kvGet } from '@/lib/redis';
 
 const BOT_LINK_BASE = 'https://t.me/SY_school_bot';
 
@@ -315,6 +315,51 @@ async function storeMailError(info) {
     await kvSet('last_mail_error', JSON.stringify({ ...info, at: new Date().toISOString() }), 604800);
   } catch (e) {
     console.error('Cannot store mail error:', e);
+  }
+
+  await alertManagers(info);
+}
+
+// 18.09.2026 у ZeptoMail кончились кредиты, и почта не уходила полдня: ошибка
+// честно писалась в лог и в last_mail_error, но туда никто не смотрит.
+// Молчаливый отказ обнаруживается жалобой клиента — а до неё успевает пройти день
+// записей без подтверждений. Поэтому о первом же отказе узнают менеджеры в чате.
+//
+// Не чаще раза в час: при массовой рассылке провалится каждое письмо, и без
+// заглушки бот завалит чат сотней одинаковых сообщений.
+const ALERT_KEY = 'mail_alert_sent';
+const ALERT_EVERY_MS = 60 * 60 * 1000;
+
+function alertText(info) {
+  const reason = String(info.text || info.error || '');
+  // У провайдеров причина лежит в JSON: вытаскиваем человеческую часть,
+  // чтобы в чат не падала простыня с request_id.
+  const match = reason.match(/"message"\s*:\s*"([^"]+)"/);
+  const short = (match ? match[1] : reason).slice(0, 160);
+
+  return '✉️ <b>Почта не отправляется</b>\n\n' +
+    'Провайдер: ' + (info.provider || '—') +
+    (info.status ? ' · ответ ' + info.status : '') + '\n' +
+    (short ? short + '\n\n' : '\n') +
+    'Не уходят подтверждения записи, просьбы подтвердить, напоминания и спецпредложения. ' +
+    'Проверить: /testmail';
+}
+
+async function alertManagers(info) {
+  try {
+    const last = Number(await kvGet(ALERT_KEY)) || 0;
+
+    if (Date.now() - last < ALERT_EVERY_MS) return;
+
+    // Метку ставим ДО отправки: если уведомление упадёт, второй попытки
+    // в этот час не будет, но и потока сообщений тоже.
+    await kvSet(ALERT_KEY, String(Date.now()), 86400);
+
+    const { notifyManagers } = await import('@/lib/managers');
+
+    await notifyManagers(alertText(info));
+  } catch (e) {
+    console.error('Cannot alert about mail error:', e);
   }
 }
 
