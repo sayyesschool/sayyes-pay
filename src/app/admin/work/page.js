@@ -4,7 +4,7 @@ import { SESSION_COOKIE, readSession } from '@/lib/adminAuth';
 import { statusTags, whenLabel } from '@/lib/adminUi';
 import { Shell } from '@/lib/adminShell';
 import { loadBookings, slotStartMs, dayKey, today } from '@/lib/analytics';
-import { getBookedSlots } from '@/lib/redis';
+import { getBookedSlots, kvGet } from '@/lib/redis';
 import { getBlocked } from '@/lib/schedule';
 
 // Та же сетка, что в карточке ученика: 10:00–20:00 через полчаса.
@@ -18,6 +18,37 @@ for (let h = 10; h <= 20; h++) {
 export const dynamic = 'force-dynamic';
 
 const DAY = 86400000;
+// Ошибка почты живёт в базе неделю, но для экрана интересны только свежие:
+// починили провайдера — плашка должна уйти сама, а не висеть напоминанием.
+const MAIL_FAIL_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+async function mailTrouble() {
+  try {
+    const raw = await kvGet('last_mail_error');
+    const info = typeof raw === 'string' ? JSON.parse(raw) : raw;
+
+    if (!info || !info.at) return null;
+
+    const at = new Date(info.at).getTime();
+
+    if (!at || Date.now() - at > MAIL_FAIL_WINDOW_MS) return null;
+
+    const text = String(info.text || info.error || '');
+    const match = text.match(/"message"\s*:\s*"([^"]+)"/);
+
+    return {
+      reason: (match ? match[1] : text).slice(0, 160) || ('ответ ' + (info.status || '—')),
+      when: new Date(at).toLocaleString('ru-RU', {
+        day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Moscow'
+      })
+    };
+  } catch (e) {
+    console.error('Mail health error:', e);
+
+    return null;
+  }
+}
+
 const DOW = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 const MONTHS = ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь',
   'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь'];
@@ -179,9 +210,22 @@ export default async function ManagePage({ searchParams }) {
   const found = query ? all.filter(booking => matches(booking, query)).slice(0, 40) : [];
   const link = (day, m) => '/admin/work?month=' + (m || month) + '&day=' + day;
 
+  // Почта ломается молча: письма просто перестают уходить, а узнаём мы об этом
+  // от клиента через день. Последняя ошибка лежит в базе — показываем её здесь,
+  // на экране, который менеджер открывает каждый день. Один запрос в базу.
+  const mailFail = await mailTrouble();
+
   return (
     <Shell session={session} active="work" title="Управление">
       {message && <div className={'msg' + (message.startsWith('Ошибка') ? ' err' : '')}>{message}</div>}
+
+      {mailFail && (
+        <div className="msg err">
+          <b>Почта не отправляется.</b> {mailFail.reason}
+          {' '}Последняя ошибка: {mailFail.when}. Не уходят подтверждения, напоминания
+          и спецпредложения — пока не починим, полагайтесь только на Telegram.
+        </div>
+      )}
 
       <div className="card">
         <div className="calhead">
