@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import { SESSION_COOKIE, readSession } from '@/lib/adminAuth';
 import { Shell } from '@/lib/adminShell';
 import { listPages } from '@/lib/wiki';
-import { seedWikiIfEmpty } from '@/lib/wikiSeed';
+import { syncSeed, staleSlugs } from '@/lib/wikiSeed';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,8 +15,12 @@ export default async function WikiIndex({ searchParams }) {
 
   const params = await searchParams;
   const message = params?.msg ? String(params.msg) : null;
-  // Первый заход: кладём стартовые страницы, чтобы вики не встречала пустотой.
-  const pages = await seedWikiIfEmpty();
+  // Текст страниц живёт и в коде. Если там его обновили, перезальём — кроме
+  // страниц, которые правили руками: их пометим и дадим кнопку.
+  await syncSeed();
+
+  const pages = await listPages();
+  const stale = await staleSlugs();
 
   return (
     <Shell session={session} active="wiki" title="База знаний">
@@ -32,7 +36,21 @@ export default async function WikiIndex({ searchParams }) {
                   {page.updatedBy ? 'правил ' + page.updatedBy : 'без автора'}
                   {page.updatedAt ? ' · ' + new Date(page.updatedAt).toLocaleDateString('ru-RU') : ''}
                 </div>
+                {stale.includes(page.slug) && (
+                  <div className="sub">
+                    <span className="tag wait">в коде есть новая версия</span>
+                  </div>
+                )}
               </div>
+              {stale.includes(page.slug) && (
+                <form method="post" action="/api/admin/wiki">
+                  <input type="hidden" name="action" value="reseed" />
+                  <input type="hidden" name="slug" value={page.slug} />
+                  <div className="btns">
+                    <button type="submit">Обновить из кода</button>
+                  </div>
+                </form>
+              )}
             </div>
           ))}
           {pages.length === 0 && (
