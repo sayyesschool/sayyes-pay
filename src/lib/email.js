@@ -15,7 +15,7 @@ import { ZOOM_JOIN_URL, ZOOM_MEETING_ID, ZOOM_PASSCODE } from '@/lib/zoom';
 
 import { localSlot, tzNoteFor } from '@/lib/time';
 import { reviveEmailBody, reviveSubject } from '@/lib/revive';
-import { kvSet, kvGet } from '@/lib/redis';
+import { kvSet, kvGet, kvDel } from '@/lib/redis';
 
 const BOT_LINK_BASE = 'https://t.me/SY_school_bot';
 
@@ -339,6 +339,16 @@ async function storeMailError(info) {
   await alertManagers(info);
 }
 
+// Письмо ушло — значит поломка кончилась. Без этого ошибка лежит в базе неделю,
+// и админка честно, но бесполезно пугает плашкой ещё сутки после починки.
+async function clearMailError() {
+  try {
+    await kvDel('last_mail_error');
+  } catch (e) {
+    console.error('Cannot clear mail error:', e);
+  }
+}
+
 // 18.09.2026 у ZeptoMail кончились кредиты, и почта не уходила полдня: ошибка
 // честно писалась в лог и в last_mail_error, но туда никто не смотрит.
 // Молчаливый отказ обнаруживается жалобой клиента — а до неё успевает пройти день
@@ -417,6 +427,9 @@ export async function sendBookingConfirmation(booking, mode = 'new') {
       await storeMailError({ provider: which, status: resp.status, text: text.slice(0, 300) });
       return { ok: false, provider: which, status: resp.status };
     }
+
+    await clearMailError();
+
     return { ok: true, provider: which };
   } catch (e) {
     console.error(`Mail (${which}) request failed:`, e);
@@ -527,6 +540,8 @@ async function deliver(msg, tag) {
 
       return { ok: false, provider: which, status: resp.status };
     }
+
+    await clearMailError();
 
     return { ok: true, provider: which };
   } catch (e) {
