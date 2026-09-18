@@ -3,7 +3,8 @@ import { cookies } from 'next/headers';
 import { SESSION_COOKIE, readSession } from '@/lib/adminAuth';
 import {
   markAttendance, cancelBooking, rescheduleBooking,
-  sendPayLink, markPaid, messageStudent, archiveUnmarked, restoreBooking
+  sendPayLink, markPaid, messageStudent, archiveUnmarked, restoreBooking,
+  resendConfirmation, resendAllConfirmations
 } from '@/lib/adminActions';
 import { blockSlots, openSlots, setWeekHours } from '@/lib/schedule';
 import { attachPayment, detachPayment, unskipPayment } from '@/lib/stripePayments';
@@ -30,6 +31,9 @@ export async function POST(request) {
     else if (action === 'noshow') result = await markAttendance(id, false, by);
     else if (action === 'cancel') result = await cancelBooking(id, by);
     else if (action === 'restore') result = await restoreBooking(id, by);
+    // Разбор после аварии с почтой: письмо не дошло, человек об этом не знает.
+    else if (action === 'resend-mail') result = await resendConfirmation(id, by);
+    else if (action === 'resend-mail-all') result = await resendAllConfirmations(by);
     else if (action === 'reschedule') result = await rescheduleBooking(id, String(form.get('slot') || ''), by);
     else if (action === 'paylink') result = await sendPayLink(id, String(form.get('pack') || ''), by);
     else if (action === 'paid') result = await markPaid(id, form.get('amount'), String(form.get('pack') || ''), by);
