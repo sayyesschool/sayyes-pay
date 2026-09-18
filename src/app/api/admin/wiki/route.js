@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { SESSION_COOKIE, readSession } from '@/lib/adminAuth';
 import { savePage, deletePage, slugify } from '@/lib/wiki';
+import { syncSeed } from '@/lib/wikiSeed';
 
 export async function POST(request) {
   const store = await cookies();
@@ -14,6 +15,14 @@ export async function POST(request) {
   const slug = String(form.get('slug') || '');
   const title = String(form.get('title') || '').trim();
   const body = String(form.get('body') || '');
+
+  // Страницу правили руками, а в коде с тех пор появилась новая версия.
+  // Кнопка «Обновить из кода» затирает ручной текст — но только по просьбе.
+  if (action === 'reseed' && slug) {
+    await syncSeed({ force: true, slug });
+
+    return NextResponse.redirect(new URL('/admin/wiki/' + slug + '?msg=Страница обновлена из кода', request.url), 303);
+  }
 
   if (action === 'delete' && slug) {
     await deletePage(slug);
