@@ -66,9 +66,16 @@ export async function GET(request) {
       // Тем, у кого нет чата с ботом, то же самое письмом. Без этого человек
       // между заявкой и уроком не получал от нас ни одного касания.
       if (!booking.chatId && booking.email && !booking.mailed24h && hoursUntil > 1.5 && hoursUntil < 25) {
-        await sendConfirmRequestEmail(booking);
-        await updateBooking(booking.id, { mailed24h: true });
-        mailed++;
+        // Флаг ставим только если письмо реально ушло. 18.09.2026 у почтового
+        // провайдера кончились кредиты — письма падали, а флаг вставал, и крон
+        // к этим людям больше не возвращался. Поломка почты не должна навсегда
+        // съедать касание.
+        const mail = await sendConfirmRequestEmail(booking);
+
+        if (mail && mail.ok) {
+          await updateBooking(booking.id, { mailed24h: true });
+          mailed++;
+        }
       }
 
       // Второе касание для тех, у кого только почта. По данным за 19 сентябрьских
@@ -79,9 +86,12 @@ export async function GET(request) {
       // ДО автоснятия неподтверждённых, которое срабатывает за 6 часов до урока.
       if (!booking.chatId && booking.email && !booking.confirmed && !booking.mailed12h
         && hoursUntil > 6.5 && hoursUntil < 14) {
-        await sendConfirmRequestEmail(booking);
-        await updateBooking(booking.id, { mailed12h: true });
-        mailed++;
+        const mail = await sendConfirmRequestEmail(booking);
+
+        if (mail && mail.ok) {
+          await updateBooking(booking.id, { mailed12h: true });
+          mailed++;
+        }
       }
 
 
@@ -128,18 +138,29 @@ export async function GET(request) {
           : (createdAt ? new Date(createdAt.getTime() + 2.5 * 60 * 60 * 1000) : null);
 
         if (dueAt && now >= dueAt) {
+          let delivered = false;
+
           if (booking.chatId) {
             await sendMessage(booking.chatId, formatHandout(booking), bookingActionsKeyboard(booking.id, booking));
+            delivered = true;
           }
+
           if (booking.email) {
             try {
-              await sendHandoutEmail(booking);
+              const mail = await sendHandoutEmail(booking);
+
+              if (mail && mail.ok) delivered = true;
             } catch (e) {
               console.error('Handout email error:', e);
             }
           }
-          await updateBooking(booking.id, { handoutSent: true });
-          sentHandout++;
+
+          // Хотя бы один канал сработал — касание состоялось. Если не сработал
+          // ни один, флаг не ставим: крон попробует снова в следующий час.
+          if (delivered) {
+            await updateBooking(booking.id, { handoutSent: true });
+            sentHandout++;
+          }
         }
       }
 
