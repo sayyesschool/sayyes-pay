@@ -1,5 +1,6 @@
 import { getBooking, updateBooking, addBookedSlot, removeBookedSlot, getBookedSlots, kvSet, kvGet, kvKeys } from '@/lib/redis';
-import { sendMessage, formatManagerCard } from '@/lib/telegram';
+import { sendMessage, formatManagerCard, bookingActionsKeyboard } from '@/lib/telegram';
+import { clientWhen } from '@/lib/time';
 import { notifyManagers } from '@/lib/managers';
 import { sendTrialAttended, sendPurchase } from '@/lib/meta';
 import { getIntroProduct, getIntroProducts, introActive, nextIntroExpiry } from '@/services/intro';
@@ -107,6 +108,58 @@ export async function cancelBooking(bookingId, by) {
   await notifyManagers('❌ Запись отменена из админки, @' + by + '\n\n' + formatManagerCard(booking));
 
   return { ok: true, message: 'Запись отменена, слот свободен' };
+}
+
+// --- Возврат одной записи ---
+// Автоматика снимает неподтверждённые за 6 часов до урока, и иногда снимает зря.
+// В боте есть /restore, но он возвращает ВСЕ снятые за период разом — а вернуть
+// нужно обычно одного человека. Здесь возврат ровно одной записи, из её карточки.
+export async function restoreBooking(bookingId, by) {
+  const booking = await getBooking(bookingId);
+
+  if (!booking) return { ok: false, error: 'Запись не найдена' };
+
+  const released = Boolean(booking.releasedUnconfirmed);
+  const cancelled = booking.status === 'cancelled';
+
+  if (!released && !cancelled) return { ok: false, error: 'Эта запись в силе, возвращать нечего' };
+
+  const hasSlot = booking.slot && booking.slot !== 'no_time';
+
+  // Слот мог уйти другому ученику, пока запись была снята. Тогда возвращать
+  // некуда: две записи на одно время — худшее, что можно сделать с расписанием.
+  if (hasSlot) {
+    const taken = await getBookedSlots();
+
+    if (taken.includes(booking.slot)) {
+      return { ok: false, error: 'Это время уже занято другим учеником — перенесите запись на свободное' };
+    }
+  }
+
+  await updateBooking(bookingId, {
+    status: 'confirmed',
+    releasedUnconfirmed: false,
+    releasedAt: null,
+    cancelledAt: null,
+    cancelledBy: null,
+    // Метка защищает от повторного снятия автоматикой: без неё крон увидит
+    // неподтверждённую запись за 6 часов до урока и снимет её снова.
+    restoredAt: new Date().toISOString(),
+    restoredBy: '@' + by
+  });
+
+  if (hasSlot) await addBookedSlot(booking.slot);
+
+  if (booking.chatId) {
+    await sendMessage(booking.chatId,
+      'Ваше время снова за вами — мы освободили его по ошибке, извините.\n\n' + clientWhen(booking),
+      bookingActionsKeyboard(booking.id, booking)
+    );
+  }
+
+  await notifyManagers('↩️ Запись возвращена из админки, @' + by + '\n\n' + formatManagerCard(booking));
+
+  return { ok: true, message: 'Запись возвращена' + (hasSlot ? ', слот снова занят' : '') };
 }
 
 // --- Перенос ---
