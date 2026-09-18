@@ -411,13 +411,24 @@ export default async function ManagePage({ searchParams }) {
                 особенно если его нет в боте. Отправка заодно вернёт просьбу
                 подтвердить: крон дошлёт её за сутки и за 12 часов до урока.
               </p>
-              <List items={mailFailed} empty="" />
               <form method="post" action="/api/admin/action" style={{ marginTop: 10 }}>
                 <input type="hidden" name="action" value="resend-mail-all" />
                 <input type="hidden" name="back" value="/admin/work" />
-                <button className="primary" type="submit">
-                  Отправить всем ({mailFailed.length})
-                </button>
+                {mailFailed.map(booking => (
+                  <label className="pick" key={booking.id}>
+                    <input type="checkbox" name="pick" value={booking.id} defaultChecked />
+                    <span>
+                      <b>{booking.name || 'без имени'}</b> · {whenLabel(booking)}
+                      <span className="sub"> {booking.email}</span>
+                    </span>
+                  </label>
+                ))}
+                <div className="btns">
+                  <button className="primary" type="submit">Отправить отмеченным</button>
+                </div>
+                <p className="muted">
+                  Отмечены все — снимите галочки с тех, кому слать не нужно.
+                </p>
               </form>
             </details>
           )}
