@@ -55,6 +55,12 @@ export const ADMIN_CSS = [
   '.syad textarea{min-height:90px;max-width:none}',
   '.syad .field{margin-bottom:10px}',
   '.syad .field label{display:block;font-size:12px;color:#71717a;margin-bottom:4px}',
+  // Строка с галочкой: отмечаем, кому слать письмо. Клик по всей строке,
+  // а не по крошечному квадратику — этим пользуются с телефона.
+  '.syad label.pick{display:flex;gap:10px;align-items:flex-start;padding:9px 0;border-bottom:1px solid #f1f1f4;cursor:pointer;font-size:14px}',
+  '.syad label.pick:last-of-type{border-bottom:none}',
+  '.syad label.pick input{width:auto;margin:3px 0 0;flex:none}',
+  '.syad label.pick .sub{display:block;font-size:12px;color:#71717a}',
   // Ссылка на оплату: длинная, её выделяют тройным кликом и копируют.
   '.syad input.link{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;max-width:none;background:#fafafa}',
   '.syad input.link:focus{background:#fff}',
