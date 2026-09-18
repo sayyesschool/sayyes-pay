@@ -6,6 +6,7 @@ import { sendTrialAttended, sendPurchase } from '@/lib/meta';
 import { getIntroProduct, getIntroProducts, introActive, nextIntroExpiry } from '@/services/intro';
 import { getProducts } from '@/services/stripe';
 import { sendIntroOfferEmail, sendBookingConfirmation } from '@/lib/email';
+import { getAllActiveBookings } from '@/lib/redis';
 import { addMessage } from '@/lib/thread';
 
 // Действия менеджера из веба. Делают ровно то же, что кнопки бота, и теми же
@@ -108,6 +109,91 @@ export async function cancelBooking(bookingId, by) {
   await notifyManagers('❌ Запись отменена из админки, @' + by + '\n\n' + formatManagerCard(booking));
 
   return { ok: true, message: 'Запись отменена, слот свободен' };
+}
+
+// --- Письма, которые не ушли ---
+// Когда почтовый провайдер лежит, подтверждение записи не доходит, а человек
+// об этом не знает: в боте его может не быть вовсе. Результат отправки пишется
+// в саму заявку (emailOk), поэтому список пострадавших у нас точный.
+//
+// Шлём только по будущим живым урокам: письмо «вы записаны» по уроку, который
+// уже прошёл или чьё время мы освободили, хуже молчания.
+export function needsMailResend(booking, now = Date.now()) {
+  if (!booking || booking.emailOk !== false) return false;
+  if (!booking.email) return false;
+  if (booking.status === 'cancelled' || booking.releasedUnconfirmed) return false;
+  if (booking.archived || booking.introTest) return false;
+
+  const start = slotStartMs(booking);
+
+  return Boolean(start && start > now);
+}
+
+export async function listMailResend() {
+  const bookings = await getAllActiveBookings();
+  const now = Date.now();
+
+  return bookings
+    .filter(booking => needsMailResend(booking, now))
+    .sort((a, b) => slotStartMs(a) - slotStartMs(b));
+}
+
+export async function resendConfirmation(bookingId, by) {
+  const booking = await getBooking(bookingId);
+
+  if (!booking) return { ok: false, error: 'Запись не найдена' };
+  if (!booking.email) return { ok: false, error: 'У этой заявки нет почты' };
+
+  const mail = await sendBookingConfirmation(booking);
+  const ok = Boolean(mail && mail.ok);
+
+  const patch = {
+    emailOk: ok,
+    emailNote: (mail && (mail.skipped || mail.error)) || null
+  };
+
+  // Просьбу подтвердить крон пометил отправленной, хотя она упала вместе
+  // с остальными. Снимаем метки — и он дошлёт её сам в своё окно, за сутки
+  // и за 12 часов до урока, когда человек ещё может среагировать.
+  if (!booking.confirmed) {
+    patch.mailed24h = false;
+    patch.mailed12h = false;
+  }
+
+  await updateBooking(bookingId, patch);
+
+  if (!ok) {
+    return { ok: false, error: 'Письмо снова не ушло: ' + ((mail && (mail.error || mail.status)) || 'причина неизвестна') };
+  }
+
+  return { ok: true, message: 'Письмо отправлено на ' + booking.email };
+}
+
+// Разом по всем, кого задело. Счёт небольшой — это разовая уборка после аварии,
+// а не рассылка: шлём по одному и честно считаем, сколько не ушло снова.
+export async function resendAllConfirmations(by) {
+  const list = await listMailResend();
+
+  if (!list.length) return { ok: true, message: 'Некому отправлять: все письма дошли' };
+
+  let sent = 0;
+  const failed = [];
+
+  for (const booking of list) {
+    const result = await resendConfirmation(booking.id, by);
+
+    if (result.ok) sent++;
+    else failed.push(booking.id);
+  }
+
+  await notifyManagers('✉️ Повторная отправка писем, @' + by +
+    '\nОтправлено: ' + sent + ' из ' + list.length +
+    (failed.length ? '\nНе ушло: ' + failed.map(id => '<code>' + id + '</code>').join(', ') : ''));
+
+  return {
+    ok: true,
+    message: 'Отправлено: ' + sent + ' из ' + list.length + (failed.length ? ', не ушло ' + failed.length : '')
+  };
 }
 
 // --- Возврат одной записи ---
