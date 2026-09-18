@@ -33,7 +33,10 @@ export async function POST(request) {
     else if (action === 'restore') result = await restoreBooking(id, by);
     // Разбор после аварии с почтой: письмо не дошло, человек об этом не знает.
     else if (action === 'resend-mail') result = await resendConfirmation(id, by);
-    else if (action === 'resend-mail-all') result = await resendAllConfirmations(by);
+    // Галочки в списке: шлём только отмеченным. Пусто — значит всем подходящим.
+    else if (action === 'resend-mail-all') {
+      result = await resendAllConfirmations(by, form.getAll('pick').map(String).filter(Boolean));
+    }
     else if (action === 'reschedule') result = await rescheduleBooking(id, String(form.get('slot') || ''), by);
     else if (action === 'paylink') result = await sendPayLink(id, String(form.get('pack') || ''), by);
     else if (action === 'paid') result = await markPaid(id, form.get('amount'), String(form.get('pack') || ''), by);
