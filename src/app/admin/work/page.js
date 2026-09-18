@@ -5,6 +5,7 @@ import { statusTags, whenLabel } from '@/lib/adminUi';
 import { Shell } from '@/lib/adminShell';
 import { loadBookings, slotStartMs, dayKey, today } from '@/lib/analytics';
 import { getBookedSlots, kvGet } from '@/lib/redis';
+import { needsMailResend } from '@/lib/adminActions';
 import { getBlocked } from '@/lib/schedule';
 
 // Та же сетка, что в карточке ученика: 10:00–20:00 через полчаса.
@@ -196,7 +197,11 @@ export default async function ManagePage({ searchParams }) {
   const noLink = active.filter(booking => booking.attended === true && !booking.paid && !booking.payLinkSentAt);
   const waitingPay = active.filter(booking => booking.attended === true && !booking.paid && booking.payLinkSentAt);
   const noTime = active.filter(booking => !booking.slot || booking.slot === 'no_time');
-  const todo = unmarked.length + noLink.length + waitingPay.length + noTime.length;
+  // Письма, которые не ушли: результат отправки пишется в заявку при записи,
+  // поэтому список точный. Только будущие живые уроки — по прошедшему письмо
+  // «вы записаны» уже не помощь, а путаница.
+  const mailFailed = active.filter(booking => needsMailResend(booking, now));
+  const todo = unmarked.length + noLink.length + waitingPay.length + noTime.length + mailFailed.length;
 
   const todays = byDay[todayKey] || [];
   const week = active
@@ -395,6 +400,28 @@ export default async function ManagePage({ searchParams }) {
           <span className="count">{todo}</span>
         </summary>
         <div className="body">
+          {mailFailed.length > 0 && (
+            <details className="sub" open>
+              <summary>
+                Письма, которые не ушли <span className="count">{mailFailed.length}</span>
+              </summary>
+              <p className="muted">
+                Подтверждение записи не дошло: почта в момент записи не работала.
+                Человек мог не узнать ни времени урока, ни ссылки на Zoom —
+                особенно если его нет в боте. Отправка заодно вернёт просьбу
+                подтвердить: крон дошлёт её за сутки и за 12 часов до урока.
+              </p>
+              <List items={mailFailed} empty="" />
+              <form method="post" action="/api/admin/action" style={{ marginTop: 10 }}>
+                <input type="hidden" name="action" value="resend-mail-all" />
+                <input type="hidden" name="back" value="/admin/work" />
+                <button className="primary" type="submit">
+                  Отправить всем ({mailFailed.length})
+                </button>
+              </form>
+            </details>
+          )}
+
           <details className="sub">
             <summary>Уроки без отметки <span className="count">{unmarked.length}</span></summary>
             <List items={unmarked.slice(0, 40)} empty="Все уроки отмечены." />
