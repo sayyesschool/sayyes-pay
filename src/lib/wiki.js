@@ -1,4 +1,4 @@
-import { kvGet, kvSet, kvDel, kvKeys } from '@/lib/redis';
+import { kvGet, kvSet, kvDel, kvKeys, kvMGet } from '@/lib/redis';
 
 // База знаний школы. Живёт в базе, а не в репозитории: инструкцию должны
 // править те, кто по ней работает, без разработчика и без GitHub.
@@ -15,12 +15,12 @@ export function slugify(value) {
 }
 
 export async function listPages() {
+  // Одним запросом, а не по странице за раз: вики читается на каждый вопрос
+  // помощнику, а лимит запросов к базе мы уже однажды выбрали досуха.
   const keys = await kvKeys('wiki:*');
   const pages = [];
 
-  for (const key of keys) {
-    const page = await kvGet(key);
-
+  for (const page of await kvMGet(keys)) {
     if (page && page.slug) pages.push(page);
   }
 
