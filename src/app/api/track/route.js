@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { kvSet, kvGet } from '@/lib/redis';
+import { kvSet, kvGet, kvSeenFirstTime } from '@/lib/redis';
 
 // Сутки считаем в базовом поясе расписания (UTC+3) — в нём живут слоты,
 // сводка бота и аналитика админки. Раньше здесь стояла дата UTC, и всё,
@@ -18,12 +18,31 @@ function cleanSource(value) {
 
 export async function POST(request) {
   try {
-    const { step, src, ad } = await request.json();
+    const { step, src, ad, vid } = await request.json();
 
     if (!step) return NextResponse.json({ error: 'Missing step' }, { status: 400 });
 
-    const name = String(step).slice(0, 40);
+    let name = String(step).slice(0, 40);
     const day = new Date(Date.now() + TZ_OFFSET_MS).toISOString().slice(0, 10);
+
+    // Открытие страницы и человек — не одно и то же. За 17–21 сентября Мета
+    // насчитала 441 клик, а счётчик — 597 открытий: один человек открывает
+    // ссылку во встроенном браузере Instagram, потом жмёт «открыть в Safari»,
+    // перезагружает, возвращается назад. Метка в самой странице этого не ловит:
+    // в другом браузере своё хранилище. Зато fbclid переезжает вместе со ссылкой,
+    // поэтому считаем по нему — а у заходов без него берём метку из localStorage.
+    //
+    // Повторный заход не пропадает: он пишется как landing_repeat, и видно,
+    // сколько раз люди возвращались.
+    if (name === '1' && vid) {
+      const visitor = String(vid).replace(/[^A-Za-z0-9_.-]/g, '').slice(0, 64);
+
+      if (visitor) {
+        const first = await kvSeenFirstTime('track:vis:' + day, visitor, 60 * 60 * 48);
+
+        if (!first) name = '1r';
+      }
+    }
     const key = 'track:' + day;
     const data = await kvGet(key) || {};
 
