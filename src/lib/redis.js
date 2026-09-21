@@ -191,6 +191,45 @@ async function kvKeys(pattern) {
   }
 }
 
+// Пометить посетителя и сказать, первый ли он раз за сутки. SADD возвращает 1,
+// если элемент добавлен, и 0, если он уже был — этого достаточно, чтобы считать
+// людей, а не открытия страницы. Одна команда на заход: конвейер Upstash
+// считается за один запрос, сколько бы команд внутри ни было.
+export async function kvSeenFirstTime(key, member, exSeconds) {
+  if (!KV_URL || !KV_TOKEN) return true;
+
+  try {
+    const resp = await fetch(KV_URL + '/pipeline', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer ' + KV_TOKEN,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify([
+        ['SADD', key, String(member)],
+        ['EXPIRE', key, String(exSeconds || 172800)]
+      ])
+    });
+
+    if (!resp.ok) {
+      note('sadd http ' + resp.status, await resp.text().catch(() => ''));
+
+      // Не смогли проверить — считаем заход первым. Завысить открытия
+      // безопаснее, чем потерять живого человека из отчёта.
+      return true;
+    }
+
+    const data = await resp.json();
+    const first = Array.isArray(data) && data[0] && !data[0].error ? Number(data[0].result) : 1;
+
+    return first !== 0;
+  } catch (e) {
+    note('sadd error', e.message || e);
+
+    return true;
+  }
+}
+
 // --- Booking helpers ---
 
 export async function getBookedSlots() {
