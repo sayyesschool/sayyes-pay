@@ -1084,6 +1084,28 @@ const VISIT_SOURCE = (function () {
 const VISIT_AD = (function () {
   try {
     const id = new URLSearchParams(window.location.search).get('ad_id') || '';
+  // Кто пришёл, а не сколько раз открыли страницу. Метка Меты в адресе
+  // переезжает вместе со ссылкой из встроенного браузера Instagram в Safari —
+  // по ней человек узнаётся там, где localStorage уже другой. Если метки нет,
+  // заводим свою. Считает на сервере: здесь мы только передаём метку.
+  const VISIT_ID = (function () {
+    try {
+      const fromAd = new URLSearchParams(location.search).get("fbclid");
+
+      if (fromAd) return String(fromAd).slice(0, 64);
+
+      let own = localStorage.getItem("sy_vid");
+
+      if (!own) {
+        own = "v" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+        localStorage.setItem("sy_vid", own);
+      }
+
+      return own;
+    } catch (e) {
+      return "";
+    }
+  })();
 
     return id.replace(/[^0-9]/g, '').slice(0, 20);
   } catch (e) {
@@ -1112,7 +1134,7 @@ function trackStep(stepId) {
   fetch('/api/track', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ step: stepName, src: VISIT_SOURCE, ad: VISIT_AD, ts: Date.now() })
+    body: JSON.stringify({ step: stepName, src: VISIT_SOURCE, ad: VISIT_AD, vid: VISIT_ID, ts: Date.now() })
   }).catch(() => {});
 }
 
