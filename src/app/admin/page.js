@@ -7,6 +7,10 @@ import { Shell } from '@/lib/adminShell';
 
 export const dynamic = 'force-dynamic';
 
+// Счётчик открытий страницы появился 12 сентября: до этого верх воронки
+// не считался вовсе, и доля «открыли от кликов» за такой период — выдумка.
+const TRACKING_SINCE = '2026-09-12';
+
 const TABS = [
   { key: 'meta', label: 'Перформанс на Мете', owner: true },
   { key: 'funnel', label: 'Воронка', owner: false },
@@ -201,7 +205,7 @@ export default async function AdminPage({ searchParams }) {
         {tab === 'funnel' && (
           <>
             <div className="card">
-              <h2>Путь от клика до оплаты</h2>
+              <h2>Путь от клика до оплаты <span className="muted">· {short(from)} — {short(to)}</span></h2>
               {chain.map(step => (
                 <div className="step" key={step.key}>
                   <div className="line">
@@ -223,12 +227,14 @@ export default async function AdminPage({ searchParams }) {
                 {ads && ads.ok ? ' Верх воронки — клики по ссылке в объявлении, без лайков и тапов по профилю.' : ' Кабинет недоступен, верх воронки — открытия страницы.'}
                 {data.totals.organic > 0 && ' Шаги воронки — только заходы с рекламы; из других источников за период пришло ещё ' + data.totals.organic + '.'}
               </p>
-              {data.totals.visits < data.totals.quiz && (
-                <p className="muted bad">
-                  Открытия страницы до 12 сентября не считались вообще — счётчик стоял только
-                  на переходах между экранами. Поэтому в старых периодах первый шаг занижен.
-                </p>
-              )}
+              {from < TRACKING_SINCE && (
+              <p className="muted bad">
+                В период попадают дни до {short(TRACKING_SINCE)} — тогда открытия страницы
+                не считались вовсе, счётчик стоял только на переходах между экранами.
+                Первый шаг за такой период занижен, а его доля от кликов ничего не значит.
+                Берите период с {short(TRACKING_SINCE)}.
+              </p>
+            )}
             </div>
 
             <div className="card">
