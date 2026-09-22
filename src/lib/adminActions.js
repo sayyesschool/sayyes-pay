@@ -240,16 +240,29 @@ export async function restoreBooking(bookingId, by) {
 
   if (hasSlot) await addBookedSlot(booking.slot);
 
-  if (booking.chatId) {
+  // Извинение «мы освободили ваше время по ошибке» уместно, только пока урок
+  // впереди. Если он уже прошёл — а так и бывает, когда автоматика сняла запись,
+  // а человек всё равно пришёл, — такое письмо в спину только запутает.
+  // Возвращаем тихо: статус чиним, ученика не трогаем.
+  const lessonAhead = !hasSlot || slotStartMs(booking) > Date.now();
+  const silent = booking.attended === true || !lessonAhead;
+
+  if (booking.chatId && !silent) {
     await sendMessage(booking.chatId,
       'Ваше время снова за вами — мы освободили его по ошибке, извините.\n\n' + clientWhen(booking),
       bookingActionsKeyboard(booking.id, booking)
     );
   }
 
-  await notifyManagers('↩️ Запись возвращена из админки, @' + by + '\n\n' + formatManagerCard(booking));
+  await notifyManagers('↩️ Запись возвращена из админки, @' + by +
+    (silent ? ' (ученику не писали: урок уже прошёл)' : '') +
+    '\n\n' + formatManagerCard(booking));
 
-  return { ok: true, message: 'Запись возвращена' + (hasSlot ? ', слот снова занят' : '') };
+  return {
+    ok: true,
+    message: 'Запись возвращена' + (hasSlot ? ', слот снова занят' : '') +
+      (silent ? '. Ученику не писали — урок уже прошёл' : '')
+  };
 }
 
 // --- Перенос ---
