@@ -403,6 +403,10 @@ async function applyNewSlot(bookingId, newSlotKey) {
     slotMsk: time,
     slotDate: newSlotDate,
     slotLocal: localTimeString(booking, newSlotKey),
+    // От этого момента крон считает защиту от автоснятия: после переноса
+    // человек получает просьбу подтвердить заново и времени у него столько же,
+    // сколько у только что записавшегося.
+    rescheduledAt: new Date().toISOString(),
     reminded24h: false,
     reminded1h: false,
     mailed24h: false,
