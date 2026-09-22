@@ -45,6 +45,10 @@ export async function POST(request) {
       slotMsk: slotMsk || '',
       slotDate: slotDate || '',
       slotLocal: slotLocal || '',
+      // Момент переноса. От него, а не от первой заявки, крон считает защиту
+      // от автоснятия: после переноса человек получает просьбу подтвердить
+      // заново, и времени у него ровно столько же, сколько у новой записи.
+      rescheduledAt: new Date().toISOString(),
       reminded24h: false,
       reminded1h: false,
       mailed24h: false,
