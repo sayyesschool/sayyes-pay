@@ -673,6 +673,39 @@ async function handleConfirmAttendance(chatId, bookingId, callbackQueryId, messa
     return;
   }
 
+  // Человек жмёт «Буду» уже после того, как автоматика сняла его запись
+  // за неподтверждённость. Раньше кнопка просто ставила отметку: статус
+  // оставался «отменена», слот — свободным, и запись пропадала из «сегодня»
+  // и из бота. 22.09.2026 так потерялась ученица, которая пришла на урок,
+  // а школа не смогла взять с неё оплату. Подтверждение возвращает запись.
+  if (booking.status === 'cancelled' && booking.attended !== true) {
+    const hasSlot = booking.slot && booking.slot !== 'no_time';
+    const taken = hasSlot ? (await getBookedSlots()).includes(booking.slot) : false;
+
+    if (taken) {
+      await answerCallback(callbackQueryId, 'Это время уже занято');
+      await sendMessage(chatId,
+        'К сожалению, это время мы уже отдали другому ученику — подтверждения не было слишком долго.\n\n' +
+        'Выберите новое, это минута:\nhttps://www.sayyestoenglish.com/learn_easy?reschedule=' + bookingId
+      );
+
+      return;
+    }
+
+    await updateBooking(bookingId, {
+      status: 'confirmed',
+      releasedUnconfirmed: false,
+      releasedAt: null,
+      // Та же метка, что у возврата из админки: иначе крон снимет запись снова.
+      restoredAt: new Date().toISOString()
+    });
+
+    if (hasSlot) await addBookedSlot(booking.slot);
+
+    await notifyManagers('↩️ Подтвердил(а) после снятия — запись вернули: ' +
+      (booking.name || 'ученик') + ' · <code>' + bookingId + '</code>');
+  }
+
   if (!booking.confirmed) {
     await updateBooking(bookingId, {
       confirmed: true,
