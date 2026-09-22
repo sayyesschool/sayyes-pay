@@ -31,17 +31,22 @@ export async function getPage(slug) {
   return kvGet(KEY(slug));
 }
 
-export async function savePage({ slug, title, body, by, order }) {
+export async function savePage({ slug, title, body, by, order, seed }) {
   const id = slug || slugify(title);
   const existing = await getPage(id);
 
+  // Автор — признак того, что страницу правил человек: по нему перезаливка
+  // из кода решает, чей текст важнее. Поэтому страницы, которые пишет сам код,
+  // автора не наследуют. Иначе первый же посев проставлял автора всем страницам,
+  // и обновление из кода навсегда считало их правлеными руками — база знаний
+  // осталась на тексте от 12.09, а помощник отвечал по нему же.
   const page = {
     slug: id,
     title: title || (existing && existing.title) || id,
     body: body || '',
     order: order || (existing && existing.order) || 100,
     updatedAt: new Date().toISOString(),
-    updatedBy: by ? '@' + by : (existing && existing.updatedBy) || null,
+    updatedBy: seed ? null : (by ? '@' + by : (existing && existing.updatedBy) || null),
     createdAt: (existing && existing.createdAt) || new Date().toISOString()
   };
 
