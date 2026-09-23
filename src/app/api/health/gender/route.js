@@ -101,13 +101,21 @@ export async function GET(request) {
 
     const buckets = { female: cell(), male: cell(), unknown: cell() };
     let skippedFuture = 0;
+    let skippedNoSlot = 0;
 
     for (const booking of bookings) {
-      const start = slotStartMs(booking.slot);
+      const start = slotStartMs(booking);
+
+      // Без времени урока судить не о чем: считаем такие заявки отдельно,
+      // чтобы молчаливая потеря данных не выглядела как нулевая доходимость.
+      if (!start) {
+        skippedNoSlot++;
+        continue;
+      }
 
       // Считаем только уроки, которые уже должны были состояться:
       // будущая запись ещё не может ни дойти, ни не дойти.
-      if (!start || start > now) {
+      if (start > now) {
         skippedFuture++;
         continue;
       }
@@ -130,6 +138,7 @@ export async function GET(request) {
       days,
       note: 'Пол определяется по имени, спорные имена лежат в unknown. Цена состоявшегося урока = расход по полу из Меты, делённый на attended.',
       skippedFuture,
+      skippedNoSlot,
       female: finish(buckets.female),
       male: finish(buckets.male),
       unknown: finish(buckets.unknown)
