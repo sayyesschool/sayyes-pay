@@ -11,6 +11,19 @@ export const dynamic = 'force-dynamic';
 // не считался вовсе, и доля «открыли от кликов» за такой период — выдумка.
 const TRACKING_SINCE = '2026-09-12';
 
+// Дни, когда воронка была сломана и цифры за них ничего не значат. 21.09 правка
+// в learn_easy.html уронила JS на первом экране: страница открывалась, шаги
+// не считались, заявок не было вовсе. Реклама при этом шла — 237 кликов и €82
+// в никуда. Без этой пометки провал читается как падение конверсии, и через
+// месяц кто-нибудь сделает из него неверный вывод.
+const BROKEN_DAYS = [
+  { from: '2026-09-22', to: '2026-09-23', why: 'воронка не работала: ошибка в скрипте, заявки не создавались' }
+];
+
+function brokenInRange(from, to) {
+  return BROKEN_DAYS.filter(span => span.from <= to && span.to >= from);
+}
+
 const TABS = [
   { key: 'meta', label: 'Перформанс на Мете', owner: true },
   { key: 'funnel', label: 'Воронка', owner: false },
@@ -227,7 +240,14 @@ export default async function AdminPage({ searchParams }) {
                 {ads && ads.ok ? ' Верх воронки — клики по ссылке в объявлении, без лайков и тапов по профилю.' : ' Кабинет недоступен, верх воронки — открытия страницы.'}
                 {data.totals.organic > 0 && ' Шаги воронки — только заходы с рекламы; из других источников за период пришло ещё ' + data.totals.organic + '.'}
               </p>
-              {from < TRACKING_SINCE && (
+              {brokenInRange(from, to).map(span => (
+              <p className="muted bad" key={span.from}>
+                {short(span.from)} — {short(span.to)}: {span.why}. Эти дни в расчёте
+                участвуют, но переходы за них смысла не имеют — при сравнении периодов
+                держите их в уме.
+              </p>
+            ))}
+            {from < TRACKING_SINCE && (
               <p className="muted bad">
                 В период попадают дни до {short(TRACKING_SINCE)} — тогда открытия страницы
                 не считались вовсе, счётчик стоял только на переходах между экранами.
