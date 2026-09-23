@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getAllActiveBookings, updateBooking, getManagerChatId, removeBookedSlot } from '@/lib/redis';
+import { getAllActiveBookings, updateBooking, getManagerChatId, removeBookedSlot, kvGet, kvSet } from '@/lib/redis';
 import { sendMessage, formatReminder, formatHandout, bookingActionsKeyboard, formatAttendanceAsk, attendanceKeyboard, formatManagerCard, managerActionsKeyboard } from '@/lib/telegram';
 import { notifyManagers, notifyHost } from '@/lib/managers';
 import { sendHandoutEmail, sendConfirmRequestEmail, sendLessonReminderEmail, sendReviveEmail, sendSlotReleasedEmail } from '@/lib/email';
@@ -7,6 +7,59 @@ import { reviveTelegram, reviveKeyboard, reviveDueAt } from '@/lib/revive';
 
 // Protect cron endpoint
 const CRON_SECRET = process.env.CRON_SECRET;
+
+// Сторож воронки. 21.09.2026 правка в learn_easy.html уронила JS на первом же
+// экране: страница открывалась, но ни один шаг не считался и ни одна заявка
+// не доходила. Реклама крутилась двое суток вхолостую — 237 кликов, 0 заявок,
+// и заметили это только потому, что Дима посмотрел на цифры руками.
+//
+// Признак поломки простой и не требует браузера: у живой воронки открытия
+// страницы идут весь день. Ноль открытий с начала суток при живом вчера —
+// это не «плохой день», это сломанная страница.
+async function watchFunnel() {
+  try {
+    const now = new Date(Date.now() + 3 * 60 * 60 * 1000);
+    const hour = now.getUTCHours();
+
+    // Ночью трафика нет и без поломки. Проверяем в те часы, когда реклама
+    // заведомо крутится: 11:00–23:00 по расписанию школы.
+    if (hour < 11) return null;
+
+    const today = now.toISOString().slice(0, 10);
+    const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const alertKey = 'funnel_alert:' + today;
+
+    if (await kvGet(alertKey)) return null;
+
+    const [rowToday, rowYesterday] = await Promise.all([
+      kvGet('track:' + today),
+      kvGet('track:' + yesterday)
+    ]);
+
+    const opened = Number((rowToday && rowToday.landing) || 0);
+    const openedBefore = Number((rowYesterday && rowYesterday.landing) || 0);
+
+    // Вчера тоже ноль — значит либо реклама выключена, либо поломка уже
+    // не новость: об этом сообщили вчера. Второй раз не шумим.
+    if (opened > 0 || openedBefore < 20) return null;
+
+    await kvSet(alertKey, new Date().toISOString(), 60 * 60 * 48);
+
+    await notifyManagers(
+      '⚠️ <b>Воронка молчит</b>\n\n' +
+      'С начала суток ноль открытий страницы, вчера их было ' + openedBefore + '.\n' +
+      'Скорее всего страница сломана и реклама идёт впустую.\n\n' +
+      'Проверить: откройте https://www.sayyestoenglish.com/learn_easy и посмотрите, ' +
+      'листаются ли экраны.'
+    );
+
+    return { opened, openedBefore, alerted: true };
+  } catch (e) {
+    console.error('Funnel watch error:', e);
+
+    return null;
+  }
+}
 
 export async function GET(request) {
   // Verify cron secret (Vercel sends this header)
@@ -321,9 +374,12 @@ export async function GET(request) {
       }
     }
 
+    const funnelAlert = await watchFunnel();
+
     return NextResponse.json({
       ok: true,
       checked: bookings.length,
+      funnelAlert,
       sent24h,
       sent1h,
       sentHandout,
