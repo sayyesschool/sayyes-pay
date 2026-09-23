@@ -1451,45 +1451,10 @@ function renderSlotGrid() {
     if (col.querySelectorAll('.tslot').length > 0) grid.appendChild(col);
   });
 
-  // «Нет удобного времени» раньше было самой заметной кнопкой на экране И
-  // отправляло заявку одним касанием, без подтверждения. Любое случайное
-  // нажатие превращалось в заявку «менеджер свяжется», то есть в ожидание
-  // вместо записи. Теперь это неприметная ссылка с подтверждением.
-  const existingNoTime = document.getElementById('noTimeWrap');
-  if (existingNoTime) existingNoTime.remove();
-  const wrap = document.createElement('div');
-  wrap.id = 'noTimeWrap';
-  wrap.style.cssText = 'text-align:center;margin-top:14px';
-  wrap.innerHTML =
-    '<button type="button" id="noTimeLink" style="background:none;border:none;padding:6px;' +
-    'font-size:12px;color:var(--gray);text-decoration:underline;cursor:pointer;font-family:inherit">' +
-    'Ни одно время не подходит</button>' +
-    '<div id="noTimeConfirm" style="display:none;background:var(--light-gray);border-radius:14px;' +
-    'padding:14px;margin-top:10px;text-align:left">' +
-    '<div style="font-size:13px;color:var(--dark);line-height:1.5;margin-bottom:10px">' +
-    'Тогда мы подберём время сами и напишем вам. Учтите: это займёт до конца рабочего дня, ' +
-    'а выбранный слот подтверждается сразу.</div>' +
-    '<div style="display:flex;gap:8px">' +
-    '<button type="button" id="noTimeBack" style="flex:1;padding:11px;border:1px solid var(--border);' +
-    'background:#fff;border-radius:100px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">' +
-    'Посмотрю ещё раз</button>' +
-    '<button type="button" id="noTimeGo" style="flex:1;padding:11px;border:none;background:var(--gray);' +
-    'color:#fff;border-radius:100px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">' +
-    'Пусть подберут</button>' +
-    '</div></div>';
-  grid.parentNode.insertBefore(wrap, grid.nextSibling);
-  wrap.querySelector('#noTimeLink').onclick = function () {
-    wrap.querySelector('#noTimeConfirm').style.display = 'block';
-    this.style.display = 'none';
-  };
-  wrap.querySelector('#noTimeBack').onclick = function () {
-    wrap.querySelector('#noTimeConfirm').style.display = 'none';
-    wrap.querySelector('#noTimeLink').style.display = 'inline';
-  };
-  wrap.querySelector('#noTimeGo').onclick = function () {
-    selectedSlot = { key: 'no_time', msk: '', date: '', localTime: '' };
-    submitBooking();
-  };
+  // Кнопки «ни одно время не подходит» больше нет. За всё время ни один
+  // такой лид не дошёл до урока: человек оставлял заявку без времени,
+  // менеджер писал ему и не получал ответа. Тот, кому время правда
+  // не подходит, вернётся по ссылке из письма или напишет в бот.
 
   // Часовой пояс. При аудитории от Португалии до ОАЭ это разброс в 4 часа,
   // поэтому подпись должна быть однозначной и заметной, а не сноской.
