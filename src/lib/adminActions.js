@@ -226,7 +226,7 @@ export async function restoreBooking(bookingId, by) {
     }
   }
 
-  await updateBooking(bookingId, {
+  const patch = {
     status: 'confirmed',
     releasedUnconfirmed: false,
     releasedAt: null,
@@ -236,7 +236,14 @@ export async function restoreBooking(bookingId, by) {
     // неподтверждённую запись за 6 часов до урока и снимет её снова.
     restoredAt: new Date().toISOString(),
     restoredBy: '@' + by
-  });
+  };
+
+  await updateBooking(bookingId, patch);
+
+  // Карточку и кнопки строим по записи ПОСЛЕ возврата. 24.09.2026 уведомление
+  // «Запись возвращена» пришло с хвостом «запись отменена»: карточка рисовалась
+  // по объекту, прочитанному до обновления.
+  const restored = { ...booking, ...patch };
 
   if (hasSlot) await addBookedSlot(booking.slot);
 
@@ -250,13 +257,13 @@ export async function restoreBooking(bookingId, by) {
   if (booking.chatId && !silent) {
     await sendMessage(booking.chatId,
       'Ваше время снова за вами — мы освободили его по ошибке, извините.\n\n' + clientWhen(booking),
-      bookingActionsKeyboard(booking.id, booking)
+      bookingActionsKeyboard(booking.id, restored)
     );
   }
 
   await notifyManagers('↩️ Запись возвращена из админки, @' + by +
     (silent ? ' (ученику не писали: урок уже прошёл)' : '') +
-    '\n\n' + formatManagerCard(booking));
+    '\n\n' + formatManagerCard(restored));
 
   return {
     ok: true,
