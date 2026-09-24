@@ -9,10 +9,10 @@ import { loadBookings, slotStartMs } from '@/lib/analytics';
 // запись; кто пришёл на урок, знаем только мы. Цена урока по объявлению =
 // расход объявления из Меты, делённый на attended отсюда.
 //
-// Ключ креатива: utm_content (имя объявления), его проставляли с самого начала.
-// ad_id начали проставлять позже, поэтому он идёт вторым: только по нему
-// старые записи выпали бы в 'none'. У каждого креатива отдаём список ad_id,
-// чтобы сопоставить с расходом в Мете (одно имя может быть у копий в разных группах).
+// Ключ креатива: ad_id. Если его нет, берём utm_content, но только когда там
+// числовой id объявления: в старых объявлениях utm_content бывал «площадка__группа»,
+// по нему креатив не определить. Остальное лежит в 'none'. Решение Димы 24.09:
+// работаем со свежими данными, у каждого нового объявления обязательны UTM и ad_id.
 
 export const dynamic = 'force-dynamic';
 
@@ -58,7 +58,8 @@ export async function GET(request) {
       if (start < since) continue;
 
       const attr = booking.attribution || {};
-      const ad = String(attr.utm_content || attr.ad_id || 'none');
+      const contentId = /^\d{10,}$/.test(String(attr.utm_content || '')) ? String(attr.utm_content) : '';
+      const ad = String(attr.ad_id || contentId || 'none');
 
       if (ad === 'none' && start <= now) {
         noAd.total++;
@@ -104,7 +105,7 @@ export async function GET(request) {
 
     return NextResponse.json({
       days,
-      note: 'Записи с временем урока за последние N дней, по utm_content (имя объявления), иначе по ad_id. Цена урока = расход объявления в Мете / attended. Меньше ~7 записей на объявление это шум.',
+      note: 'Записи с временем урока за последние N дней, по ad_id (или числовому utm_content). Цена урока = расход объявления в Мете / attended. Меньше ~7 записей на объявление это шум.',
       skippedNoSlot,
       noAd,
       ads
