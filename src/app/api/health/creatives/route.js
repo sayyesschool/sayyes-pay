@@ -9,15 +9,17 @@ import { loadBookings, slotStartMs } from '@/lib/analytics';
 // запись; кто пришёл на урок, знаем только мы. Цена урока по объявлению =
 // расход объявления из Меты, делённый на attended отсюда.
 //
-// ad_id берётся из attribution заявки: метку подставляет Мета в URL, воронка
-// сохраняет её вместе с utm. Заявки без ad_id лежат в ключе 'none'.
+// Ключ креатива: utm_content (имя объявления), его проставляли с самого начала.
+// ad_id начали проставлять позже, поэтому он идёт вторым: только по нему
+// старые записи выпали бы в 'none'. У каждого креатива отдаём список ad_id,
+// чтобы сопоставить с расходом в Мете (одно имя может быть у копий в разных группах).
 
 export const dynamic = 'force-dynamic';
 
 const DAY = 24 * 60 * 60 * 1000;
 
 function cell() {
-  return { bookings: 0, cancelled: 0, lessons: 0, attended: 0, noShow: 0, unmarked: 0, paid: 0, upcoming: 0 };
+  return { adIds: [], bookings: 0, cancelled: 0, lessons: 0, attended: 0, noShow: 0, unmarked: 0, paid: 0, upcoming: 0 };
 }
 
 function finish(c) {
@@ -56,7 +58,7 @@ export async function GET(request) {
       if (start < since) continue;
 
       const attr = booking.attribution || {};
-      const ad = String(attr.ad_id || 'none');
+      const ad = String(attr.utm_content || attr.ad_id || 'none');
 
       if (ad === 'none' && start <= now) {
         noAd.total++;
@@ -70,6 +72,8 @@ export async function GET(request) {
         noAd.byMonth[month] = (noAd.byMonth[month] || 0) + 1;
       }
       const c = byAd[ad] || (byAd[ad] = cell());
+
+      if (attr.ad_id && !c.adIds.includes(String(attr.ad_id))) c.adIds.push(String(attr.ad_id));
 
       // Будущий урок ещё не может ни состояться, ни сорваться: считаем отдельно.
       if (start > now) {
@@ -95,12 +99,12 @@ export async function GET(request) {
     }
 
     const ads = Object.entries(byAd)
-      .map(([ad_id, c]) => ({ ad_id, ...finish(c) }))
+      .map(([creative, c]) => ({ creative, ...finish(c) }))
       .sort((a, b) => b.bookings - a.bookings);
 
     return NextResponse.json({
       days,
-      note: 'Записи с временем урока за последние N дней, по ad_id из attribution. Цена урока = расход объявления в Мете / attended. Меньше ~7 записей на объявление это шум.',
+      note: 'Записи с временем урока за последние N дней, по utm_content (имя объявления), иначе по ad_id. Цена урока = расход объявления в Мете / attended. Меньше ~7 записей на объявление это шум.',
       skippedNoSlot,
       noAd,
       ads
