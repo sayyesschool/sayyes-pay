@@ -421,7 +421,10 @@ export async function buildAnalytics({ from, to, source = 'all' } = {}) {
   const screens = SCREENS.map(([key, label]) => ({
     key,
     label,
-    value: dates.reduce((acc, date) => acc + (traffic[date][key] || 0), 0)
+    // Как и общая воронка выше — только рекламные заходы (ключи step|meta).
+    // 24.09.2026: экраны считались по общему счётчику, и туда попадали органика,
+    // переходы по ссылке на перенос и наши собственные тестовые проходы.
+    value: dates.reduce((acc, date) => acc + (hasSplit(date) ? pick(traffic[date], key) : Number(traffic[date][key] || 0)), 0)
   }));
 
   return {
