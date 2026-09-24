@@ -74,7 +74,8 @@ export function guessGender(rawName) {
 }
 
 function cell() {
-  return { bookings: 0, attended: 0, noShow: 0, unmarked: 0, paid: 0, cancelled: 0 };
+  // paidIds: только id заявок, без имён. Имя видно лишь в закрытой карточке /admin/client/<id>.
+  return { bookings: 0, attended: 0, noShow: 0, unmarked: 0, paid: 0, cancelled: 0, paidIds: [] };
 }
 
 function finish(c) {
@@ -130,7 +131,10 @@ export async function GET(request) {
       else if (booking.attended === false) bucket.noShow++;
       else bucket.unmarked++;
 
-      if (booking.paid) bucket.paid++;
+      if (booking.paid) {
+        bucket.paid++;
+        bucket.paidIds.push(booking.id);
+      }
       if (booking.status === 'cancelled') bucket.cancelled++;
     }
 
