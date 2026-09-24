@@ -75,7 +75,19 @@ const STEP_LABELS = [
 ];
 
 function funnelBlock(trackData) {
-  const data = trackData || {};
+  // Только рекламные заходы. Счётчик пишет общий ключ (landing) и разрез по
+  // источнику (landing|meta); в сводку берём разрез, чтобы органика и наши
+  // тестовые проходы не смешивались с рекламой. Разрезы по объявлению (@) не выводим.
+  const raw = trackData || {};
+  const hasSplit = Object.keys(raw).some(key => key.includes('|'));
+  const data = {};
+
+  for (const [key, value] of Object.entries(raw)) {
+    if (key.includes('@')) continue;
+    if (!hasSplit) { data[key] = value; continue; }
+    if (key.endsWith('|meta')) data[key.slice(0, -5)] = value;
+  }
+
   const keys = Object.keys(data);
   if (keys.length === 0) {
     return '<b>Воронка сегодня:</b>\nсчётчики пусты — за день никто не открывал воронку';
