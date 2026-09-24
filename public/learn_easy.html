@@ -1118,6 +1118,21 @@ const VISIT_ID = (function () {
   }
 })();
 
+function outsideAdGeo() {
+  var tz = '';
+  try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e) { return false; }
+  if (!tz) return false;
+  var ok = ['Asia/Dubai','Asia/Jerusalem','Asia/Tel_Aviv','Asia/Nicosia','Asia/Famagusta','Asia/Istanbul',
+    'Atlantic/Reykjavik','Atlantic/Canary','Atlantic/Madeira','Atlantic/Azores','Atlantic/Faroe','Africa/Ceuta',
+    'UTC','Etc/UTC','GMT','Etc/GMT'];
+  if (ok.indexOf(tz) >= 0) return false;
+  var notOurs = ['Europe/Moscow','Europe/Minsk','Europe/Kaliningrad','Europe/Samara','Europe/Volgograd',
+    'Europe/Saratov','Europe/Ulyanovsk','Europe/Astrakhan','Europe/Kirov','Europe/Simferopol',
+    'Europe/Kyiv','Europe/Kiev','Europe/Uzhgorod','Europe/Zaporozhye','Europe/Chisinau','Europe/Tiraspol'];
+  if (tz.indexOf('Europe/') === 0 && notOurs.indexOf(tz) < 0) return false;
+  return true;
+}
+
 function trackStep(stepId) {
   const stepName = STEP_NAMES[stepId] || ('step_' + stepId);
   const stepNumber = STEP_ORDER.indexOf(stepName) + 1;
@@ -1718,7 +1733,9 @@ async function submitBooking() {
           : budgetAnswer.startsWith('До 50') ? 50
           : 10;
 
-        fbq('track', 'Lead', {
+        // Пояс телефона вне рекламных стран: VPN из Туркменистана и Казахстана.
+        // Заявку принимаем, но Мету на ней не учим. Список тот же, что в src/lib/meta.js.
+        if (!outsideAdGeo()) fbq('track', 'Lead', {
           content_name: 'trial_booking',
           content_category: 'funnel',
           lead_level: quizAnswers['Уровень'] || '',
