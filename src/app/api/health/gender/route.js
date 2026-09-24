@@ -31,6 +31,14 @@ const AMBIGUOUS = new Set([
   'sam', 'jean', 'andrea', 'kim', 'jo', 'chris', 'robin', 'taylor', 'jordan'
 ]);
 
+// Женские имена, которые кончаются на согласную и иначе ушли бы к мужчинам.
+const FEMALE_CONSONANT = new Set([
+  'надин', 'ирен', 'кармен', 'эстер', 'эсфирь', 'рахиль', 'руфь', 'ассоль', 'нинель',
+  'мариам', 'мирьям', 'марьям', 'айгуль', 'гульнур', 'гульназ', 'гульнар', 'лейсан',
+  'динар', 'дильноз', 'шахноз', 'зульфия', 'элиф', 'ясмин', 'жасмин', 'изабель',
+  'аннет', 'мюриэл', 'рэйчел', 'кэтрин', 'элизабет', 'маргарет', 'агнес', 'гертруд'
+]);
+
 // Латиница по окончанию определяется плохо, поэтому частые имена перечислены.
 const LATIN_FEMALE = new Set([
   'anna', 'maria', 'marie', 'elena', 'olga', 'irina', 'natalia', 'natalie',
@@ -69,13 +77,19 @@ export function guessGender(rawName) {
   if (last === 'а' || last === 'я') return 'female';
   // Мягкий знак ничего не решает: Игорь мужчина, Любовь женщина.
   if (last === 'ь') return 'unknown';
+  // Женские имена на согласную: Надин, Ирен, Айгуль, Лейсан. 24.09 Надин и Мари
+  // попали к мужчинам и дали им «две оплаты», которых на деле не было.
+  if (FEMALE_CONSONANT.has(first)) return 'female';
+  // На гласную кроме а и я кончаются в основном иностранные женские имена
+  // (Мари, Натали, Софи), но и мужские тоже бывают. Судить нельзя.
+  if (/[иеёоуюэы]$/.test(first)) return 'unknown';
 
   return 'male';
 }
 
 function cell() {
   // paidIds: только id заявок, без имён. Имя видно лишь в закрытой карточке /admin/client/<id>.
-  return { bookings: 0, attended: 0, noShow: 0, unmarked: 0, paid: 0, cancelled: 0, paidIds: [] };
+  return { bookings: 0, attended: 0, noShow: 0, unmarked: 0, paid: 0, cancelled: 0, paidIds: [], attendedIds: [] };
 }
 
 function finish(c) {
@@ -127,7 +141,10 @@ export async function GET(request) {
 
       bucket.bookings++;
 
-      if (booking.attended === true) bucket.attended++;
+      if (booking.attended === true) {
+        bucket.attended++;
+        bucket.attendedIds.push(booking.id);
+      }
       else if (booking.attended === false) bucket.noShow++;
       else bucket.unmarked++;
 
