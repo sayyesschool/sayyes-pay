@@ -134,6 +134,42 @@ async function postToDataset(pixelId, token, body) {
 }
 
 // Единая отправка. Никогда не бросает наружу — аналитика не должна ронять заявку.
+// Часовые пояса стран, куда мы крутим рекламу: ЕС и Европа, Великобритания,
+// Турция, Эмираты, Израиль, Кипр, Исландия. Сюда же UTC: его отдают браузеры
+// с защитой от слежки, и выбрасывать таких людей нельзя.
+//
+// Зачем: 24.09 пошли записи из Астаны и Ашхабада, хотя туда не потрачено ни евро.
+// Это жители Туркменистана и Казахстана через VPN с турецкими и европейскими
+// выходами: Мета видит их в Турции. Исключить их в кабинете нельзя, поэтому мы
+// не учим на них алгоритм: заявка создаётся как обычно, менеджер её видит,
+// но Lead, Schedule и подтверждение в Мету не уходят. Факт урока и оплата
+// уходят всегда: это деньги, а не намерение.
+const TARGET_TZ_EXACT = new Set([
+  'Asia/Dubai', 'Asia/Jerusalem', 'Asia/Tel_Aviv', 'Asia/Nicosia', 'Asia/Famagusta',
+  'Asia/Istanbul', 'Atlantic/Reykjavik', 'Atlantic/Canary', 'Atlantic/Madeira',
+  'Atlantic/Azores', 'Atlantic/Faroe', 'Africa/Ceuta', 'UTC', 'Etc/UTC', 'GMT', 'Etc/GMT'
+]);
+
+// Европейские пояса стран, где мы рекламу не крутим.
+const NON_TARGET_EUROPE = new Set([
+  'Europe/Moscow', 'Europe/Minsk', 'Europe/Kaliningrad', 'Europe/Samara', 'Europe/Volgograd',
+  'Europe/Saratov', 'Europe/Ulyanovsk', 'Europe/Astrakhan', 'Europe/Kirov', 'Europe/Simferopol',
+  'Europe/Kyiv', 'Europe/Kiev', 'Europe/Uzhgorod', 'Europe/Zaporozhye', 'Europe/Chisinau', 'Europe/Tiraspol'
+]);
+
+export function outsideTargetTz(tz) {
+  // Пояс не пришёл: не знаем, значит не выбрасываем.
+  if (!tz) return false;
+  if (TARGET_TZ_EXACT.has(tz)) return false;
+  if (tz.startsWith('Europe/') && !NON_TARGET_EUROPE.has(tz)) return false;
+  return true;
+}
+
+function skipForTz(booking) {
+  const tz = booking && (booking.tz || (booking.attribution && booking.attribution.tz));
+  return outsideTargetTz(tz) ? { skipped: 'timezone outside ad geo: ' + tz } : null;
+}
+
 export async function sendCapiEvent({
   eventName,
   eventId,
@@ -221,6 +257,8 @@ export async function sendCapiEvent({
  */
 export async function sendLead(booking, extra = {}) {
   if (!booking) return { skipped: 'no booking' };
+  const tzSkip = skipForTz(booking);
+  if (tzSkip) return tzSkip;
   const answers = booking.quizAnswers || {};
   return sendCapiEvent({
     eventName: 'Lead',
@@ -284,6 +322,8 @@ function budgetValue(booking) {
 
 export async function sendSchedule(booking, extra = {}) {
   if (!booking) return { skipped: 'no booking' };
+  const tzSkip = skipForTz(booking);
+  if (tzSkip) return tzSkip;
   const custom = {
     content_name: 'trial_confirmed',
     value: budgetValue(booking),
@@ -311,6 +351,8 @@ export async function sendSchedule(booking, extra = {}) {
  */
 export async function sendTrialConfirmed(booking, extra = {}) {
   if (!booking) return { skipped: 'no booking' };
+  const tzSkip = skipForTz(booking);
+  if (tzSkip) return tzSkip;
 
   const custom = {
     content_name: 'trial_will_attend',
