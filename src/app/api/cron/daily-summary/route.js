@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getAllActiveBookings, kvGet, kvKeys, getManagerChatId } from '@/lib/redis';
+import { getAllActiveBookings, kvGet, kvSet, kvKeys, getManagerChatId } from '@/lib/redis';
 import { sendMessage } from '@/lib/telegram';
 import { getManagerChatIds } from '@/lib/managers';
 import { slotKeyToDate } from '@/lib/time';
@@ -25,19 +25,34 @@ function escapeCSV(val) {
 
 async function sendDocument(chatId, csvContent, filename, caption) {
   const token = BOT_TOKEN();
-  if (!token) return;
+  if (!token) return { ok: false, description: 'no bot token' };
   try {
     const form = new FormData();
     form.append('chat_id', String(chatId));
     form.append('caption', caption || '');
     form.append('parse_mode', 'HTML');
     form.append('document', new Blob([csvContent], { type: 'text/csv; charset=utf-8' }), filename);
-    await fetch(`https://api.telegram.org/bot${token}/sendDocument`, {
+    const resp = await fetch(`https://api.telegram.org/bot${token}/sendDocument`, {
       method: 'POST',
       body: form
     });
+    return await resp.json();
   } catch (e) {
     console.error('sendDocument error:', e);
+    return { ok: false, description: String(e && e.message || e) };
+  }
+}
+
+// Итог каждого запуска пишем в базу: логи Vercel на бесплатном тарифе живут
+// около часа, и 24.09.2026 выяснить, почему сводка не пришла, было уже нечем.
+// Смотреть: /api/health/cron. Ни текста, ни чатов, ни данных учеников тут нет.
+const STATUS_KEY = 'cron:daily-summary:last';
+
+async function saveStatus(status) {
+  try {
+    await kvSet(STATUS_KEY, { ...status, at: new Date().toISOString() }, 60 * 60 * 24 * 30);
+  } catch (e) {
+    console.error('daily-summary status error:', e);
   }
 }
 
@@ -222,20 +237,46 @@ export async function GET(request) {
     }
     for (const id of await getManagerChatIds()) chatIds.add(String(id));
 
+    // Сводка идёт обычным сообщением, CSV - отдельным файлом с короткой подписью.
+    // Раньше сводка была подписью к файлу, а у подписи в Telegram лимит 1024 символа.
+    // С 14.09 в счётчики добавились разрезы по объявлениям, блок воронки вырос
+    // до ~4000 символов, и в дни с заявками Telegram молча отклонял всю отправку:
+    // ответ никто не проверял. Теперь ответ Telegram проверяется по каждому чату.
     let sentCount = 0;
+    const failures = [];
+
     for (const chatId of chatIds) {
+      const msg = await sendMessage(chatId, summaryText);
+      let ok = Boolean(msg && msg.ok);
+
+      if (!ok) failures.push({ step: 'message', error: (msg && msg.description) || 'no response' });
+
       if (csvContent) {
-        const caption = summaryText + `\n\n📎 Записи за ${today}: ${todayBookings.length} чел.`;
-        await sendDocument(chatId, csvContent, `sayyes_${today}.csv`, caption);
-      } else {
-        await sendMessage(chatId, summaryText);
+        const doc = await sendDocument(chatId, csvContent, `sayyes_${today}.csv`, `📎 Записи за ${today}: ${todayBookings.length} чел.`);
+
+        if (!doc || !doc.ok) {
+          ok = false;
+          failures.push({ step: 'csv', error: (doc && doc.description) || 'no response' });
+        }
       }
-      sentCount++;
+
+      if (ok) sentCount++;
     }
 
-    return NextResponse.json({ ok: true, totalToday, upcoming: upcomingCount, awaitingTime, sentTo: sentCount, timestamp: new Date().toISOString() });
+    await saveStatus({
+      ok: failures.length === 0 && sentCount > 0,
+      day: today,
+      recipients: chatIds.size,
+      sent: sentCount,
+      textLength: summaryText.length,
+      bookingsToday: totalToday,
+      failures
+    });
+
+    return NextResponse.json({ ok: failures.length === 0, totalToday, upcoming: upcomingCount, awaitingTime, sentTo: sentCount, failures, timestamp: new Date().toISOString() });
   } catch (e) {
     console.error('Daily summary error:', e);
+    await saveStatus({ ok: false, error: String(e && e.message || e) });
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
 }
