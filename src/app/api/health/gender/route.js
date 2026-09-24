@@ -89,7 +89,7 @@ export function guessGender(rawName) {
 
 function cell() {
   // paidIds: только id заявок, без имён. Имя видно лишь в закрытой карточке /admin/client/<id>.
-  return { bookings: 0, attended: 0, noShow: 0, unmarked: 0, paid: 0, cancelled: 0, paidIds: [], attendedIds: [] };
+  return { bookings: 0, lessons: 0, attended: 0, noShow: 0, unmarked: 0, paid: 0, cancelled: 0, paidIds: [], attendedIds: [] };
 }
 
 function finish(c) {
@@ -100,8 +100,8 @@ function finish(c) {
     marked,
     // Доходимость от размеченных уроков: неразмеченные ничего не говорят.
     attendRate: marked ? Math.round((c.attended / marked) * 100) : null,
-    // Доля от всех записей, включая неразмеченные: нижняя граница правды.
-    attendRateOfAll: c.bookings ? Math.round((c.attended / c.bookings) * 100) : null
+    // Доля пришедших от всех записей, включая отменённые: сквозная цифра.
+    attendRateOfBookings: c.bookings ? Math.round((c.attended / c.bookings) * 100) : null
   };
 }
 
@@ -141,6 +141,17 @@ export async function GET(request) {
 
       bucket.bookings++;
 
+      // Отменённая запись это не урок: отмечать явку там нечего. 24.09 я складывал
+      // такие записи в «не отмечено» и написал Диме про 136 неотмеченных уроков,
+      // хотя в админке их ноль. Отмену считаем отдельно и в явку не пускаем,
+      // кроме случая, когда урок всё же прошёл (attended === true).
+      if (booking.status === 'cancelled' && booking.attended !== true) {
+        bucket.cancelled++;
+        continue;
+      }
+
+      bucket.lessons++;
+
       if (booking.attended === true) {
         bucket.attended++;
         bucket.attendedIds.push(booking.id);
@@ -152,7 +163,6 @@ export async function GET(request) {
         bucket.paid++;
         bucket.paidIds.push(booking.id);
       }
-      if (booking.status === 'cancelled') bucket.cancelled++;
     }
 
     return NextResponse.json({
