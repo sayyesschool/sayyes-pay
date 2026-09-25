@@ -1,4 +1,5 @@
 import { dayKey, dayList, loadBookings, loadTraffic, slotStartMs } from '@/lib/analytics';
+import { kvGet, kvSet } from '@/lib/redis';
 import { getAdsByAd, getAdsMeta } from '@/lib/metaAds';
 
 // Креативы от показа до оплаты. Мета знает расход, показы и клики по объявлению,
@@ -9,9 +10,27 @@ import { getAdsByAd, getAdsMeta } from '@/lib/metaAds';
 // Судьба заявки (отмена, пришёл, оплатил) берётся на сегодня, поэтому у свежих
 // дат часть уроков ещё впереди, и они показаны отдельно.
 
-// С этой даты у объявлений есть ad_id в ссылке. Раньше расход креатива
-// не с чем сопоставить, и цена урока выходит выдуманной.
-export const CREATIVES_SINCE = '2026-09-24';
+// Реклама запущена 28.08: заявки раньше к креативам не привязать.
+export const CREATIVES_SINCE = '2026-08-28';
+
+// Мета отвечает секундами, а экран открывают часто. Расход держим 10 минут,
+// названия и картинки 30: ссылки на картинки живут дольше. Неудачный ответ
+// не кэшируем, чтобы сбой кабинета не залипал.
+async function cached(key, seconds, load) {
+  try {
+    const hit = await kvGet(key);
+
+    if (hit && typeof hit === 'object') return hit;
+  } catch (e) {}
+
+  const fresh = await load();
+
+  if (fresh && fresh.ok) {
+    try { await kvSet(key, fresh, seconds); } catch (e) {}
+  }
+
+  return fresh;
+}
 
 const STEPS = ['landing', 'q_level', 'contacts', 'time_slots'];
 
@@ -80,10 +99,11 @@ function derive(r) {
 
 export async function buildCreatives({ from, to }) {
   const dates = dayList(from, to);
-  const [bookings, traffic, ads] = await Promise.all([
+  const [bookings, traffic, ads, meta] = await Promise.all([
     loadBookings(),
     loadTraffic(dates),
-    getAdsByAd({ from, to })
+    cached('cache:crads:' + from + ':' + to, 600, () => getAdsByAd({ from, to, daily: false })),
+    cached('cache:crmeta', 1800, () => getAdsMeta(null))
   ]);
 
   const rows = {};
@@ -131,6 +151,13 @@ export async function buildCreatives({ from, to }) {
     r.bookings++;
     if (booking.confirmed) r.confirmed++;
 
+    // Оплату считаем при любом статусе записи: деньги пришли, даже если
+    // менеджер не отметил явку или запись потом закрыли.
+    if (booking.paid) {
+      r.paid++;
+      r.revenue += Number(booking.paidAmount || 0);
+    }
+
     if (booking.status === 'cancelled' && booking.attended !== true) {
       r.cancelled++;
       continue;
@@ -145,11 +172,6 @@ export async function buildCreatives({ from, to }) {
     if (booking.attended === true) r.attended++;
     else if (booking.attended === false) r.noShow++;
     else r.unmarked++;
-
-    if (booking.paid) {
-      r.paid++;
-      r.revenue += Number(booking.paidAmount || 0);
-    }
   }
 
   // Заявки без метки объявления в сравнение не идут: их расход не с чем сопоставить.
@@ -158,7 +180,6 @@ export async function buildCreatives({ from, to }) {
   delete rows.none;
 
   const list = Object.values(rows).filter(r => r.spend > 0 || r.bookings > 0 || r.landing > 0);
-  const meta = await getAdsMeta(list.map(r => r.id));
 
   if (meta.ok) {
     for (const r of list) {

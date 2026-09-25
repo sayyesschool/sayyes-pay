@@ -134,7 +134,7 @@ export async function getAdsInsights({ from, to } = {}) {
 // Расход по каждому объявлению за период, по дням. Нужен growth-агенту, чтобы
 // считать цену состоявшегося урока по креативу: расход объявления / пришедшие
 // из /api/health/creatives. Суммы расхода наружу отдаются только под ключом.
-export async function getAdsByAd({ from, to } = {}) {
+export async function getAdsByAd({ from, to, daily = true } = {}) {
   if (!token() || !account()) {
     return { ok: false, reason: 'Нет доступа к кабинету: не заданы META_ADS_TOKEN и META_AD_ACCOUNT_ID.' };
   }
@@ -143,7 +143,9 @@ export async function getAdsByAd({ from, to } = {}) {
     const rows = await ask('/act_' + account() + '/insights', {
       fields: 'ad_id,ad_name,adset_name,campaign_name,spend,impressions,actions',
       level: 'ad',
-      time_increment: '1',
+      // По дням нужно growth-агенту; экрану креативов хватает одной строки на объявление,
+      // и так ответ в разы меньше и быстрее.
+      ...(daily ? { time_increment: '1' } : {}),
       time_range: JSON.stringify({ since: from, until: to }),
       limit: '500'
     });
@@ -190,14 +192,16 @@ export async function getAdsByAd({ from, to } = {}) {
 // Ссылки на картинки подписанные и живут несколько дней, поэтому не храним их,
 // а спрашиваем при каждом открытии.
 export async function getAdsMeta(ids) {
-  const list = Array.from(new Set((ids || []).map(String).filter(id => /^\d+$/.test(id))));
+  // Без списка отдаём все объявления кабинета: так запрос можно пустить
+  // параллельно с остальными, не дожидаясь, пока станут известны id.
+  const list = ids ? Array.from(new Set(ids.map(String).filter(id => /^\d+$/.test(id)))) : null;
 
-  if (!token() || !list.length) return { ok: Boolean(token()), ads: {} };
+  if (!token() || (list && !list.length)) return { ok: Boolean(token()), ads: {} };
 
   try {
     // Объявления берём из кабинета, а не по списку id: среди id из заявок
     // бывают чужие и удалённые, и тогда Мета отклоняет весь пакет целиком.
-    const wanted = new Set(list);
+    const wanted = list ? new Set(list) : null;
     // Постранично и небольшими порциями: большой ответ Мета отклоняет
     // («reduce the amount of data»). Размер превью задаём прямо в раскрытии
     // поля creative, иначе оно 64 пикселя.
@@ -223,7 +227,7 @@ export async function getAdsMeta(ids) {
     for (const ad of rows) {
       const id = String(ad.id);
 
-      if (!wanted.has(id)) continue;
+      if (wanted && !wanted.has(id)) continue;
 
       const c = ad.creative || {};
 

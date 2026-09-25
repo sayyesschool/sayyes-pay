@@ -81,10 +81,8 @@ export default async function AdminPage({ searchParams }) {
   const to = valid(params?.to) ? params.to : today();
   const visible = TABS.filter(tab => owner || !tab.owner);
   const tab = visible.some(item => item.key === params?.tab) ? params.tab : visible[0].key;
-  // У креативов по умолчанию только даты, где у объявлений есть ad_id.
   const fallbackFrom = shiftDay(to, -29);
-  const from = valid(params?.from) ? params.from
-    : (tab === 'creatives' && fallbackFrom < CREATIVES_SINCE ? CREATIVES_SINCE : fallbackFrom);
+  const from = valid(params?.from) ? params.from : fallbackFrom;
   const sort = ['spend', 'lesson', 'bookings', 'attended'].includes(params?.sort) ? params.sort : 'spend';
   const creatives = tab === 'creatives' ? await buildCreatives({ from, to }) : null;
 

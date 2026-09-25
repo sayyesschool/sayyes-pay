@@ -231,7 +231,7 @@ export function CreativesTab({ data, sort, sortLink, since }) {
 
       {data.range.from < since && (
         <div className="card warn">
-          <p className="muted">До {since.slice(8)}.{since.slice(5, 7)} у объявлений не было ad_id в ссылке: заявки тех дней не привязаны к креативам, и цена за них завышена.</p>
+          <p className="muted">Реклама запущена {since.slice(8)}.{since.slice(5, 7)}: более ранние заявки к креативам не привязаны.</p>
         </div>
       )}
 
