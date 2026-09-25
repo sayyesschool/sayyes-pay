@@ -403,30 +403,58 @@ export async function sendPayLink(bookingId, packId, by) {
 }
 
 // --- Оплата мимо кассы ---
+// Повторные оплаты по одной заявке нормальны: после интро за 30 EUR человек покупает пакет.
+// Решение Димы 31.08: запрещена только повторная оплата интро, стандартные пакеты можно
+// покупать сколько угодно (Stripe так и работает). До 25.09 здесь стоял запрет на любую
+// вторую оплату, и оплату Клары 5n1arl1u на 210 EUR провести было нельзя.
+// Каждая оплата пишется отдельной записью payment:*, из них собирается выручка.
+// В заявке остаются поля последней оплаты плюс счётчик и сумма всех.
 export async function markPaid(bookingId, amountEuro, packId, by) {
   const booking = await getBooking(bookingId);
 
   if (!booking) return { ok: false, error: 'Запись не найдена' };
-  if (booking.paid) return { ok: false, error: 'По этой заявке оплата уже проведена' };
 
   const amount = Math.round(Number(amountEuro) * 100);
 
   if (!amount || amount < 0) return { ok: false, error: 'Сумма указана неверно' };
 
-  const pack = packId || 'INTRO_MANUAL';
-  const at = new Date().toISOString();
+  const pack = String(packId || '').trim() || 'MANUAL';
+  const isIntro = /^INTRO/i.test(pack);
 
-  await updateBooking(bookingId, {
+  if (isIntro && booking.introPaid) {
+    return { ok: false, error: 'Интро по этой заявке уже оплачено, повторно его провести нельзя' };
+  }
+
+  // Защита от двойного нажатия: та же сумма мимо кассы за последние 10 минут.
+  if (booking.paidVia === 'manual' && booking.paidAmount === amount && booking.paidAt
+      && Date.now() - new Date(booking.paidAt).getTime() < 10 * 60 * 1000) {
+    return { ok: false, error: 'Такая же оплата уже проведена несколько минут назад' };
+  }
+
+  const at = new Date().toISOString();
+  const previousTotal = booking.paid
+    ? Number(booking.paidTotal || booking.paidAmount || 0)
+    : 0;
+  const previousCount = booking.paid ? Number(booking.paymentsCount || 1) : 0;
+
+  const patch = {
     paid: true,
     paidAt: at,
     paidPack: pack,
     paidAmount: amount,
     paidCurrency: 'eur',
     paidVia: 'manual',
-    paidBy: '@' + by
-  });
+    paidBy: '@' + by,
+    paidTotal: previousTotal + amount,
+    paymentsCount: previousCount + 1,
+    ...(isIntro ? { introPaid: true } : {})
+  };
 
-  await kvSet('payment:manual_' + bookingId + '_' + Date.now(), {
+  await updateBooking(bookingId, patch);
+
+  const recordId = 'manual_' + bookingId + '_' + Date.now();
+
+  await kvSet('payment:' + recordId, {
     at,
     bookingId,
     email: booking.email || '',
@@ -436,16 +464,31 @@ export async function markPaid(bookingId, amountEuro, packId, by) {
     via: 'Мимо кассы'
   });
 
+  // До 25.09 сюда передавалась сама заявка, и Purchase уходил в Мету с суммой 0
+  // и без eventId. Передаём поля, которые ждёт sendPurchase.
   try {
-    await sendPurchase({ ...booking, paid: true, paidAmount: amount, paidPack: pack });
+    await sendPurchase({
+      bookingId,
+      email: booking.email,
+      phone: booking.phone,
+      value: amount / 100,
+      currency: 'EUR',
+      contentName: pack,
+      orderId: recordId,
+      eventId: 'pur_' + recordId
+    });
   } catch (e) {
     console.error('CAPI purchase error:', e);
   }
 
-  await notifyManagers('💰 Оплата мимо кассы, провёл @' + by + '\n\n'
-    + formatManagerCard({ ...booking, paid: true, paidAmount: amount, paidPack: pack }));
+  const repeat = previousCount > 0
+    ? '\nПовторная оплата: всего ' + (previousCount + 1) + ' на ' + Math.round((previousTotal + amount) / 100) + ' EUR'
+    : '';
 
-  return { ok: true, message: 'Оплата проведена' };
+  await notifyManagers('💰 Оплата мимо кассы, провёл @' + by + repeat + '\n\n'
+    + formatManagerCard({ ...booking, ...patch }));
+
+  return { ok: true, message: previousCount > 0 ? 'Повторная оплата проведена' : 'Оплата проведена' };
 }
 
 // --- Убрать старые хвосты ---

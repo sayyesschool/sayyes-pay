@@ -86,6 +86,7 @@ export default async function ClientPage({ params, searchParams }) {
             <div><b>Отметка</b> {booking.attendanceMarkedAt ? fmt(booking.attendanceMarkedAt) + ' · ' + (booking.attendedBy || '') : '—'}</div>
             <div><b>Оплата</b> {booking.paid
               ? Math.round(Number(booking.paidAmount || 0) / 100) + ' EUR · ' + (booking.paidPack || '') + ' · ' + (booking.paidVia === 'manual' ? 'мимо кассы' : 'Stripe')
+                + (Number(booking.paymentsCount || 1) > 1 ? ' · всего оплат ' + booking.paymentsCount + ' на ' + Math.round(Number(booking.paidTotal || 0) / 100) + ' EUR' : '')
               : '—'}</div>
             {offerUntil && (
               <div><b>Спецоффер</b> {introActive(booking) ? 'активен до ' + fmt(offerUntil) : 'окно закрыто ' + fmt(offerUntil)}</div>
