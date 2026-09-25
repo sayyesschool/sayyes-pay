@@ -418,8 +418,14 @@ export async function markPaid(bookingId, amountEuro, packId, by) {
 
   if (!amount || amount < 0) return { ok: false, error: 'Сумма указана неверно' };
 
-  const pack = String(packId || '').trim() || 'MANUAL';
-  const isIntro = /^INTRO/i.test(pack);
+  // Пакет выбирается из списка (решение Димы 25.09): интро индивидуально, интро группа,
+  // индивидуальные, группа. Коды те же, что у Stripe-ссылок, чтобы отчёты не разъезжались.
+  const MANUAL_PACKS = ['INTRO_IND', 'INTRO_GRP', 'IND', 'GRP'];
+  const pack = String(packId || '').trim().toUpperCase();
+
+  if (!MANUAL_PACKS.includes(pack)) return { ok: false, error: 'Выберите пакет из списка' };
+
+  const isIntro = pack.startsWith('INTRO');
 
   if (isIntro && booking.introPaid) {
     return { ok: false, error: 'Интро по этой заявке уже оплачено, повторно его провести нельзя' };

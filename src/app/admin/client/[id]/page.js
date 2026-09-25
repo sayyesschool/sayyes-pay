@@ -268,11 +268,17 @@ export default async function ClientPage({ params, searchParams }) {
             <input type="hidden" name="back" value={back} />
             <div className="field">
               <label>Оплата мимо кассы: сумма в евро</label>
-              <input type="number" name="amount" step="1" min="1" placeholder="30" />
+              <input type="number" name="amount" step="1" min="1" placeholder="30" required />
             </div>
             <div className="field">
-              <label>Пакет (необязательно)</label>
-              <input type="text" name="pack" placeholder="INTRO_IND" />
+              <label>Пакет</label>
+              <select name="pack" defaultValue="" required>
+                <option value="" disabled>выберите пакет</option>
+                <option value="INTRO_IND">Intro_Ind</option>
+                <option value="INTRO_GRP">Intro_Group</option>
+                <option value="IND">Ind</option>
+                <option value="GRP">Group</option>
+              </select>
             </div>
             <button type="submit">Провести оплату</button>
           </form>
