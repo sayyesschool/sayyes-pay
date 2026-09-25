@@ -195,20 +195,6 @@ export async function getAdsMeta(ids) {
   if (!token() || !list.length) return { ok: Boolean(token()), ads: {} };
 
   try {
-    const byId = async (chunk, params) => {
-      const url = new URL(API + '/');
-
-      url.searchParams.set('ids', chunk.join(','));
-      for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value);
-      url.searchParams.set('access_token', token());
-
-      const resp = await fetch(url.toString(), { cache: 'no-store' });
-      const data = await resp.json();
-
-      if (data.error) throw new Error(data.error.message || 'Meta API error');
-
-      return data;
-    };
     // Объявления берём из кабинета, а не по списку id: среди id из заявок
     // бывают чужие и удалённые, и тогда Мета отклоняет весь пакет целиком.
     const wanted = new Set(list);
@@ -234,18 +220,14 @@ export async function getAdsMeta(ids) {
       if (ad.creative && ad.creative.id) creativeOf[id] = String(ad.creative.id);
     }
 
-    const creativeIds = Array.from(new Set(Object.values(creativeOf)));
-    const creatives = {};
-
-    for (let i = 0; i < creativeIds.length; i += 50) {
-      const data = await byId(creativeIds.slice(i, i + 50), {
-        fields: 'thumbnail_url,image_url,object_type,video_id',
-        thumbnail_width: '480',
-        thumbnail_height: '480'
-      });
-
-      Object.assign(creatives, data);
-    }
+    // Параметр ids Мета убрала (v26), поэтому креативы тоже списком из кабинета.
+    const creativeRows = await ask('/act_' + account() + '/adcreatives', {
+      fields: 'thumbnail_url,image_url,video_id',
+      thumbnail_width: '480',
+      thumbnail_height: '480',
+      limit: '500'
+    });
+    const creatives = Object.fromEntries(creativeRows.map(c => [String(c.id), c]));
 
     for (const [adId, creativeId] of Object.entries(creativeOf)) {
       const c = creatives[creativeId];
