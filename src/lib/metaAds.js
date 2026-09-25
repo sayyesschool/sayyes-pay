@@ -184,3 +184,81 @@ export async function getAdsByAd({ from, to } = {}) {
     return { ok: false, reason: 'Кабинет не ответил: ' + e.message };
   }
 }
+
+// Имя, статус и картинка объявления. Картинку просим у креатива отдельным
+// запросом: только там можно задать размер превью, иначе Мета отдаёт 64 пикселя.
+// Ссылки на картинки подписанные и живут несколько дней, поэтому не храним их,
+// а спрашиваем при каждом открытии.
+export async function getAdsMeta(ids) {
+  const list = Array.from(new Set((ids || []).map(String).filter(id => /^\d+$/.test(id))));
+
+  if (!token() || !list.length) return { ok: Boolean(token()), ads: {} };
+
+  try {
+    const byId = async (chunk, params) => {
+      const url = new URL(API + '/');
+
+      url.searchParams.set('ids', chunk.join(','));
+      for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value);
+      url.searchParams.set('access_token', token());
+
+      const resp = await fetch(url.toString(), { cache: 'no-store' });
+      const data = await resp.json();
+
+      if (data.error) throw new Error(data.error.message || 'Meta API error');
+
+      return data;
+    };
+    const chunks = [];
+
+    for (let i = 0; i < list.length; i += 50) chunks.push(list.slice(i, i + 50));
+
+    const ads = {};
+    const creativeOf = {};
+
+    for (const chunk of chunks) {
+      const data = await byId(chunk, { fields: 'name,effective_status,adset{name},creative{id}' });
+
+      for (const [id, ad] of Object.entries(data)) {
+        ads[id] = {
+          name: ad.name || null,
+          status: ad.effective_status || null,
+          adset: ad.adset ? ad.adset.name : null,
+          image: null,
+          kind: null
+        };
+        if (ad.creative && ad.creative.id) creativeOf[id] = String(ad.creative.id);
+      }
+    }
+
+    const creativeIds = Array.from(new Set(Object.values(creativeOf)));
+    const creatives = {};
+
+    for (let i = 0; i < creativeIds.length; i += 50) {
+      const data = await byId(creativeIds.slice(i, i + 50), {
+        fields: 'thumbnail_url,image_url,object_type,video_id',
+        thumbnail_width: '480',
+        thumbnail_height: '480'
+      });
+
+      Object.assign(creatives, data);
+    }
+
+    for (const [adId, creativeId] of Object.entries(creativeOf)) {
+      const c = creatives[creativeId];
+
+      if (!c) continue;
+
+      ads[adId].image = c.image_url || c.thumbnail_url || null;
+      ads[adId].kind = c.video_id ? 'video' : 'image';
+    }
+
+    return { ok: true, ads };
+  } catch (e) {
+    return { ok: false, reason: 'Кабинет не ответил: ' + e.message, ads: {} };
+  }
+}
+
+export function adsManagerLink(adId) {
+  return 'https://www.facebook.com/adsmanager/manage/ads/edit?act=' + account() + '&selected_ad_ids=' + adId;
+}

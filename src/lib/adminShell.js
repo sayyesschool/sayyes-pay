@@ -137,6 +137,7 @@ export const ADMIN_CSS = [
 // чтобы верх не превращался в простыню из кнопок.
 export const ANALYTICS_TABS = [
   { key: 'meta', label: 'Перформанс на Мете', owner: true },
+  { key: 'creatives', label: 'Креативы', owner: true },
   { key: 'funnel', label: 'Воронка', owner: false },
   { key: 'work', label: 'Заявки и уроки', owner: false },
   { key: 'money', label: 'Финансы', owner: true }

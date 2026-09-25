@@ -4,6 +4,8 @@ import { SESSION_COOKIE, readSession } from '@/lib/adminAuth';
 import { buildAnalytics, shiftDay, today } from '@/lib/analytics';
 import { getAdsInsights } from '@/lib/metaAds';
 import { Shell } from '@/lib/adminShell';
+import { buildCreatives, CREATIVES_SINCE } from '@/lib/creatives';
+import { CreativesTab } from '@/lib/creativesView';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,6 +28,7 @@ function brokenInRange(from, to) {
 
 const TABS = [
   { key: 'meta', label: 'Перформанс на Мете', owner: true },
+  { key: 'creatives', label: 'Креативы', owner: true },
   { key: 'funnel', label: 'Воронка', owner: false },
   { key: 'work', label: 'Заявки и уроки', owner: false },
   { key: 'money', label: 'Финансы', owner: true }
@@ -76,9 +79,14 @@ export default async function AdminPage({ searchParams }) {
   const params = await searchParams;
   const valid = value => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
   const to = valid(params?.to) ? params.to : today();
-  const from = valid(params?.from) ? params.from : shiftDay(to, -29);
   const visible = TABS.filter(tab => owner || !tab.owner);
   const tab = visible.some(item => item.key === params?.tab) ? params.tab : visible[0].key;
+  // У креативов по умолчанию только даты, где у объявлений есть ad_id.
+  const fallbackFrom = shiftDay(to, -29);
+  const from = valid(params?.from) ? params.from
+    : (tab === 'creatives' && fallbackFrom < CREATIVES_SINCE ? CREATIVES_SINCE : fallbackFrom);
+  const sort = ['spend', 'lesson', 'bookings', 'attended'].includes(params?.sort) ? params.sort : 'spend';
+  const creatives = tab === 'creatives' ? await buildCreatives({ from, to }) : null;
 
   const source = ['meta', 'organic'].includes(params?.source) ? params.source : 'all';
   const data = await buildAnalytics({ from, to, source });
@@ -213,6 +221,15 @@ export default async function AdminPage({ searchParams }) {
               </>
             )}
           </>
+        )}
+
+        {tab === 'creatives' && creatives && (
+          <CreativesTab
+            data={creatives}
+            sort={sort}
+            since={CREATIVES_SINCE}
+            sortLink={key => link('creatives', from, to) + '&sort=' + key}
+          />
         )}
 
         {tab === 'funnel' && (
