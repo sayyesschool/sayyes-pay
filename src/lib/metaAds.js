@@ -130,3 +130,57 @@ export async function getAdsInsights({ from, to } = {}) {
     return { ok: false, reason: 'Кабинет не ответил: ' + e.message };
   }
 }
+
+// Расход по каждому объявлению за период, по дням. Нужен growth-агенту, чтобы
+// считать цену состоявшегося урока по креативу: расход объявления / пришедшие
+// из /api/health/creatives. Суммы расхода наружу отдаются только под ключом.
+export async function getAdsByAd({ from, to } = {}) {
+  if (!token() || !account()) {
+    return { ok: false, reason: 'Нет доступа к кабинету: не заданы META_ADS_TOKEN и META_AD_ACCOUNT_ID.' };
+  }
+
+  try {
+    const rows = await ask('/act_' + account() + '/insights', {
+      fields: 'ad_id,ad_name,adset_name,campaign_name,spend,impressions,actions',
+      level: 'ad',
+      time_increment: '1',
+      time_range: JSON.stringify({ since: from, until: to }),
+      limit: '500'
+    });
+
+    const ads = {};
+
+    for (const row of rows) {
+      const id = String(row.ad_id);
+      const ad = ads[id] || (ads[id] = {
+        ad_id: id,
+        ad_name: row.ad_name,
+        adset_name: row.adset_name,
+        campaign_name: row.campaign_name,
+        spend: 0,
+        impressions: 0,
+        linkClicks: 0,
+        leads: 0,
+        byDay: {}
+      });
+      const spend = Number(row.spend || 0);
+      const clicks = linkClicksFrom(row.actions);
+      const leads = leadsFrom(row.actions);
+
+      ad.spend += spend;
+      ad.impressions += Number(row.impressions || 0);
+      ad.linkClicks += clicks;
+      ad.leads += leads;
+      ad.byDay[row.date_start] = { spend: Math.round(spend * 100) / 100, linkClicks: clicks, leads };
+    }
+
+    return {
+      ok: true,
+      ads: Object.values(ads)
+        .map(a => ({ ...a, spend: Math.round(a.spend * 100) / 100 }))
+        .sort((a, b) => b.spend - a.spend)
+    };
+  } catch (e) {
+    return { ok: false, reason: 'Кабинет не ответил: ' + e.message };
+  }
+}
