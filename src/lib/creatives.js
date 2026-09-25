@@ -187,6 +187,7 @@ export async function buildCreatives({ from, to }) {
     adsOk: ads.ok,
     adsReason: ads.ok ? null : ads.reason,
     metaOk: meta.ok,
+    metaReason: meta.ok ? null : meta.reason,
     rows: list.map(derive),
     total,
     untagged

@@ -209,26 +209,29 @@ export async function getAdsMeta(ids) {
 
       return data;
     };
-    const chunks = [];
-
-    for (let i = 0; i < list.length; i += 50) chunks.push(list.slice(i, i + 50));
-
+    // Объявления берём из кабинета, а не по списку id: среди id из заявок
+    // бывают чужие и удалённые, и тогда Мета отклоняет весь пакет целиком.
+    const wanted = new Set(list);
+    const rows = await ask('/act_' + account() + '/ads', {
+      fields: 'name,effective_status,adset{name},creative{id}',
+      limit: '500'
+    });
     const ads = {};
     const creativeOf = {};
 
-    for (const chunk of chunks) {
-      const data = await byId(chunk, { fields: 'name,effective_status,adset{name},creative{id}' });
+    for (const ad of rows) {
+      const id = String(ad.id);
 
-      for (const [id, ad] of Object.entries(data)) {
-        ads[id] = {
-          name: ad.name || null,
-          status: ad.effective_status || null,
-          adset: ad.adset ? ad.adset.name : null,
-          image: null,
-          kind: null
-        };
-        if (ad.creative && ad.creative.id) creativeOf[id] = String(ad.creative.id);
-      }
+      if (!wanted.has(id)) continue;
+
+      ads[id] = {
+        name: ad.name || null,
+        status: ad.effective_status || null,
+        adset: ad.adset ? ad.adset.name : null,
+        image: null,
+        kind: null
+      };
+      if (ad.creative && ad.creative.id) creativeOf[id] = String(ad.creative.id);
     }
 
     const creativeIds = Array.from(new Set(Object.values(creativeOf)));

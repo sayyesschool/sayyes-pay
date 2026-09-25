@@ -223,6 +223,12 @@ export function CreativesTab({ data, sort, sortLink, since }) {
         </div>
       )}
 
+      {data.adsOk && !data.metaOk && (
+        <div className="card warn">
+          <p className="muted">Картинки и статусы объявлений не пришли: {data.metaReason || 'нет ответа кабинета'}</p>
+        </div>
+      )}
+
       {data.range.from < since && (
         <div className="card warn">
           <p className="muted">До {since.slice(8)}.{since.slice(5, 7)} у объявлений не было ad_id в ссылке: заявки тех дней не привязаны к креативам, и цена за них завышена.</p>
