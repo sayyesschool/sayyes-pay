@@ -198,44 +198,42 @@ export async function getAdsMeta(ids) {
     // Объявления берём из кабинета, а не по списку id: среди id из заявок
     // бывают чужие и удалённые, и тогда Мета отклоняет весь пакет целиком.
     const wanted = new Set(list);
-    const rows = await ask('/act_' + account() + '/ads', {
-      fields: 'name,effective_status,adset{name},creative{id}',
-      limit: '500'
-    });
+    // Постранично и небольшими порциями: большой ответ Мета отклоняет
+    // («reduce the amount of data»). Размер превью задаём прямо в раскрытии
+    // поля creative, иначе оно 64 пикселя.
+    const rows = [];
+    let next = new URL(API + '/act_' + account() + '/ads');
+
+    next.searchParams.set('fields', 'name,effective_status,adset{name},creative.thumbnail_width(480).thumbnail_height(480){thumbnail_url,image_url,video_id}');
+    next.searchParams.set('limit', '50');
+    next.searchParams.set('access_token', token());
+
+    for (let page = 0; next && page < 10; page++) {
+      const resp = await fetch(next.toString(), { cache: 'no-store' });
+      const data = await resp.json();
+
+      if (data.error) throw new Error(data.error.message || 'Meta API error');
+
+      rows.push(...(data.data || []));
+      next = data.paging && data.paging.next ? new URL(data.paging.next) : null;
+    }
+
     const ads = {};
-    const creativeOf = {};
 
     for (const ad of rows) {
       const id = String(ad.id);
 
       if (!wanted.has(id)) continue;
 
+      const c = ad.creative || {};
+
       ads[id] = {
         name: ad.name || null,
         status: ad.effective_status || null,
         adset: ad.adset ? ad.adset.name : null,
-        image: null,
-        kind: null
+        image: c.image_url || c.thumbnail_url || null,
+        kind: c.video_id ? 'video' : (c.image_url || c.thumbnail_url ? 'image' : null)
       };
-      if (ad.creative && ad.creative.id) creativeOf[id] = String(ad.creative.id);
-    }
-
-    // Параметр ids Мета убрала (v26), поэтому креативы тоже списком из кабинета.
-    const creativeRows = await ask('/act_' + account() + '/adcreatives', {
-      fields: 'thumbnail_url,image_url,video_id',
-      thumbnail_width: '480',
-      thumbnail_height: '480',
-      limit: '500'
-    });
-    const creatives = Object.fromEntries(creativeRows.map(c => [String(c.id), c]));
-
-    for (const [adId, creativeId] of Object.entries(creativeOf)) {
-      const c = creatives[creativeId];
-
-      if (!c) continue;
-
-      ads[adId].image = c.image_url || c.thumbnail_url || null;
-      ads[adId].kind = c.video_id ? 'video' : 'image';
     }
 
     return { ok: true, ads };
