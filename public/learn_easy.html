@@ -711,20 +711,27 @@ h2{font-size:21px;font-weight:700;color:var(--dark);line-height:1.3;margin-botto
       <div class="small">Пробный урок · 30 мин · Zoom</div>
     </div>
 
+    <!-- G9 (26.09.2026): бот главной кнопкой. Подтвердившие приходят в 58%, неподтвердившие
+         почти никогда, а подтверждают в основном те, кто открыл бота (66% против 23% у почты).
+         Календарь остаётся, но второй кнопкой. Только для записи со временем. -->
+    <div id="s14TgBlock" style="display:none;background:#fff;border:2px solid #229ED9;border-radius:16px;padding:14px 16px;margin-bottom:12px">
+      <div style="font-size:15px;font-weight:700;color:var(--dark);margin-bottom:6px">Осталось одно: подключите Telegram</div>
+      <div style="font-size:13px;color:var(--gray);line-height:1.55">Туда придёт ссылка на Zoom за час до урока и напоминание накануне. Там же перенос в одно касание, если планы изменятся.</div>
+    </div>
+
+    <a id="botMainBtn" href="https://t.me/SY_school_bot" target="_blank" onclick="trackStep('bot_click')"
+       style="display:none;align-items:center;justify-content:center;gap:10px;width:100%;padding:16px;background:#229ED9;color:#fff;border:none;border-radius:100px;font-size:16px;font-weight:700;cursor:pointer;text-align:center;text-decoration:none;box-shadow:0 4px 18px rgba(34,158,217,0.35);margin-bottom:6px">
+      ✈️ Подключить Telegram
+    </a>
+    <p id="botMainHint" style="display:none;font-size:12px;color:var(--gray);text-align:center;margin-bottom:14px">Откроется чат школы. Нажмите «Старт» - это 10 секунд.</p>
+
     <!-- Добавить в календарь: работает без бота и без почты -->
     <a id="icsBtn" href="#" download="say-yes-probny-urok.ics"
-       style="display:flex;align-items:center;justify-content:center;gap:10px;width:100%;padding:16px;background:var(--purple);color:#fff;border:none;border-radius:100px;font-size:16px;font-weight:700;cursor:pointer;text-align:center;text-decoration:none;box-shadow:0 4px 20px rgba(91,45,142,0.3);margin-bottom:12px">
-      <span style="font-size:19px">📅</span> Добавить урок в календарь
+       style="display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:13px;background:#fff;color:var(--purple);border:2px solid var(--purple);border-radius:100px;font-size:15px;font-weight:700;cursor:pointer;text-align:center;text-decoration:none;margin-bottom:12px">
+      <span style="font-size:19px">📅</span> <span id="icsLabel">Добавить в календарь</span>
     </a>
 
-
-    <div id="s14TgBlock" style="background:var(--light-gray);border-radius:16px;padding:14px 16px;margin-bottom:16px">
-      <div style="font-size:13px;font-weight:700;color:var(--dark);margin-bottom:8px">Что дальше</div>
-      <div style="font-size:13px;color:var(--gray);line-height:1.7">
-        ✔ Накануне попросим подтвердить, что вы придёте - преподаватель готовится к уроку заранее<br>
-        ✔ Перенести или отменить можно в любой момент, в одно касание
-      </div>
-    </div>
+    <p id="botNote" style="display:none;font-size:12px;color:var(--gray);text-align:center;line-height:1.6;margin-bottom:0"></p>
 
     <!-- Сообщение только для заявок без выбранного слота -->
     <div id="s14NoTimeMsg" style="display:none;background:var(--purple-light);border-radius:16px;padding:20px 18px;margin-bottom:20px;text-align:center">
@@ -755,7 +762,8 @@ const STEP_NAMES = {
   '4a':'social_proof','5':'q_time','6':'q_format','7':'q_readiness',
   '7a':'progress_plan','8':'q_age','2':'differentiation',
   '11':'value_reinforcement','12':'contacts','13':'time_slots','14':'confirmation',
-  '2b':'budget','10n':'russian_only','1r':'landing_repeat'
+  '2b':'budget','10n':'russian_only','1r':'landing_repeat',
+  'bot_click':'bot_click'
 };
 
 // ===== Идентификаторы клика для Conversions API =====
@@ -1549,6 +1557,33 @@ function buildIcsDataUrl(slotKey, bookingId) {
   return 'data:text/calendar;charset=utf-8,' + encodeURIComponent(lines.join('\r\n'));
 }
 
+// Раскладка экрана «Вы записаны» (G9). Запись со временем: бот главной кнопкой,
+// календарь второй. Перенос и заявка без времени выглядят как до G9.
+function s14Layout(mode, botLink, email) {
+  const main = document.getElementById('botMainBtn');
+  const mainHint = document.getElementById('botMainHint');
+  const note = document.getElementById('botNote');
+  const ics = document.getElementById('icsBtn');
+  const icsLabel = document.getElementById('icsLabel');
+  const isTime = mode === 'time';
+
+  if (main) {
+    main.style.display = isTime ? 'flex' : 'none';
+    main.href = botLink || 'https://t.me/SY_school_bot';
+  }
+  if (mainHint) mainHint.style.display = isTime ? 'block' : 'none';
+  if (note) {
+    note.style.display = isTime ? 'block' : 'none';
+    note.textContent = email
+      ? 'Нет Telegram? Напоминание и ссылку пришлём на почту.'
+      : 'Нет Telegram? Менеджер напишет вам по телефону.';
+  }
+  if (ics && mode === 'reschedule') {
+    ics.style.cssText = 'display:flex;align-items:center;justify-content:center;gap:10px;width:100%;padding:16px;background:var(--purple);color:#fff;border:none;border-radius:100px;font-size:16px;font-weight:700;cursor:pointer;text-align:center;text-decoration:none;box-shadow:0 4px 20px rgba(91,45,142,0.3);margin-bottom:12px';
+    if (icsLabel) icsLabel.textContent = 'Добавить урок в календарь';
+  }
+}
+
 function fillConfirmation(slot, bookingId) {
   const tzEl = document.getElementById('cTz');
   if (tzEl) tzEl.textContent = TZ_LABEL ? 'Время указано для вашего пояса: ' + TZ_LABEL : '';
@@ -1619,6 +1654,7 @@ async function submitBooking() {
         if (tgBlock) tgBlock.style.display = 'none';
         if (botBtn) botBtn.style.display = 'none';
         if (botHint) botHint.style.display = 'none';
+        s14Layout('reschedule');
         const title = document.getElementById('cTitle');
         if (title) title.textContent = 'ЗАПИСЬ ПЕРЕНЕСЕНА';
         fillConfirmation(selectedSlot.key, rescheduleBookingId);
@@ -1705,6 +1741,7 @@ async function submitBooking() {
         const ics = document.getElementById('icsBtn');
         if (ics) ics.style.display = 'none';
         if (tgBlock) tgBlock.style.display = 'none';
+        s14Layout('no_time');
         if (noTimeMsg) noTimeMsg.style.display = 'block';
         if (botBtn) { botBtn.style.display = 'flex'; botBtn.href = data.botLink || 'https://t.me/SY_school_bot'; }
         if (botHint) botHint.style.display = 'block';
@@ -1715,8 +1752,9 @@ async function submitBooking() {
         if (title) title.textContent = 'ВЫ ЗАПИСАНЫ';
         if (tgBlock) tgBlock.style.display = 'block';
         if (noTimeMsg) noTimeMsg.style.display = 'none';
-        if (botBtn) { botBtn.style.display = 'flex'; botBtn.href = data.botLink || 'https://t.me/SY_school_bot'; }
-        if (botHint) botHint.style.display = 'block';
+        if (botBtn) botBtn.style.display = 'none';
+        if (botHint) botHint.style.display = 'none';
+        s14Layout('time', data.botLink, email);
         fillConfirmation(selectedSlot.key, data.bookingId);
       }
       go(14);
