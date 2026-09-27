@@ -125,7 +125,10 @@ export async function GET(request) {
       put(groups.source, attr.utm_source || (attr.fbclid || attr.ad_id ? 'meta' : 'без метки'));
       put(groups.ad, attr.ad_id || 'без объявления');
 
-      const reachKey = booking.chatId ? 'bot' : 'email-only';
+      // Без бота и без почты человек не получает от нас ни одного касания до урока:
+      // напоминания и просьба подтвердить уходят только в бот или письмом.
+      // До 26.09.2026 такие записи сидели в «email-only» и занижали цифру почты.
+      const reachKey = booking.chatId ? 'bot' : (booking.email ? 'email-only' : 'no-touch');
 
       if (!reach[reachKey]) reach[reachKey] = { total: 0, confirmed: 0, attended: 0 };
       reach[reachKey].total++;

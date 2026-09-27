@@ -96,7 +96,8 @@ export async function cancelBooking(bookingId, by) {
   await updateBooking(bookingId, {
     status: 'cancelled',
     cancelledAt: new Date().toISOString(),
-    cancelledBy: '@' + by
+    cancelledBy: '@' + by,
+    cancelSource: 'admin'
   });
 
   if (booking.slot && booking.slot !== 'no_time') await removeBookedSlot(booking.slot);
@@ -232,6 +233,8 @@ export async function restoreBooking(bookingId, by) {
     releasedAt: null,
     cancelledAt: null,
     cancelledBy: null,
+    cancelSource: null,
+    restoredFrom: booking.cancelSource || (booking.releasedUnconfirmed ? 'auto_unconfirmed' : 'unknown'),
     // Метка защищает от повторного снятия автоматикой: без неё крон увидит
     // неподтверждённую запись за 6 часов до урока и снимет её снова.
     restoredAt: new Date().toISOString(),

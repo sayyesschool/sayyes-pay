@@ -264,7 +264,9 @@ export async function GET(request) {
         await updateBooking(booking.id, {
           status: 'cancelled',
           releasedUnconfirmed: true,
-          releasedAt: new Date().toISOString()
+          releasedAt: new Date().toISOString(),
+          cancelledAt: new Date().toISOString(),
+          cancelSource: 'auto_unconfirmed'
         });
 
         if (booking.slot && booking.slot !== 'no_time') await removeBookedSlot(booking.slot);

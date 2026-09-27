@@ -346,8 +346,15 @@ async function handleConfirmCancel(chatId, bookingId, callbackQueryId, messageId
     await removeBookedSlot(booking.slot);
   }
 
-  // Update booking status
-  await updateBooking(bookingId, { status: 'cancelled' });
+  // Update booking status. Кто и когда отменил, пишем в саму заявку: до 26.09.2026
+  // отмена учеником в боте и отмена менеджером выглядели в базе одинаково,
+  // и разобрать 113 отмен за месяц по причинам было нельзя.
+  await updateBooking(bookingId, {
+    status: 'cancelled',
+    cancelledAt: new Date().toISOString(),
+    cancelledBy: 'student',
+    cancelSource: 'bot_student'
+  });
   await clearUserBooking(chatId);
 
   await answerCallback(callbackQueryId, 'Запись отменена');
@@ -480,7 +487,7 @@ async function handleNewSlot(chatId, bookingId, newSlotKey, callbackQueryId, mes
   }
 }
 
-async function handleMgrCancel(chatId, bookingId, callbackQueryId, messageId) {
+async function handleMgrCancel(chatId, bookingId, callbackQueryId, messageId, from) {
   const booking = await getBooking(bookingId);
   if (!booking) {
     await answerCallback(callbackQueryId, 'Запись не найдена');
@@ -493,7 +500,12 @@ async function handleMgrCancel(chatId, bookingId, callbackQueryId, messageId) {
   }
 
   // Update booking status
-  await updateBooking(bookingId, { status: 'cancelled' });
+  await updateBooking(bookingId, {
+    status: 'cancelled',
+    cancelledAt: new Date().toISOString(),
+    cancelledBy: from && from.username ? '@' + from.username : 'manager',
+    cancelSource: 'bot_manager'
+  });
 
   await answerCallback(callbackQueryId, 'Запись отменена');
   await editMessage(chatId, messageId,
@@ -700,6 +712,9 @@ async function handleConfirmAttendance(chatId, bookingId, callbackQueryId, messa
       status: 'confirmed',
       releasedUnconfirmed: false,
       releasedAt: null,
+      cancelledAt: null,
+      cancelSource: null,
+      restoredFrom: booking.cancelSource || (booking.releasedUnconfirmed ? 'auto_unconfirmed' : 'unknown'),
       // Та же метка, что у возврата из админки: иначе крон снимет запись снова.
       restoredAt: new Date().toISOString()
     });
@@ -1628,6 +1643,9 @@ async function handleRestoreCommand(chatId, text) {
       status: 'confirmed',
       releasedUnconfirmed: false,
       releasedAt: null,
+      cancelledAt: null,
+      cancelSource: null,
+      restoredFrom: b.cancelSource || 'auto_unconfirmed',
       restoredAt: new Date().toISOString()
     });
 
@@ -1868,7 +1886,9 @@ async function handleCleanSlotsCommand(chatId, text) {
       await updateBooking(booking.id, {
         status: 'cancelled',
         releasedByManager: true,
-        releasedAt: new Date().toISOString()
+        releasedAt: new Date().toISOString(),
+        cancelledAt: new Date().toISOString(),
+        cancelSource: 'cleanslots'
       });
 
       if (booking.chatId) {
@@ -2573,7 +2593,7 @@ export async function POST(request) {
           await editMessage(chatId, messageId, 'Запись клиента отменена.');
           break;
         case 'mgr_cancel':
-          await handleMgrCancel(chatId, bookingId, callbackId, messageId);
+          await handleMgrCancel(chatId, bookingId, callbackId, messageId, from);
           break;
         case 'mgr_time':
           await handleMgrManualTimeAsk(chatId, bookingId, callbackId);
