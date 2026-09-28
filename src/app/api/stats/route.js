@@ -15,7 +15,7 @@ const CRON_SECRET = process.env.CRON_SECRET;
 const STEP_ORDER = [
   'landing', 'language', 'country', 'q_level', 'q_goal', 'social_proof',
   'q_time', 'q_format', 'q_readiness', 'progress_plan', 'q_age',
-  'differentiation', 'value_reinforcement', 'contacts', 'time_slots', 'confirmation',
+  'differentiation', 'value_reinforcement', 'time_slots', 'contacts', 'confirmation',
   // старые имена шагов, чтобы читались исторические дни до v4
   'qualification', 'q1_level', 'q2_goal', 'q3_time', 'q4_format',
   'q5_readiness', 'q6_age', 'q7_country', 'q8_language', 'russian_only'

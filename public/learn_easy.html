@@ -554,7 +554,7 @@ h2{font-size:21px;font-weight:700;color:var(--dark);line-height:1.3;margin-botto
   <div class="content">
     <h2>💬 Сейчас основная коммуникация в школе проходит на русском языке. Вам это подходит?</h2>
     <div class="options" style="margin-top:12px">
-      <div class="opt" onclick="pick(this,12)"><span class="opt-icon">✅</span>Да</div>
+      <div class="opt" onclick="pick(this,13)"><span class="opt-icon">✅</span>Да</div>
       <div class="opt" onclick="pick(this,'10n')"><span class="opt-icon">❌</span>Нет</div>
     </div>
   </div>
@@ -622,13 +622,24 @@ h2{font-size:21px;font-weight:700;color:var(--dark);line-height:1.3;margin-botto
 
 <!-- ======= S12: CONTACTS ======= -->
 <div class="screen" id="s12">
-  <div class="nav"><button class="back-btn" onclick="go(10)">← Назад</button></div>
+  <div class="nav"><button class="back-btn" onclick="go(13)">← Назад</button></div>
   <div class="content">
     <div class="badge">✨</div>
     <h2>Остался последний шаг</h2>
     <p class="sub">Куда прислать подтверждение записи?</p>
 
-    <div class="planbox" style="margin-bottom:16px"></div>
+    <!-- 28.09.2026: время выбирается ДО контактов (G4). Здесь показываем выбранное время,
+         а если его успели занять, прямо на этом экране три ближайших свободных слота. -->
+    <div id="chosenSlotBox" style="display:flex;justify-content:space-between;align-items:center;gap:10px;background:var(--purple-light);border-radius:12px;padding:10px 14px;margin-bottom:14px">
+      <span id="chosenSlotText" style="font-size:13px;font-weight:700;color:var(--purple-dark)"></span>
+      <a href="#" onclick="go(13);return false;" style="font-size:12px;color:var(--purple);text-decoration:underline;white-space:nowrap">изменить</a>
+    </div>
+    <div id="slotTakenBox" style="display:none;background:#FFF4E0;border-radius:12px;padding:12px 14px;margin-bottom:14px">
+      <div id="slotTakenTitle" style="font-size:13px;font-weight:700;color:#7A4A00;margin-bottom:2px"></div>
+      <div style="font-size:12px;color:#8A5A10;margin-bottom:8px">Ближайшее свободное время:</div>
+      <div id="slotAlts" style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px"></div>
+      <a href="#" onclick="go(13);return false;" style="display:inline-block;margin-top:8px;font-size:12px;color:var(--purple);text-decoration:underline">Другое время</a>
+    </div>
 
     <div style="background:var(--purple-light);border-radius:14px;padding:12px 14px;margin-bottom:16px">
       <div style="font-size:12px;font-weight:700;color:var(--purple-dark);margin-bottom:6px">Что дальше:</div>
@@ -661,13 +672,13 @@ h2{font-size:21px;font-weight:700;color:var(--dark);line-height:1.3;margin-botto
     </div>
 
     <div class="spacer"></div>
-    <button class="cta" onclick="goToSlots()">Выбрать время урока →</button>
+    <button class="cta" id="contactsCta" onclick="submitContacts()">Записаться на урок →</button>
   </div>
 </div>
 
 <!-- ======= S13: TIME SLOTS ======= -->
 <div class="screen" id="s13">
-  <div class="nav"><button class="back-btn" id="s13BackBtn" onclick="go(12)">← Назад</button></div>
+  <div class="nav"><button class="back-btn" id="s13BackBtn" onclick="go(10)">← Назад</button></div>
   <div class="content">
     <div id="rescheduleInfo" style="display:none;background:var(--purple-light);border-radius:12px;padding:12px 14px;margin-bottom:12px;text-align:center">
       <div style="font-size:15px;font-weight:600;color:var(--purple)">🔄 Перенос записи</div>
@@ -696,7 +707,7 @@ h2{font-size:21px;font-weight:700;color:var(--dark);line-height:1.3;margin-botto
     <div id="slotsLoading" style="text-align:center;padding:30px 0;color:var(--gray)">Загрузка доступных слотов...</div>
     <div class="tgrid" id="slotsGrid" style="display:none"></div>
 
-    <button class="cta disabled" id="slotCta" onclick="submitBooking()">Выберите время выше</button>
+    <button class="cta disabled" id="slotCta" onclick="slotNext()">Выберите время выше</button>
   </div>
 </div>
 
@@ -864,7 +875,7 @@ function markValid(el) {
 
 // Telegram был единственным обязательным каналом - и именно там всё ломалось.
 // Теперь достаточно любого из двух, но хотя бы один нужен.
-function goToSlots() {
+function submitContacts() {
   const tgInput = document.getElementById('uTg');
   const emailInput = document.getElementById('uEmail');
   const hint = document.getElementById('contactHint');
@@ -876,7 +887,7 @@ function goToSlots() {
   if (tg && isValidEmail(tg) && !email) {
     emailInput.value = tg;
     tgInput.value = '';
-    return goToSlots();
+    return submitContacts();
   }
 
   const tgOk = tg && isValidTgOrPhone(tg);
@@ -910,7 +921,107 @@ function goToSlots() {
 
   hint.textContent = 'Достаточно одного из двух. Оба - надёжнее: пришлём и туда, и туда.';
   hint.style.color = 'var(--gray)';
-  go(13);
+  submitBooking();
+}
+
+// Кнопка на экране времени. При переносе записи контакты не нужны - сразу отправка.
+function slotNext() {
+  if (!selectedSlot) return;
+  if (isReschedule) return submitBooking();
+  go(12);
+}
+
+// Строка «Ср, 30 сен, 13:00» на экране контактов.
+function renderChosenSlot() {
+  const box = document.getElementById('chosenSlotBox');
+  const taken = document.getElementById('slotTakenBox');
+  const text = document.getElementById('chosenSlotText');
+  if (taken) taken.style.display = 'none';
+  if (box) box.style.display = 'flex';
+  if (text && selectedSlot) text.textContent = '🗓 ' + selectedSlot.date + ', ' + (selectedSlot.localTime || selectedSlot.msk);
+  const cta = document.getElementById('contactsCta');
+  if (cta) { cta.textContent = 'Записаться на урок →'; cta.classList.remove('disabled'); }
+}
+
+// Выбранное время успели занять, пока человек вводил контакты.
+// Не отправляем его обратно к сетке: предлагаем три ближайших свободных слота
+// прямо здесь, контакты остаются в полях. Слоты без времени не предлагаем:
+// такие заявки до урока не доходили (решение 23.09).
+async function showSlotTaken(takenKey, takenLabel) {
+  try {
+    const resp = await fetch('/api/slots');
+    if (resp.ok) {
+      const data = await resp.json();
+      let booked = data.booked;
+      if (typeof booked === 'string') { try { booked = JSON.parse(booked); } catch (e) { booked = []; } }
+      bookedSlots = Array.isArray(booked) ? booked : bookedSlots;
+    }
+  } catch (e) {}
+  if (!bookedSlots.includes(takenKey)) bookedSlots.push(takenKey);
+
+  const nowTs = Date.now();
+  const free = [];
+  getNextWeekdays(6).forEach(date => {
+    generateSlots(date).forEach(mskMin => {
+      const local = mskMinutesToLocal(mskMin, date);
+      if (local.getTime() - nowTs < 3 * 60 * 60 * 1000) return;
+      const key = ymd(date) + '_' + formatMskTime(mskMin);
+      if (bookedSlots.includes(key)) return;
+      free.push({
+        ts: local.getTime(),
+        key: key,
+        msk: formatMskTime(mskMin),
+        date: DAYS_RU[date.getDay()] + ', ' + date.getDate() + ' ' + MONTHS_RU[date.getMonth()],
+        localTime: formatTime(local)
+      });
+    });
+  });
+  free.sort((a, b) => a.ts - b.ts);
+  const takenTs = (function () {
+    const [d, t] = String(takenKey).split('_');
+    if (!d || !t) return 0;
+    const [y, mo, da] = d.split('-').map(Number);
+    const [hh, mm] = t.split(':').map(Number);
+    return Date.UTC(y, mo - 1, da, hh - MSK_OFFSET, mm);
+  })();
+  const after = free.filter(s => s.ts >= takenTs);
+  const alts = after.concat(free.filter(s => s.ts < takenTs)).slice(0, 3);
+
+  document.getElementById('chosenSlotBox').style.display = 'none';
+  const box = document.getElementById('slotTakenBox');
+  const list = document.getElementById('slotAlts');
+  document.getElementById('slotTakenTitle').textContent = takenLabel + ' только что заняли';
+  list.innerHTML = '';
+  const cta = document.getElementById('contactsCta');
+
+  if (!alts.length) {
+    list.innerHTML = '<div style="grid-column:1/-1;font-size:12px;color:#8A5A10">Свободного времени на неделе не осталось.</div>';
+    selectedSlot = null;
+    cta.textContent = 'Выбрать другое время';
+    cta.classList.add('disabled');
+    box.style.display = 'block';
+    return;
+  }
+
+  const choose = (slot, el) => {
+    selectedSlot = { key: slot.key, msk: slot.msk, date: slot.date, localTime: slot.localTime };
+    list.querySelectorAll('.alt-slot').forEach(x => { x.style.borderColor = '#D8D2C4'; x.style.borderWidth = '1px'; });
+    el.style.borderColor = 'var(--purple)';
+    el.style.borderWidth = '2px';
+    cta.textContent = 'Записаться на ' + slot.date + ', ' + slot.localTime + ' →';
+    cta.classList.remove('disabled');
+  };
+
+  alts.forEach((slot, i) => {
+    const el = document.createElement('div');
+    el.className = 'alt-slot';
+    el.style.cssText = 'background:#fff;border:1px solid #D8D2C4;border-radius:10px;text-align:center;padding:6px 4px;cursor:pointer;font-size:12px;color:var(--purple-dark);line-height:1.3';
+    el.innerHTML = slot.date.split(',')[0] + ' ' + slot.date.split(' ')[1] + '<br><b style="font-size:14px">' + slot.localTime + '</b>';
+    el.onclick = function () { choose(slot, el); };
+    list.appendChild(el);
+    if (i === 0) choose(slot, el);
+  });
+  box.style.display = 'block';
 }
 
 function updateProgressChart() {
@@ -1049,7 +1160,7 @@ function updateProgressChart() {
 // Порядок экранов для step_number: по нему считается отвал
 const STEP_ORDER = ['landing','country','q_level','q_goal','social_proof',
   'q_time','q_format','q_readiness','progress_plan','q_age','differentiation','budget',
-  'value_reinforcement','language','contacts','time_slots','confirmation'];
+  'value_reinforcement','language','time_slots','contacts','confirmation'];
 const FUNNEL_VERSION = 'v2';
 
 // Источник ИМЕННО ЭТОГО захода, а не сохранённого в ATTRIBUTION за 90 дней.
@@ -1244,6 +1355,8 @@ function renderPlan() {
 
 function go(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  // Контакты имеют смысл только с выбранным временем (порядок с 28.09.2026).
+  if (id == 12 && !selectedSlot) id = 13;
   const nextScreen = document.getElementById('s' + id);
   nextScreen.querySelectorAll('.opt').forEach(o => o.classList.remove('selected'));
   nextScreen.classList.add('active');
@@ -1251,6 +1364,7 @@ function go(id) {
   trackStep(id);
   if (id == 12 || id == 13) renderPlan();
   if (id == 13) loadSlots();
+  if (id == 12) renderChosenSlot();
   if (id == '7a') updateProgressChart();
 }
 
@@ -1512,7 +1626,9 @@ function selectSlot(el) {
   const col = el.closest('.day-col');
   const dayDate = col ? col.querySelector('.day-date').textContent : '';
   const time = el.querySelector('.time').textContent;
-  document.getElementById('slotCta').textContent = 'Записаться на ' + dayDate + ', ' + time;
+  document.getElementById('slotCta').textContent = isReschedule
+    ? 'Записаться на ' + dayDate + ', ' + time
+    : 'Дальше →';
 }
 
 // ===== Файл календаря =====
@@ -1677,7 +1793,7 @@ async function submitBooking() {
   // Достаточно любого одного канала: Telegram/телефон ИЛИ email
   if (!tg && !email) { alert('Укажите Telegram или email - куда прислать подтверждение'); go(12); return; }
 
-  const btn = document.getElementById('slotCta');
+  const btn = document.getElementById('contactsCta');
   btn.textContent = 'Отправка...';
   btn.classList.add('disabled');
 
@@ -1780,15 +1896,18 @@ async function submitBooking() {
           currency: 'EUR'
         }, { eventID: leadEventId });
       }
+    } else if (resp.status === 409) {
+      // Время заняли, пока человек вводил контакты: запасные слоты прямо на экране
+      await showSlotTaken(selectedSlot.key, selectedSlot.date + ', ' + (selectedSlot.localTime || selectedSlot.msk));
     } else {
       const data = await resp.json().catch(() => ({}));
       alert(data.error || 'Произошла ошибка. Попробуйте ещё раз.');
-      btn.textContent = 'Записаться на это время';
+      btn.textContent = 'Записаться на урок →';
       btn.classList.remove('disabled');
     }
   } catch(e) {
     alert('Ошибка подключения. Попробуйте ещё раз.');
-    btn.textContent = 'Записаться на это время';
+    btn.textContent = 'Записаться на урок →';
     btn.classList.remove('disabled');
   }
 }

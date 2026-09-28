@@ -234,7 +234,9 @@ export async function buildAnalytics({ from, to, source = 'all' } = {}) {
   const funnel = [
     { key: 'visits', label: 'Открыли воронку', value: totals.visits, of: null },
     { key: 'quiz', label: 'Начали квиз', value: totals.quiz, of: pct(totals.quiz, totals.visits) },
-    { key: 'contacts', label: 'Дошли до контактов', value: totals.contacts, of: pct(totals.contacts, totals.quiz) },
+    // С 28.09.2026 время выбирается до контактов (G4).
+    { key: 'slots', label: 'Дошли до выбора времени', value: totals.slots, of: pct(totals.slots, totals.quiz) },
+    { key: 'contacts', label: 'Дошли до контактов', value: totals.contacts, of: pct(totals.contacts, totals.slots) },
     { key: 'bookings', label: 'Записались', value: totals.bookings, of: pct(totals.bookings, totals.contacts) },
     { key: 'confirmed', label: 'Подтвердили', value: totals.confirmed, of: pct(totals.confirmed, totals.bookings) },
     { key: 'attended', label: 'Пришли на урок', value: totals.attended, of: pct(totals.attended, totals.lessons) },
@@ -413,8 +415,8 @@ export async function buildAnalytics({ from, to, source = 'all' } = {}) {
     ['q_age', 'Возраст'],
     ['differentiation', 'Чем отличаемся'],
     ['value_reinforcement', 'Что на уроке'],
-    ['contacts', 'Контакты'],
     ['time_slots', 'Выбор времени'],
+    ['contacts', 'Контакты'],
     ['confirmation', 'Подтверждение']
   ];
 

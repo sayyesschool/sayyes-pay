@@ -11,8 +11,8 @@ const DAY = 24 * 60 * 60 * 1000;
 const STEPS = [
   'landing', 'country', 'q_level', 'q_goal', 'social_proof',
   'q_time', 'q_format', 'q_readiness', 'progress_plan', 'q_age',
-  'differentiation', 'budget', 'value_reinforcement', 'language', 'contacts',
-  'time_slots', 'confirmation'
+  'differentiation', 'budget', 'value_reinforcement', 'language', 'time_slots',
+  'contacts', 'confirmation'
 ];
 
 // Перенос — возврат уже записанного человека, а не открытие воронки.
