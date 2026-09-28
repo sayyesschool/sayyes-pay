@@ -1339,15 +1339,10 @@ function generateSlots(date, count) {
     allSlots.push(h * 60);       // :00
     allSlots.push(h * 60 + 30);  // :30
   }
-  // Сид от локальной даты - той же, что идёт в ключ слота
-  const dateStr = ymd(date);
-  const rng = seededRandom(dateStr + 'sayyes');
-  // Shuffle and pick
-  for (let i = allSlots.length - 1; i > 0; i--) {
-    const j = Math.floor(rng() * (i + 1));
-    [allSlots[i], allSlots[j]] = [allSlots[j], allSlots[i]];
-  }
-  return allSlots.slice(0, count).sort((a, b) => a - b);
+  // До 28.09.2026 здесь брались случайные count слотов из 20, и воронка прятала
+  // свободные слоты, которые менеджеры оставили открытыми в админке (15:00 МСК 28.09).
+  // Решение Димы: показывать всю сетку, свободность решает только список занятых.
+  return allSlots;
 }
 
 function mskMinutesToLocal(mskMinutes, date) {
@@ -1442,7 +1437,7 @@ function renderSlotGrid() {
     const nowTs = Date.now();
     // Слотов в сетке вдвое больше: при 7 в день расписание упиралось в потолок
         // раньше, чем реклама - люди приходили, а свободного времени уже не было.
-        const slots = generateSlots(date, 14);
+        const slots = generateSlots(date);
     slots.forEach(mskMin => {
       const localDate = mskMinutesToLocal(mskMin, date);
       // Слот должен начинаться минимум через 3 часа - иначе преподаватель не успеет
