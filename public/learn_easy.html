@@ -624,9 +624,7 @@ h2{font-size:21px;font-weight:700;color:var(--dark);line-height:1.3;margin-botto
 <div class="screen" id="s12">
   <div class="nav"><button class="back-btn" onclick="go(13)">← Назад</button></div>
   <div class="content">
-    <div class="badge">✨</div>
-    <h2>Остался последний шаг</h2>
-    <p class="sub">Куда прислать подтверждение записи?</p>
+    <h2>Куда прислать подтверждение?</h2>
 
     <!-- 28.09.2026: время выбирается ДО контактов (G4). Здесь показываем выбранное время,
          а если его успели занять, прямо на этом экране три ближайших свободных слота. -->
@@ -641,21 +639,11 @@ h2{font-size:21px;font-weight:700;color:var(--dark);line-height:1.3;margin-botto
       <a href="#" onclick="go(13);return false;" style="display:inline-block;margin-top:8px;font-size:12px;color:var(--purple);text-decoration:underline">Другое время</a>
     </div>
 
-    <div style="background:var(--purple-light);border-radius:14px;padding:12px 14px;margin-bottom:16px">
-      <div style="font-size:12px;font-weight:700;color:var(--purple-dark);margin-bottom:6px">Что дальше:</div>
-      <div style="font-size:12px;color:var(--purple-dark);line-height:1.65">
-        ✔ подберём преподавателя под ваш запрос<br>
-        ✔ пришлём подтверждение с временем урока<br>
-        ✔ напомним за день и за час до начала
-      </div>
-    </div>
-
     <div class="field">
       <label>Имя</label>
       <input type="text" id="uName" placeholder="Например, Анна">
     </div>
 
-    <div style="font-size:13px;font-weight:700;color:var(--dark);margin:4px 0 8px">Куда удобнее - Telegram или почта?</div>
     <div class="field">
       <label>Telegram или телефон</label>
       <input type="text" id="uTg" placeholder="@username или телефон с кодом страны">
@@ -666,13 +654,18 @@ h2{font-size:21px;font-weight:700;color:var(--dark);line-height:1.3;margin-botto
     </div>
     <div id="contactHint" style="font-size:11px;color:var(--gray);margin:-4px 0 12px">Достаточно одного из двух. Оба - надёжнее: пришлём и туда, и туда.</div>
 
-    <div style="display:flex;align-items:center;gap:10px;background:var(--light-gray);padding:12px 14px;border-radius:12px;margin-bottom:16px">
-      <span style="font-size:22px">🔒</span>
-      <span style="font-size:12px;color:var(--gray);line-height:1.4">Мы не передаём данные третьим лицам и не звоним без предупреждения.</span>
-    </div>
+    <button class="cta" id="contactsCta" style="margin-top:8px" onclick="submitContacts()">Записаться на урок →</button>
+    <div style="font-size:11px;color:var(--gray);line-height:1.4;text-align:center;margin:10px 0 16px">🔒 Мы не передаём данные третьим лицам и не звоним без предупреждения.</div>
 
-    <div class="spacer"></div>
-    <button class="cta" id="contactsCta" onclick="submitContacts()">Записаться на урок →</button>
+    <!-- G14 (29.09.2026): форма и кнопка наверх, «Что дальше» под кнопкой -->
+    <div style="background:var(--purple-light);border-radius:14px;padding:12px 14px;margin-bottom:16px">
+      <div style="font-size:12px;font-weight:700;color:var(--purple-dark);margin-bottom:6px">Что дальше:</div>
+      <div style="font-size:12px;color:var(--purple-dark);line-height:1.65">
+        ✔ подберём преподавателя под ваш запрос<br>
+        ✔ пришлём подтверждение с временем урока<br>
+        ✔ напомним за день и за час до начала
+      </div>
+    </div>
   </div>
 </div>
 
