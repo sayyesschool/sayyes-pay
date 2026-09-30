@@ -1,10 +1,38 @@
 // Расход и клики из рекламного кабинета. Без них в админке нет ни цены заявки,
 // ни цены дошедшего, ни окупаемости — поэтому блок честно говорит, чего не хватает,
 // а не притворяется нулями.
+import { ARCHIVED_ACCOUNTS, archiveDayRows, archiveCampaignRows, archiveAdRows, archiveAdsMeta } from '@/lib/metaArchive';
+
 const API = 'https://graph.facebook.com/v21.0';
 
-const token = () => process.env.META_ADS_TOKEN || '';
-const account = () => String(process.env.META_AD_ACCOUNT_ID || '').replace(/^act_/, '');
+// С 30.09.2026 рекламных кабинетов два: старый SAYYES EU (история до переезда) и новый
+// в новом BM. META_AD_ACCOUNT_ID принимает список через запятую, первый - основной.
+// Токен общий (META_ADS_TOKEN) или свой у кабинета: META_ADS_TOKEN_<id кабинета>.
+// Если один кабинет не ответил, остальные всё равно считаются.
+const accounts = () => String(process.env.META_AD_ACCOUNT_ID || '')
+  .split(',')
+  .map(id => id.trim().replace(/^act_/, ''))
+  .filter(Boolean);
+const tokenFor = id => process.env['META_ADS_TOKEN_' + id] || process.env.META_ADS_TOKEN || '';
+// Архивные кабинеты читаются из JSON, а не из API, даже если их id есть в переменной.
+const reachable = () => accounts().filter(id => tokenFor(id) && !ARCHIVED_ACCOUNTS.includes(id));
+const account = () => accounts()[0] || '';
+const NO_ACCESS = 'Нет доступа к кабинету: не заданы META_ADS_TOKEN и META_AD_ACCOUNT_ID.';
+
+// Опрашивает каждый кабинет. Ошибку одного не превращает в ошибку всех.
+async function eachAccount(fn) {
+  const ids = reachable();
+  const settled = await Promise.allSettled(ids.map(id => fn(id, tokenFor(id))));
+  const ok = [];
+  const failed = [];
+
+  settled.forEach((r, i) => {
+    if (r.status === 'fulfilled') ok.push({ id: ids[i], value: r.value });
+    else failed.push(ids[i] + ': ' + (r.reason && r.reason.message ? r.reason.message : 'ошибка'));
+  });
+
+  return { ok, failed };
+}
 
 // Лиды Мета считает по-разному в зависимости от того, как настроена цель.
 // Берём первое, что нашли: пиксельный Lead, лид-форму или полную регистрацию.
@@ -38,12 +66,12 @@ function linkClicksFrom(actions) {
   return hit ? Number(hit.value || 0) : 0;
 }
 
-async function ask(path, params) {
+async function ask(path, params, tok) {
   const url = new URL(API + path);
 
   for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value);
 
-  url.searchParams.set('access_token', token());
+  url.searchParams.set('access_token', tok);
 
   const resp = await fetch(url.toString(), { cache: 'no-store' });
   const data = await resp.json();
@@ -54,27 +82,28 @@ async function ask(path, params) {
 }
 
 export async function getAdsInsights({ from, to } = {}) {
-  if (!token() || !account()) {
-    return { ok: false, reason: 'Нет доступа к кабинету: не заданы META_ADS_TOKEN и META_AD_ACCOUNT_ID.' };
-  }
-
   try {
     const timeRange = JSON.stringify({ since: from, until: to });
     const fields = 'spend,clicks,impressions,reach,ctr,cpc,cpm,actions';
-    const [byDay, campaigns] = await Promise.all([
-      ask('/act_' + account() + '/insights', {
+    const res = await eachAccount((id, tok) => Promise.all([
+      ask('/act_' + id + '/insights', {
         fields,
         time_increment: '1',
         time_range: timeRange,
         limit: '400'
-      }),
-      ask('/act_' + account() + '/insights', {
+      }, tok),
+      ask('/act_' + id + '/insights', {
         fields: 'campaign_name,' + fields,
         level: 'campaign',
         time_range: timeRange,
         limit: '100'
-      })
-    ]);
+      }, tok)
+    ]));
+
+    const byDay = res.ok.flatMap(r => r.value[0]).concat(archiveDayRows(from, to));
+    const campaigns = res.ok.flatMap(r => r.value[1]).concat(archiveCampaignRows(from, to));
+
+    if (!reachable().length) res.failed.push(NO_ACCESS);
 
     const perDay = {};
     let spend = 0;
@@ -88,13 +117,14 @@ export async function getAdsInsights({ from, to } = {}) {
       const dayLeads = leadsFrom(row.actions);
       const dayLinkClicks = linkClicksFrom(row.actions);
 
-      perDay[row.date_start] = {
-        spend: Number(row.spend || 0),
-        clicks: Number(row.clicks || 0),
-        linkClicks: dayLinkClicks,
-        impressions: Number(row.impressions || 0),
-        leads: dayLeads
-      };
+      // Один и тот же день может прийти из двух кабинетов: складываем.
+      const d = perDay[row.date_start] || (perDay[row.date_start] = { spend: 0, clicks: 0, linkClicks: 0, impressions: 0, leads: 0 });
+
+      d.spend = Math.round((d.spend + Number(row.spend || 0)) * 100) / 100;
+      d.clicks += Number(row.clicks || 0);
+      d.linkClicks += dayLinkClicks;
+      d.impressions += Number(row.impressions || 0);
+      d.leads += dayLeads;
       spend += Number(row.spend || 0);
       clicks += Number(row.clicks || 0);
       linkClicks += dayLinkClicks;
@@ -105,6 +135,7 @@ export async function getAdsInsights({ from, to } = {}) {
 
     return {
       ok: true,
+      partial: res.failed.length ? res.failed : null,
       spend: Math.round(spend * 100) / 100,
       clicks,
       linkClicks,
@@ -135,12 +166,8 @@ export async function getAdsInsights({ from, to } = {}) {
 // считать цену состоявшегося урока по креативу: расход объявления / пришедшие
 // из /api/health/creatives. Суммы расхода наружу отдаются только под ключом.
 export async function getAdsByAd({ from, to, daily = true } = {}) {
-  if (!token() || !account()) {
-    return { ok: false, reason: 'Нет доступа к кабинету: не заданы META_ADS_TOKEN и META_AD_ACCOUNT_ID.' };
-  }
-
   try {
-    const rows = await ask('/act_' + account() + '/insights', {
+    const res = await eachAccount((id, tok) => ask('/act_' + id + '/insights', {
       fields: 'ad_id,ad_name,adset_name,campaign_name,spend,impressions,actions',
       level: 'ad',
       // По дням нужно growth-агенту; экрану креативов хватает одной строки на объявление,
@@ -148,7 +175,9 @@ export async function getAdsByAd({ from, to, daily = true } = {}) {
       ...(daily ? { time_increment: '1' } : {}),
       time_range: JSON.stringify({ since: from, until: to }),
       limit: '500'
-    });
+    }, tok));
+
+    const rows = res.ok.flatMap(r => r.value).concat(archiveAdRows(from, to, daily));
 
     const ads = {};
 
@@ -196,7 +225,7 @@ export async function getAdsMeta(ids) {
   // параллельно с остальными, не дожидаясь, пока станут известны id.
   const list = ids ? Array.from(new Set(ids.map(String).filter(id => /^\d+$/.test(id)))) : null;
 
-  if (!token() || (list && !list.length)) return { ok: Boolean(token()), ads: {} };
+  if (list && !list.length) return { ok: true, ads: {} };
 
   try {
     // Объявления берём из кабинета, а не по списку id: среди id из заявок
@@ -205,22 +234,28 @@ export async function getAdsMeta(ids) {
     // Постранично и небольшими порциями: большой ответ Мета отклоняет
     // («reduce the amount of data»). Размер превью задаём прямо в раскрытии
     // поля creative, иначе оно 64 пикселя.
-    const rows = [];
-    let next = new URL(API + '/act_' + account() + '/ads');
+    const res = await eachAccount(async (id, tok) => {
+      const got = [];
+      let next = new URL(API + '/act_' + id + '/ads');
 
-    next.searchParams.set('fields', 'name,effective_status,adset{name},creative.thumbnail_width(480).thumbnail_height(480){thumbnail_url,image_url,video_id}');
-    next.searchParams.set('limit', '50');
-    next.searchParams.set('access_token', token());
+      next.searchParams.set('fields', 'name,effective_status,adset{name},creative.thumbnail_width(480).thumbnail_height(480){thumbnail_url,image_url,video_id}');
+      next.searchParams.set('limit', '50');
+      next.searchParams.set('access_token', tok);
 
-    for (let page = 0; next && page < 10; page++) {
-      const resp = await fetch(next.toString(), { cache: 'no-store' });
-      const data = await resp.json();
+      for (let page = 0; next && page < 10; page++) {
+        const resp = await fetch(next.toString(), { cache: 'no-store' });
+        const data = await resp.json();
 
-      if (data.error) throw new Error(data.error.message || 'Meta API error');
+        if (data.error) throw new Error(data.error.message || 'Meta API error');
 
-      rows.push(...(data.data || []));
-      next = data.paging && data.paging.next ? new URL(data.paging.next) : null;
-    }
+        got.push(...(data.data || []).map(ad => ({ ...ad, _account: id })));
+        next = data.paging && data.paging.next ? new URL(data.paging.next) : null;
+      }
+
+      return got;
+    });
+
+    const rows = res.ok.flatMap(r => r.value).concat(archiveAdsMeta());
 
     const ads = {};
 
@@ -231,6 +266,7 @@ export async function getAdsMeta(ids) {
 
       const c = ad.creative || {};
 
+      adAccount[id] = ad._account;
       ads[id] = {
         name: ad.name || null,
         status: ad.effective_status || null,
@@ -246,6 +282,10 @@ export async function getAdsMeta(ids) {
   }
 }
 
+// Какому кабинету принадлежит объявление: запоминаем при чтении getAdsMeta,
+// чтобы ссылка в Ads Manager открывала нужный кабинет, а не основной.
+const adAccount = {};
+
 export function adsManagerLink(adId) {
-  return 'https://www.facebook.com/adsmanager/manage/ads/edit?act=' + account() + '&selected_ad_ids=' + adId;
+  return 'https://www.facebook.com/adsmanager/manage/ads/edit?act=' + (adAccount[String(adId)] || account()) + '&selected_ad_ids=' + adId;
 }
