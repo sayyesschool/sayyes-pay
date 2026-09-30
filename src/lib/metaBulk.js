@@ -211,22 +211,53 @@ async function buildCreative(p) {
   if (p.headline) spec.titles = [{ text: p.headline }];
   if (p.description) spec.descriptions = [{ text: p.description }];
 
-  return { ...common, object_story_spec: base, asset_feed_spec: spec };
+  // Мета по-разному принимает кнопку в креативе с двумя носителями: для цели
+  // «Лиды» BOOK_NOW в call_to_action_types считается динамическим креативом и
+  // отклоняется. Поэтому варианты перебираются по очереди, первый принятый остаётся.
+  const b = JSON.parse(JSON.stringify(spec));
+  delete b.call_to_action_types;
+  b.call_to_actions = [{ type: p.cta, value: { link: p.link } }];
+
+  const c = JSON.parse(JSON.stringify(spec));
+  delete c.call_to_action_types;
+  delete c.bodies;
+  delete c.link_urls;
+  const template = { link: p.link, message: p.text, call_to_action: { type: p.cta, value: { link: p.link } } };
+  if (p.description) template.description = p.description;
+  if (p.headline) template.name = p.headline;
+
+  return [
+    { ...common, object_story_spec: base, asset_feed_spec: spec },
+    { ...common, object_story_spec: base, asset_feed_spec: b },
+    { ...common, object_story_spec: { ...base, template_data: template }, asset_feed_spec: c }
+  ];
 }
 
 // Создаёт креатив и объявление на паузе. Ошибка одной строки не валит остальные.
 export async function createRow(p) {
   const act = '/act_' + ACCOUNT();
-  const creative = await buildCreative(p);
-  const c = await graph('POST', act + '/adcreatives', creative);
-  const ad = await graph('POST', act + '/ads', {
-    name: p.name,
-    adset_id: p.adsetId,
-    creative: { creative_id: c.id },
-    status: 'PAUSED'
-  });
+  const built = await buildCreative(p);
+  const variants = Array.isArray(built) ? built : [built];
+  const errors = [];
 
-  return { creativeId: c.id, adId: ad.id };
+  for (let v = 0; v < variants.length; v++) {
+    let c;
+    try {
+      c = await graph('POST', act + '/adcreatives', variants[v]);
+      const ad = await graph('POST', act + '/ads', {
+        name: p.name,
+        adset_id: p.adsetId,
+        creative: { creative_id: c.id },
+        status: 'PAUSED'
+      });
+      return { creativeId: c.id, adId: ad.id, variant: v + 1 };
+    } catch (e) {
+      errors.push('вариант ' + (v + 1) + ': ' + e.message);
+      if (c && c.id) await graph('DELETE', '/' + c.id).catch(() => {});
+    }
+  }
+
+  throw new Error(errors.join(' | '));
 }
 
 export async function runBulk(plans, concurrency = 4) {

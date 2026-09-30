@@ -75,7 +75,7 @@ export async function POST(request) {
     '<table><tr><th>Строка</th><th>Название</th><th>Результат</th></tr>' +
     results.map(r => '<tr><td>' + r.line + '</td><td>' + esc(r.name) + '</td><td class="' + (r.ok ? 'ok' : 'err') + '">' +
       (r.ok
-        ? '<a target="_blank" href="https://adsmanager.facebook.com/adsmanager/manage/ads/edit?act=' + act + '&selected_ad_ids=' + r.adId + '">' + r.adId + '</a>'
+        ? '<a target="_blank" href="https://adsmanager.facebook.com/adsmanager/manage/ads/edit?act=' + act + '&selected_ad_ids=' + r.adId + '">' + r.adId + '</a>' + (r.variant > 1 ? ' (вариант ' + r.variant + ')' : '')
         : esc(r.error)) + '</td></tr>').join('') + '</table>';
 
   return page('Готово', body);
