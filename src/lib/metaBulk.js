@@ -14,7 +14,7 @@ export const DEFAULT_URL_TAGS =
   'campaign_id={{campaign.id}}&adset_id={{adset.id}}&ad_id={{ad.id}}&utm_source=meta&utm_campaign={{campaign.name}}';
 export const DEFAULT_LINK = 'https://www.sayyestoenglish.com/learn_easy';
 
-export const COLUMNS = ['adset_id', 'name', 'media', 'text', 'headline', 'description', 'cta', 'link'];
+export const COLUMNS = ['adset_id', 'name', 'media', 'text', 'headline', 'description', 'cta', 'link', 'post_id'];
 
 async function graph(method, path, params = {}) {
   const url = new URL(API + path);
@@ -120,8 +120,17 @@ export function planRow(row, lib) {
   const names = String(row.media || '').split('|').map(s => s.trim()).filter(Boolean);
   const media = names.map(n => ({ name: n, found: lib.get(key(n)) }));
 
+  const postId = String(row.post_id || '').trim();
+
   if (!/^\d+$/.test(row.adset_id || '')) errors.push('нет adset_id');
   if (!row.name) errors.push('нет name');
+
+  // Готовая публикация: берём её целиком, с реакциями. Текст и медиа не нужны.
+  if (postId) {
+    if (!/^\d+_\d+$/.test(postId)) errors.push('post_id должен быть вида страница_публикация');
+    return { line: row.line, adsetId: row.adset_id, name: row.name, postId, media: [], cta: '', errors };
+  }
+
   if (!row.text) errors.push('нет текста');
   if (!names.length) errors.push('нет media');
   if (names.length > 2) errors.push('media: максимум два файла, лента|вертикаль');
@@ -161,6 +170,10 @@ const VERTICAL = {
 };
 
 async function buildCreative(p) {
+  // Готовая публикация: без Instagram-профиля, чтобы в Instagram реклама шла
+  // от имени страницы и сохранила накопленные там реакции.
+  if (p.postId) return { name: p.name, object_story_id: p.postId, url_tags: DEFAULT_URL_TAGS };
+
   const base = { page_id: PAGE_ID(), instagram_user_id: IG_ID() };
   const [feed, vertical] = p.media.map(m => m.found);
   const common = { name: p.name, url_tags: DEFAULT_URL_TAGS, contextual_multi_ads: { enroll_status: 'OPT_OUT' } };
@@ -226,9 +239,10 @@ async function buildCreative(p) {
   if (p.description) template.description = p.description;
   if (p.headline) template.name = p.headline;
 
+  // Вариант с call_to_actions проверен 01.10.2026 и идёт первым.
   return [
-    { ...common, object_story_spec: base, asset_feed_spec: spec },
     { ...common, object_story_spec: base, asset_feed_spec: b },
+    { ...common, object_story_spec: base, asset_feed_spec: spec },
     { ...common, object_story_spec: { ...base, template_data: template }, asset_feed_spec: c }
   ];
 }

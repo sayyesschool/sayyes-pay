@@ -61,7 +61,7 @@ export async function POST(request) {
       (mode !== 'check' && bad.length ? ' <b class="err">Ничего не создано: сначала исправьте ошибки.</b>' : '') + '</p>' +
       '<table><tr><th>Строка</th><th>Название</th><th>Медиа</th><th>Кнопка</th><th>Проверка</th></tr>' +
       plans.map(p => '<tr><td>' + p.line + '</td><td>' + esc(p.name) + '</td><td>' +
-        p.media.map(m => esc(m.name) + (m.found ? ' (' + m.found.type + ')' : '')).join('<br>') +
+        (p.postId ? 'публикация ' + esc(p.postId) : p.media.map(m => esc(m.name) + (m.found ? ' (' + m.found.type + ')' : '')).join('<br>')) +
         '</td><td>' + esc(p.cta) + '</td><td class="' + (p.errors.length ? 'err' : 'ok') + '">' +
         (p.errors.length ? esc(p.errors.join('; ')) : 'ок') + '</td></tr>').join('') + '</table>';
     return page(mode === 'check' ? 'Проверка' : 'Есть ошибки', body);
