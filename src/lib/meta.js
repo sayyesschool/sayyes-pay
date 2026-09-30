@@ -13,7 +13,7 @@
 import crypto from 'crypto';
 import { kvGet, kvKeys, kvSet, getBooking } from '@/lib/redis';
 
-const PIXEL_ID = () => process.env.META_PIXEL_ID || '1405840230688968';
+const PIXEL_ID = () => process.env.META_PIXEL_ID || '1332532938846061';
 const CAPI_TOKEN = () => process.env.META_CAPI_TOKEN;
 // Второй датасет — в портфеле школы. Основной пиксель принадлежит чужому бизнесу,
 // поэтому каждое событие дублируется в свой: там копится история и аудитории

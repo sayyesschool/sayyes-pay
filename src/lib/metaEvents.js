@@ -12,7 +12,7 @@ const GRAPH = 'https://graph.facebook.com/v21.0';
 const TZ_OFFSET_MS = 3 * 60 * 60 * 1000;
 
 const PIXELS = () => [
-  { id: process.env.META_PIXEL_ID || '1405840230688968', token: process.env.META_CAPI_TOKEN, main: true },
+  { id: process.env.META_PIXEL_ID || '1332532938846061', token: process.env.META_CAPI_TOKEN, main: true },
   { id: process.env.META_PIXEL_ID_2 || '', token: process.env.META_CAPI_TOKEN_2, main: false }
 ].filter(p => p.id && p.token);
 

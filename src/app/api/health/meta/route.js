@@ -9,7 +9,7 @@ import { kvGet } from '@/lib/redis';
 const EVENTS = ['Lead', 'Schedule', 'SubmitApplication', 'StartTrial', 'Purchase'];
 
 export async function GET() {
-  const primary = process.env.META_PIXEL_ID || '1405840230688968';
+  const primary = process.env.META_PIXEL_ID || '1332532938846061';
   const mirror = process.env.META_PIXEL_ID_2 || null;
   const last = {};
 
