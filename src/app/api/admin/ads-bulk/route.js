@@ -1,6 +1,6 @@
 import { cookies } from 'next/headers';
 import { SESSION_COOKIE, readSession } from '@/lib/adminAuth';
-import { loadLibrary, parseCsv, planRow, runBulk, ready, accountId } from '@/lib/metaBulk';
+import { loadLibrary, parseCsv, planRow, runBulk, ready, accountId, createStructure } from '@/lib/metaBulk';
 
 export const dynamic = 'force-dynamic';
 // 200 объявлений по два запроса к Мете в четыре потока укладываются в пару минут.
@@ -30,6 +30,22 @@ export async function POST(request) {
 
   const form = await request.formData();
   const mode = String(form.get('mode') || 'check');
+
+  if (mode === 'structure') {
+    let spec;
+    try { spec = JSON.parse(String(form.get('spec') || '')); } catch (e) {
+      return page('Ошибка', '<p class="err">JSON не читается: ' + esc(e.message) + '</p>');
+    }
+    try {
+      const r = await createStructure(spec);
+      return page('Кампания создана на паузе',
+        '<p>Кампания: ' + esc(r.campaignId) + '</p><table><tr><th>Группа</th><th>adset_id</th></tr>' +
+        r.adsets.map(a => '<tr><td>' + esc(a.name) + '</td><td>' + esc(a.id) + '</td></tr>').join('') + '</table>' +
+        '<p>Эти adset_id вставляйте в таблицу объявлений.</p>');
+    } catch (e) {
+      return page('Ошибка Меты', '<p class="err">' + esc(e.message) + '</p>');
+    }
+  }
   const file = form.get('file');
   const csv = file && typeof file === 'object' && file.size ? await file.text() : String(form.get('csv') || '');
   const rows = parseCsv(csv);

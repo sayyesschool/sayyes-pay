@@ -258,3 +258,60 @@ export function ready() {
 }
 
 export const accountId = ACCOUNT;
+
+// Кампания и группы тоже создаются на паузе через API, а не черновиком:
+// объявления можно класть только в опубликованную группу.
+export async function createStructure(spec) {
+  const act = '/act_' + ACCOUNT();
+  const camp = await graph('POST', act + '/campaigns', {
+    name: spec.campaign,
+    objective: spec.objective || 'OUTCOME_LEADS',
+    buying_type: 'AUCTION',
+    special_ad_categories: [],
+    is_adset_budget_sharing_enabled: 'false',
+    status: 'PAUSED'
+  });
+  const adsets = [];
+
+  for (const s of spec.adsets || []) {
+    const set = await graph('POST', act + '/adsets', {
+      name: s.name,
+      campaign_id: camp.id,
+      daily_budget: String(Math.round(Number(s.daily_eur) * 100)),
+      billing_event: 'IMPRESSIONS',
+      optimization_goal: 'OFFSITE_CONVERSIONS',
+      bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
+      destination_type: 'WEBSITE',
+      promoted_object: { pixel_id: spec.pixel_id, custom_event_type: spec.event || 'SCHEDULE' },
+      targeting: spec.targeting,
+      dsa_beneficiary: spec.dsa || 'Say Yes Ger',
+      dsa_payor: spec.dsa || 'Say Yes Ger',
+      status: 'PAUSED'
+    });
+    adsets.push({ name: s.name, id: set.id });
+  }
+
+  return { campaignId: camp.id, adsets };
+}
+
+export const STRUCTURE_SAMPLE = {
+  campaign: 'sayyes_eu_2026-10',
+  pixel_id: '1332532938846061',
+  event: 'SCHEDULE',
+  adsets: [
+    { name: 'eu_ae_il_schedule_winners', daily_eur: 50 },
+    { name: 'eu_ae_il_schedule_new_creatives', daily_eur: 40 }
+  ],
+  targeting: {
+    genders: [2], age_min: 18, age_max: 65,
+    geo_locations: {
+      countries: ['IE', 'IT', 'NL', 'NO', 'ES', 'SE', 'CH', 'AE', 'GB', 'IL', 'FI', 'DK', 'BE', 'GR', 'AT', 'HR', 'PL', 'RS',
+        'PT', 'LU', 'BG', 'CZ', 'SI', 'IS', 'SK', 'LT', 'HU', 'CY', 'RO', 'FR', 'DE', 'MT', 'EE', 'LV'],
+      location_types: ['home', 'recent']
+    },
+    locales: [17],
+    publisher_platforms: ['facebook', 'instagram', 'threads'],
+    device_platforms: ['mobile', 'desktop'],
+    targeting_automation: { advantage_audience: 0 }
+  }
+};

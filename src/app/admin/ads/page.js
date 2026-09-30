@@ -2,7 +2,7 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { SESSION_COOKIE, readSession } from '@/lib/adminAuth';
 import { Shell } from '@/lib/adminShell';
-import { COLUMNS } from '@/lib/metaBulk';
+import { COLUMNS, STRUCTURE_SAMPLE } from '@/lib/metaBulk';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,6 +34,18 @@ export default async function AdsPage() {
           <div className="btns">
             <button name="mode" value="check">Проверить</button>
             <button name="mode" value="create">Создать на паузе</button>
+          </div>
+        </form>
+      </div>
+
+      <div className="card">
+        <p><b>Кампания и группы на паузе.</b> Объявления кладутся только в опубликованную группу, поэтому структура тоже создаётся здесь.
+          Бюджет в евро в день на группу.</p>
+        <form method="post" action="/api/admin/ads-bulk">
+          <textarea name="spec" rows={14} style={{ width: '100%', fontFamily: 'monospace', fontSize: 12 }}
+            defaultValue={JSON.stringify(STRUCTURE_SAMPLE, null, 2)} />
+          <div className="btns">
+            <button name="mode" value="structure">Создать кампанию на паузе</button>
           </div>
         </form>
       </div>
