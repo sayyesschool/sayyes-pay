@@ -72,6 +72,34 @@ export function matchBooking(email, bookings) {
   return best;
 }
 
+// Заявка по почте плательщика для оплат без кода заявки (оплата с сайта,
+// по ссылке, скопированной вручную). Отменённые заявки не берём, кроме тех,
+// где урок всё же состоялся: человек пришёл, а запись потом сняли.
+export async function findBookingByEmail(email) {
+  const target = String(email || '').trim().toLowerCase();
+
+  if (!target) return null;
+
+  const bookings = [];
+
+  for (const b of await kvMGet(await kvKeys('booking:*'))) {
+    if (!b || !b.id) continue;
+    if (b.status === 'cancelled' && b.attended !== true) continue;
+    bookings.push(b);
+  }
+
+  return matchBooking(target, bookings);
+}
+
+// Повторные оплаты по одной заявке нормальны (интро, потом пакет): в заявке
+// храним последнюю оплату плюс счётчик и сумму всех. Та же логика, что в markPaid.
+export function paidAccumulation(booking, amount) {
+  const previousTotal = booking && booking.paid ? Number(booking.paidTotal || booking.paidAmount || 0) : 0;
+  const previousCount = booking && booking.paid ? Number(booking.paymentsCount || 1) : 0;
+
+  return { paidTotal: previousTotal + Number(amount || 0), paymentsCount: previousCount + 1 };
+}
+
 export function paymentLabel(pi) {
   return String(pi.description || '').trim() || (pi.invoice ? 'Оплата по счёту' : 'Оплата в Stripe');
 }
@@ -102,8 +130,11 @@ export async function listStripePayments(days = 30) {
     const skip = skipped.has(pi.id);
     // Почту спрашиваем только у непривязанных: у привязанных она уже записана,
     // а каждый такой вопрос — отдельный запрос в Stripe.
-    const email = record ? String(record.email || '') : await payerEmail(pi);
-    const guess = (record || skip) ? null : matchBooking(email, bookings);
+    // 07.10.2026: запись без заявки (оплата с сайта) раньше считалась «привязанной»,
+    // и кнопки «Привязать» у неё не было. Привязанной считаем только запись с заявкой.
+    const hasBooking = Boolean(record && record.bookingId);
+    const email = (record && record.email) ? String(record.email) : await payerEmail(pi);
+    const guess = (hasBooking || skip) ? null : matchBooking(email, bookings);
 
     rows.push({
       id: pi.id,
@@ -114,7 +145,7 @@ export async function listStripePayments(days = 30) {
       invoice: Boolean(pi.invoice),
       email,
       bookingId: record ? (record.bookingId || null) : null,
-      linked: Boolean(record),
+      linked: hasBooking,
       skipped: skip,
       guessId: guess ? guess.id : '',
       guessName: guess ? (guess.name || 'без имени') : ''
@@ -151,25 +182,35 @@ export async function attachPayment(piId, bookingId, by) {
   const keys = await kvKeys('payment:*');
   const records = await kvMGet(keys);
   const manual = [];
+  const amount = pi.amount_received || pi.amount || 0;
+  // Запись об этом платеже уже есть, но без заявки: оплата пришла с сайта,
+  // вебхук её записал, а с человеком не связал. Дописываем заявку в неё же.
+  let existingKey = null;
 
   for (let i = 0; i < records.length; i++) {
     const record = records[i];
 
     if (!record) continue;
     if (record.pi === id) {
-      return { ok: false, error: 'Платёж уже привязан к заявке ' + (record.bookingId || '—') };
+      if (record.bookingId) {
+        return { ok: false, error: 'Платёж уже привязан к заявке ' + record.bookingId };
+      }
+      existingKey = keys[i];
+      continue;
     }
-    if (record.bookingId === booking.id && String(keys[i]).startsWith('payment:manual_')) {
+    // Ручная отметка про ЭТИ ЖЕ деньги: та же заявка и та же сумма. Раньше
+    // удалялись все ручные отметки заявки, вместе с оплатой интро.
+    if (record.bookingId === booking.id && String(keys[i]).startsWith('payment:manual_')
+        && Number(record.amount || 0) === Number(amount)) {
       manual.push(keys[i]);
     }
   }
 
-  const amount = pi.amount_received || pi.amount || 0;
   const email = await payerEmail(pi);
   const at = new Date(pi.created * 1000).toISOString();
   const label = paymentLabel(pi);
 
-  await kvSet('payment:pi_' + id, {
+  await kvSet(existingKey || ('payment:pi_' + id), {
     at,
     bookingId: booking.id,
     pi: id,
@@ -192,16 +233,29 @@ export async function attachPayment(piId, bookingId, by) {
     paidAt: at,
     paidAmount: amount,
     paidCurrency: pi.currency || 'eur',
-    paidPack: booking.paidPack || label,
+    paidPack: label,
     paidVia: 'stripe',
     paidPi: id,
-    paidBy: '@' + by
+    paidBy: '@' + by,
+    ...paidAccumulation(booking, amount)
   });
 
-  try {
-    await sendPurchase({ ...booking, paid: true, paidAmount: amount, paidPack: booking.paidPack || label });
-  } catch (e) {
-    console.error('CAPI purchase error:', e);
+  // Purchase шлём только если платёж раньше вообще не был записан. Если запись была,
+  // вебхук уже отправил его в Мету при оплате, и второй раз он задвоит покупки.
+  if (!existingKey) {
+    try {
+      await sendPurchase({
+        bookingId: booking.id,
+        email: email || booking.email,
+        value: amount / 100,
+        currency: String(pi.currency || 'eur').toUpperCase(),
+        contentName: label,
+        orderId: id,
+        eventId: 'stripe_pi_' + id
+      });
+    } catch (e) {
+      console.error('CAPI purchase error:', e);
+    }
   }
 
   await notifyManagers(

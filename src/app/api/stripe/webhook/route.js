@@ -7,7 +7,7 @@ import {
 import { getBooking, updateBooking, kvSet, kvGet, kvMGet, kvKeys } from '@/lib/redis';
 import { notifyManagers } from '@/lib/managers';
 import { sendPurchase } from '@/lib/meta';
-import { payerEmail, paymentLabel } from '@/lib/stripePayments';
+import { payerEmail, paymentLabel, findBookingByEmail, paidAccumulation } from '@/lib/stripePayments';
 
 export async function POST(request) {
   try {
@@ -142,7 +142,22 @@ export async function POST(request) {
 
       // Человек мог исправить почту на оплате: значит, в заявке была опечатка.
       // Чинить её нужно и в базе, иначе письма школы так и будут уходить в никуда.
-      const bookingId = purchaseData.metadata && purchaseData.metadata.booking_id;
+      // Кода заявки нет, если человек платил с сайта или по ссылке, скопированной
+      // вручную. Тогда ищем заявку по почте плательщика. До 07.10.2026 такие оплаты
+      // записывались без заявки и уходили в органику: 210 EUR от Леси (01.10),
+      // Людмилы (03.10) и Лены по почте 326meemp (05.10), хотя все трое из воронки.
+      const codeFromLink = purchaseData.metadata && purchaseData.metadata.booking_id;
+      let matchedByEmail = null;
+
+      if (!codeFromLink && purchaseData.email) {
+        try {
+          matchedByEmail = await findBookingByEmail(purchaseData.email);
+        } catch (e) {
+          console.error('Session booking match error:', e);
+        }
+      }
+
+      const bookingId = codeFromLink || (matchedByEmail && matchedByEmail.id) || null;
       const pack = (purchaseData.metadata && purchaseData.metadata.pack) || purchaseData.externalId || null;
       const isIntro = Boolean(pack && String(pack).startsWith('INTRO_'));
 
@@ -151,7 +166,8 @@ export async function POST(request) {
           const booking = await getBooking(bookingId);
 
           if (booking) {
-            const emailChanged = purchaseData.email && booking.email !== purchaseData.email;
+            // Заявку нашли по этой же почте: менять в ней нечего.
+            const emailChanged = Boolean(codeFromLink) && purchaseData.email && booking.email !== purchaseData.email;
 
             // Отметка оплаты в самой заявке: без неё менеджер не видит, кто заплатил,
             // а клиент может оплатить то же самое второй раз.
@@ -162,6 +178,7 @@ export async function POST(request) {
               paidAmount: purchaseData.amount || null,
               paidCurrency: purchaseData.currency || null,
               paidSessionId: purchaseData.sessionId || null,
+              ...paidAccumulation(booking, purchaseData.amount || 0),
               ...(isIntro ? { introPaid: true } : {}),
               ...(emailChanged ? { email: purchaseData.email, emailBeforePayment: booking.email || null } : {})
             });
@@ -170,7 +187,7 @@ export async function POST(request) {
             // а чужая оплата по чужой заявке. Отличить одно от другого может только человек.
             try {
               await notifyManagers(
-                '💰 <b>Оплата</b> · Stripe\n' +
+                '💰 <b>Оплата</b> · Stripe' + (codeFromLink ? '' : ' (заявка найдена по почте)') + '\n' +
                 `${booking.name || 'Ученик'}, код <code>${bookingId}</code>\n` +
                 `${purchaseData.label || pack || 'Пакет'} — ${Math.round(Number(purchaseData.amount || 0) / 100)} ${String(purchaseData.currency || '').toUpperCase()}` +
                 (emailChanged && booking.email
