@@ -1380,7 +1380,8 @@ function renderPlan() {
   boxes.forEach(box => {
     if (!items.length) { box.innerHTML = ''; return; }
 
-    box.className = 'planbox plan';
+    // classList, а не className: иначе слетает s13-info и план виден на экране времени в TG.
+    box.classList.add('plan');
     box.innerHTML = '<div class="plan-title">Ваш урок уже собран под вас</div>'
       + '<div class="plan-sub">Из ваших ответов - вот что преподаватель сделает за 30 минут</div>'
       + items.map(item => '<div class="plan-item"><span>' + item[0] + '</span><span>' + item[1] + '</span></div>').join('')
