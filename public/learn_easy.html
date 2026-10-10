@@ -180,6 +180,9 @@ h2{font-size:21px;font-weight:700;color:var(--dark);line-height:1.3;margin-botto
 <!-- Turnstile грузился на КАЖДОМ открытии воронки, хотя window.TURNSTILE_SITE_KEY нигде не задан,
      то есть капча не работала ни разу. Код вызова в submit оставлен: чтобы включить капчу,
      нужно задать ключ и вернуть сюда этот скрипт. -->
+<!-- Telegram Mini App (10.10.2026): воронка открывается внутри Telegram по ссылке t.me/SY_school_bot/app.
+     Вне Telegram библиотека ничего не делает, initData пустой. -->
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
 <main>
@@ -701,6 +704,11 @@ h2{font-size:21px;font-weight:700;color:var(--dark);line-height:1.3;margin-botto
     <div id="slotsLoading" style="text-align:center;padding:30px 0;color:var(--gray)">Загрузка доступных слотов...</div>
     <div class="tgrid" id="slotsGrid" style="display:none"></div>
 
+    <div id="slotTakenBox13" style="display:none;background:#FFF4E0;border-radius:12px;padding:12px 14px;margin-bottom:12px">
+      <div id="slotTakenTitle13" style="font-size:13px;font-weight:700;color:#7A4A00;margin-bottom:2px"></div>
+      <div style="font-size:12px;color:#8A5A10;margin-bottom:8px">Ближайшее свободное время:</div>
+      <div id="slotAlts13" style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px"></div>
+    </div>
     <button class="cta disabled" id="slotCta" onclick="slotNext()">Выберите время выше</button>
   </div>
 </div>
@@ -921,7 +929,8 @@ function submitContacts() {
 // Кнопка на экране времени. При переносе записи контакты не нужны - сразу отправка.
 function slotNext() {
   if (!selectedSlot) return;
-  if (isReschedule) return submitBooking();
+  // При переносе контакты не нужны, в Telegram они уже известны: сразу запись.
+  if (isReschedule || TG_APP) return submitBooking();
   go(12);
 }
 
@@ -941,7 +950,9 @@ function renderChosenSlot() {
 // Не отправляем его обратно к сетке: предлагаем три ближайших свободных слота
 // прямо здесь, контакты остаются в полях. Слоты без времени не предлагаем:
 // такие заявки до урока не доходили (решение 23.09).
-async function showSlotTaken(takenKey, takenLabel) {
+async function showSlotTaken(takenKey, takenLabel, ids) {
+  // По умолчанию экран контактов (веб); в Telegram тот же блок на экране времени.
+  ids = ids || { box: 'slotTakenBox', title: 'slotTakenTitle', list: 'slotAlts', cta: 'contactsCta', hide: 'chosenSlotBox' };
   try {
     const resp = await fetch('/api/slots');
     if (resp.ok) {
@@ -981,12 +992,15 @@ async function showSlotTaken(takenKey, takenLabel) {
   const after = free.filter(s => s.ts >= takenTs);
   const alts = after.concat(free.filter(s => s.ts < takenTs)).slice(0, 3);
 
-  document.getElementById('chosenSlotBox').style.display = 'none';
-  const box = document.getElementById('slotTakenBox');
-  const list = document.getElementById('slotAlts');
-  document.getElementById('slotTakenTitle').textContent = takenLabel + ' только что заняли';
+  if (ids.hide && document.getElementById(ids.hide)) document.getElementById(ids.hide).style.display = 'none';
+  // Занятое время зачёркиваем и в сетке, если она на этом же экране.
+  try { markBookedSlots(); } catch (e) {}
+  document.querySelectorAll('#slotsGrid .tslot.sel').forEach(x => x.classList.remove('sel'));
+  const box = document.getElementById(ids.box);
+  const list = document.getElementById(ids.list);
+  document.getElementById(ids.title).textContent = takenLabel + ' только что заняли';
   list.innerHTML = '';
-  const cta = document.getElementById('contactsCta');
+  const cta = document.getElementById(ids.cta);
 
   if (!alts.length) {
     list.innerHTML = '<div style="grid-column:1/-1;font-size:12px;color:#8A5A10">Свободного времени на неделе не осталось.</div>';
@@ -1165,6 +1179,9 @@ const VISIT_SOURCE = (function () {
   try {
     const params = new URLSearchParams(window.location.search);
 
+    // Открыто как Mini App внутри Telegram: заход из посева или из бота.
+    if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initData) return 'telegram';
+
     // Перенос - это не новый визит, человек уже записан. Считать его открытием
     // воронки нельзя, иначе каждый перенос портит конверсию первого экрана.
     if (params.get('reschedule')) return 'reschedule';
@@ -1190,6 +1207,25 @@ const VISIT_SOURCE = (function () {
     return 'unknown';
   }
 })();
+
+// Воронка внутри Telegram (Mini App). Вне Telegram TG_APP = null, и всё работает как раньше.
+// Объявление обязано жить на верхнем уровне скрипта, как VISIT_ID: 21.09.2026 объявление
+// внутри чужой функции положило воронку на двое суток.
+// В Telegram экрана контактов нет: после выбора времени сразу запись и переход в бот.
+const TG_APP = (function () {
+  try {
+    const w = window.Telegram && window.Telegram.WebApp;
+    if (w && w.initData) {
+      w.ready();
+      w.expand();
+      return w;
+    }
+  } catch (e) {}
+  return null;
+})();
+const TG_CHANNEL = TG_APP
+  ? String((TG_APP.initDataUnsafe && TG_APP.initDataUnsafe.start_param) || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 40)
+  : '';
 
 // Какое объявление привело человека. Метку ad_id Мета подставляет сама через
 // макрос {{ad.id}} в параметрах ссылки объявления - без неё все креативы
@@ -1622,7 +1658,7 @@ function selectSlot(el) {
   const time = el.querySelector('.time').textContent;
   document.getElementById('slotCta').textContent = isReschedule
     ? 'Записаться на ' + dayDate + ', ' + time
-    : 'Дальше →';
+    : (TG_APP ? 'Записаться на ' + dayDate + ', ' + time + ' →' : 'Дальше →');
 }
 
 // ===== Файл календаря =====
@@ -1779,15 +1815,31 @@ async function submitBooking() {
     return;
   }
 
-  const name = document.getElementById('uName').value.trim();
-  const tg = document.getElementById('uTg').value.trim();
-  const email = document.getElementById('uEmail').value.trim();
+  // В Telegram имя и аккаунт известны: сервер берёт их из подписанных данных Mini App.
+  const tgUser = TG_APP && TG_APP.initDataUnsafe ? TG_APP.initDataUnsafe.user : null;
+  const name = TG_APP ? '' : document.getElementById('uName').value.trim();
+  const tg = TG_APP ? '' : document.getElementById('uTg').value.trim();
+  const email = TG_APP ? '' : document.getElementById('uEmail').value.trim();
 
-  if (!name) { alert('Пожалуйста, укажите ваше имя'); go(12); return; }
-  // Достаточно любого одного канала: Telegram/телефон ИЛИ email
-  if (!tg && !email) { alert('Укажите Telegram или email - куда прислать подтверждение'); go(12); return; }
+  if (!TG_APP) {
+    if (!name) { alert('Пожалуйста, укажите ваше имя'); go(12); return; }
+    // Достаточно любого одного канала: Telegram/телефон ИЛИ email
+    if (!tg && !email) { alert('Укажите Telegram или email - куда прислать подтверждение'); go(12); return; }
+  }
 
-  const btn = document.getElementById('contactsCta');
+  const btn = document.getElementById(TG_APP ? 'slotCta' : 'contactsCta');
+
+  // Разрешение боту писать первым: без него подтверждение и напоминания не дойдут,
+  // пока человек сам не нажмёт Start. Запись уходит при любом ответе.
+  let tgWriteAccess = false;
+  if (TG_APP && typeof TG_APP.requestWriteAccess === 'function') {
+    tgWriteAccess = await new Promise(resolve => {
+      let done = false;
+      const finish = v => { if (!done) { done = true; resolve(Boolean(v)); } };
+      try { TG_APP.requestWriteAccess(finish); } catch (e) { finish(false); }
+      setTimeout(() => finish(false), 60000);
+    });
+  }
   btn.textContent = 'Отправка...';
   btn.classList.add('disabled');
 
@@ -1826,7 +1878,9 @@ async function submitBooking() {
         turnstileToken,
         quizAnswers,
         attribution: ATTRIBUTION.snapshot(),
-        leadEventId
+        leadEventId,
+        tgInitData: TG_APP ? TG_APP.initData : '',
+        tgWriteAccess
       })
     });
 
@@ -1890,9 +1944,21 @@ async function submitBooking() {
           currency: 'EUR'
         }, { eventID: leadEventId });
       }
+
+      // Telegram: сразу в чат с ботом. Если бот уже прислал подтверждение (разрешение
+      // писать дали), открываем просто чат; если нет, ссылку со Start, чтобы чат привязался.
+      if (TG_APP) {
+        try {
+          const base = String(data.botLink || 'https://t.me/SY_school_bot').split('?')[0];
+          TG_APP.openTelegramLink(data.tgLinked ? base : (data.botLink || base));
+          setTimeout(() => { try { TG_APP.close(); } catch (e) {} }, 500);
+        } catch (e) {}
+      }
     } else if (resp.status === 409) {
-      // Время заняли, пока человек вводил контакты: запасные слоты прямо на экране
-      await showSlotTaken(selectedSlot.key, selectedSlot.date + ', ' + (selectedSlot.localTime || selectedSlot.msk));
+      // Время заняли, пока человек вводил контакты: запасные слоты прямо на экране.
+      // В Telegram контактов нет, поэтому блок показывается на экране времени.
+      await showSlotTaken(selectedSlot.key, selectedSlot.date + ', ' + (selectedSlot.localTime || selectedSlot.msk),
+        TG_APP ? { box: 'slotTakenBox13', title: 'slotTakenTitle13', list: 'slotAlts13', cta: 'slotCta', hide: null } : null);
     } else {
       const data = await resp.json().catch(() => ({}));
       alert(data.error || 'Произошла ошибка. Попробуйте ещё раз.');

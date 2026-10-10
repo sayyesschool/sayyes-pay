@@ -2,12 +2,16 @@ import { NextResponse } from 'next/server';
 import {
   getBookedSlots, addBookedSlot,
   createBooking, setPendingBooking, updateBooking,
-  getManagerChatId, kvGet
+  getManagerChatId, kvGet, setUserBooking, clearPendingBooking
 } from '@/lib/redis';
-import { makeDeepLink, sendMessage, formatBookingForManager, managerActionsKeyboard, MANAGER_USERNAME } from '@/lib/telegram';
+import {
+  makeDeepLink, sendMessage, formatBookingForManager, managerActionsKeyboard, MANAGER_USERNAME,
+  formatBookingConfirmation, bookingActionsKeyboard
+} from '@/lib/telegram';
+import { verifyInitData, tgDisplayName } from '@/lib/tgWebApp';
 import { notifyManagers } from '@/lib/managers';
 import { sendBookingConfirmation } from '@/lib/email';
-import { sendLead } from '@/lib/meta';
+import { sendLead, sendSchedule } from '@/lib/meta';
 import { isSlotClosed } from '@/lib/capacity';
 
 // Generate short unique booking ID
@@ -68,7 +72,33 @@ function splitContact(raw, email) {
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { name, telegram, email, slot, slotMsk, slotDate, slotLocal, turnstileToken, quizAnswers, attribution, leadEventId } = body;
+    const { slot, slotMsk, slotDate, slotLocal, turnstileToken, quizAnswers, leadEventId, tgInitData, tgWriteAccess } = body;
+    let { name, telegram, email, attribution } = body;
+
+    // Воронка открыта как Mini App внутри Telegram (с 10.10.2026). Экрана контактов
+    // там нет: имя и аккаунт берём из подписанных данных Telegram. Подпись проверяем,
+    // иначе любой мог бы записаться от чужого Telegram id.
+    let tgUser = null;
+    let tgChannel = '';
+
+    if (tgInitData) {
+      const tg = verifyInitData(tgInitData);
+
+      if (!tg.ok) {
+        return NextResponse.json({ error: 'Не удалось проверить данные Telegram. Откройте воронку заново из Telegram.' }, { status: 403 });
+      }
+
+      tgUser = tg.user;
+      tgChannel = tg.startParam;
+      name = name || tgDisplayName(tgUser) || (tgUser.username ? '@' + tgUser.username : 'Ученик из Telegram');
+      telegram = telegram || (tgUser.username ? '@' + tgUser.username : '');
+      attribution = {
+        ...(attribution || {}),
+        utm_source: 'telegram',
+        utm_medium: 'tg_miniapp',
+        ...(tgChannel ? { utm_campaign: tgChannel } : {})
+      };
+    }
 
     // IP и User-Agent берём из заголовков запроса: клиент их не знает, а Мете
     // они нужны как есть, без хеширования — это заметно поднимает матчинг.
@@ -84,7 +114,7 @@ export async function POST(request) {
     // Раньше Telegram был единственным обязательным каналом — и именно он
     // ломался: без нажатия «Начать» в боте человек не получал ни подтверждения,
     // ни напоминаний. Теперь достаточно любого одного канала.
-    if (!telegram && !email) {
+    if (!telegram && !email && !tgUser) {
       return NextResponse.json({ error: 'Укажите Telegram или email' }, { status: 400 });
     }
 
@@ -135,6 +165,7 @@ export async function POST(request) {
       // Пояс клиента дублируем на верхний уровень: по нему все сообщения
       // пересчитывают время слота, в том числе после переноса из бота
       tz: (attribution && attribution.tz) || '',
+      ...(tgUser ? { tgUserId: String(tgUser.id), source: 'telegram', tgChannel: tgChannel || null } : {}),
       createdAt: new Date().toISOString()
     };
 
@@ -172,6 +203,38 @@ export async function POST(request) {
     // Generate deep link
     const botLink = makeDeepLink(bookingId);
 
+    // Mini App: человек разрешил боту писать, значит чат можно связать сразу,
+    // без нажатия Start. Личный чат с пользователем имеет тот же id, что и сам
+    // пользователь. Подтверждение уходит в бот до того, как Mini App закроется.
+    let tgLinked = false;
+
+    if (tgUser && tgWriteAccess) {
+      try {
+        const chatId = String(tgUser.id);
+        // Сначала сообщение, потом привязка: если Telegram писать не дал,
+        // чат в заявку не пишем, иначе напоминания молча уходили бы в никуда.
+        const sent = await sendMessage(chatId, formatBookingConfirmation(booking), bookingActionsKeyboard(bookingId));
+
+        tgLinked = Boolean(sent && sent.ok);
+
+        if (tgLinked) {
+          await updateBooking(bookingId, { chatId });
+          await setUserBooking(chatId, bookingId);
+          await clearPendingBooking(bookingId);
+
+          // Schedule в Мете: запись подтверждена в боте, так же как после Start.
+          try {
+            const res = await sendSchedule({ ...booking, chatId });
+            if (res && res.ok) await updateBooking(bookingId, { scheduleSent: true });
+          } catch (e) {
+            console.error('CAPI schedule error:', e);
+          }
+        }
+      } catch (e) {
+        console.error('Mini App chat link error:', e);
+      }
+    }
+
     // Notify manager immediately (even before user opens bot)
     try {
       const sent = await notifyManagers(formatBookingForManager(booking, 'new'), managerActionsKeyboard(bookingId));
@@ -185,7 +248,8 @@ export async function POST(request) {
     return NextResponse.json({
       success: true,
       bookingId,
-      botLink
+      botLink,
+      tgLinked
     });
   } catch (e) {
     console.error('Booking error:', e);
