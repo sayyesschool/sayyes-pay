@@ -152,6 +152,10 @@ h2{font-size:21px;font-weight:700;color:var(--dark);line-height:1.3;margin-botto
 .note{font-size:12px;color:var(--purple-mid);line-height:1.5;margin-top:12px;display:flex;align-items:flex-start;gap:6px}
 .tslot.booked{opacity:.35;pointer-events:none;border-color:var(--border)}
 .tslot.booked .time::after{content:" ✕";color:var(--gray);font-size:12px}
+/* Mini App: s13 двумя экранами (10.10.2026) */
+#s13.tg-info .s13-time,#s13.tg-time .s13-info,#s13.tg-info .plan-title{display:none!important}
+#s13InfoCta{display:none}
+#s13.tg-info #s13InfoCta{display:block}
 #slotsGrid .tslot .tz-note{font-size:10px;color:var(--gray);margin-top:2px}
 .spinner{display:inline-block;width:20px;height:20px;border:3px solid var(--border);border-top-color:var(--purple);border-radius:50%;animation:spin .6s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -675,20 +679,20 @@ h2{font-size:21px;font-weight:700;color:var(--dark);line-height:1.3;margin-botto
 
 <!-- ======= S13: TIME SLOTS ======= -->
 <div class="screen" id="s13">
-  <div class="nav"><button class="back-btn" id="s13BackBtn" onclick="go(10)">← Назад</button></div>
+  <div class="nav"><button class="back-btn" id="s13BackBtn" onclick="s13Back()">← Назад</button></div>
   <div class="content">
     <div id="rescheduleInfo" style="display:none;background:var(--purple-light);border-radius:12px;padding:12px 14px;margin-bottom:12px;text-align:center">
       <div style="font-size:15px;font-weight:600;color:var(--purple)">🔄 Перенос записи</div>
       <div style="font-size:13px;color:var(--gray);margin-top:2px">Выберите новое удобное время</div>
     </div>
-    <h2>Когда вам удобно?</h2>
+    <h2 id="s13Title">Когда вам удобно?</h2>
     <p class="sub">Пробный урок · 30 мин · Zoom</p>
 
-    <div class="planbox" style="margin:12px 0"></div>
+    <div class="planbox s13-info" style="margin:12px 0"></div>
 
     <!-- Цена до записи, а не после: человек выбирает время, уже зная,
          сколько стоит продолжение и в какой валюте. -->
-    <div id="introPriceBox" style="background:var(--purple-light);border-radius:14px;padding:12px 14px;margin-bottom:12px">
+    <div id="introPriceBox" class="s13-info" style="background:var(--purple-light);border-radius:14px;padding:12px 14px;margin-bottom:12px">
       <div style="font-size:14px;font-weight:700;color:var(--purple-dark);margin-bottom:4px">Пробный урок - бесплатно</div>
       <div style="font-size:12px;color:var(--purple-dark);line-height:1.65">
         Если понравится, следующий шаг - <b>30 €</b>: 2 индивидуальных занятия или пробная неделя в группе.<br>
@@ -696,20 +700,21 @@ h2{font-size:21px;font-weight:700;color:var(--dark);line-height:1.3;margin-botto
       </div>
     </div>
 
-    <div id="teacherCard" style="display:flex;align-items:center;gap:10px;background:var(--purple-light);border-radius:14px;padding:10px 12px;margin-bottom:12px">
+    <div id="teacherCard" class="s13-info" style="display:flex;align-items:center;gap:10px;background:var(--purple-light);border-radius:14px;padding:10px 12px;margin-bottom:12px">
       <span style="font-size:22px">👩‍🏫</span>
       <span style="font-size:12px;color:var(--purple-dark);line-height:1.45">Преподавателя подберём под ваш запрос - по ответам, которые вы дали.</span>
     </div>
 
-    <div id="slotsLoading" style="text-align:center;padding:30px 0;color:var(--gray)">Загрузка доступных слотов...</div>
-    <div class="tgrid" id="slotsGrid" style="display:none"></div>
+    <div id="slotsLoading" class="s13-time" style="text-align:center;padding:30px 0;color:var(--gray)">Загрузка доступных слотов...</div>
+    <div class="tgrid s13-time" id="slotsGrid" style="display:none"></div>
 
-    <div id="slotTakenBox13" style="display:none;background:#FFF4E0;border-radius:12px;padding:12px 14px;margin-bottom:12px">
+    <div id="slotTakenBox13" class="s13-time" style="display:none;background:#FFF4E0;border-radius:12px;padding:12px 14px;margin-bottom:12px">
       <div id="slotTakenTitle13" style="font-size:13px;font-weight:700;color:#7A4A00;margin-bottom:2px"></div>
       <div style="font-size:12px;color:#8A5A10;margin-bottom:8px">Ближайшее свободное время:</div>
       <div id="slotAlts13" style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px"></div>
     </div>
-    <button class="cta disabled" id="slotCta" onclick="slotNext()">Выберите время выше</button>
+    <button class="cta disabled s13-time" id="slotCta" onclick="slotNext()">Выберите время выше</button>
+    <button class="cta" id="s13InfoCta" onclick="setS13Phase('time')">Выбрать время →</button>
   </div>
 </div>
 
@@ -776,7 +781,7 @@ const STEP_NAMES = {
   '7a':'progress_plan','8':'q_age','2':'differentiation',
   '11':'value_reinforcement','12':'contacts','13':'time_slots','14':'confirmation',
   '2b':'budget','10n':'russian_only','1r':'landing_repeat',
-  'bot_click':'bot_click'
+  'bot_click':'bot_click','13t':'time_grid'
 };
 
 // ===== Идентификаторы клика для Conversions API =====
@@ -993,7 +998,7 @@ async function showSlotTaken(takenKey, takenLabel, ids) {
   const alts = after.concat(free.filter(s => s.ts < takenTs)).slice(0, 3);
 
   if (ids.hide && document.getElementById(ids.hide)) document.getElementById(ids.hide).style.display = 'none';
-  // Занятое время зачёркиваем и в сетке, если она на этом же экране.
+  // Занятое время убираем и из сетки, если она на этом же экране.
   try { markBookedSlots(); } catch (e) {}
   document.querySelectorAll('#slotsGrid .tslot.sel').forEach(x => x.classList.remove('sel'));
   const box = document.getElementById(ids.box);
@@ -1383,6 +1388,26 @@ function renderPlan() {
   });
 }
 
+// В Mini App экран времени не помещается целиком, а прокрутка там неудобная:
+// сначала «что будет на уроке», потом сетка (решение Димы 10.10.2026).
+// В веб-воронке и при переносе экран один, как раньше.
+function setS13Phase(phase) {
+  const s13 = document.getElementById('s13');
+  const title = document.getElementById('s13Title');
+  s13.classList.remove('tg-info', 'tg-time');
+  if (!TG_APP || isReschedule) { title.textContent = 'Когда вам удобно?'; return; }
+  s13.classList.add(phase === 'time' ? 'tg-time' : 'tg-info');
+  title.textContent = phase === 'time' ? 'Когда вам удобно?' : 'Ваш урок уже собран под вас';
+  window.scrollTo(0, 0);
+  if (phase === 'time') trackStep('13t');
+}
+
+function s13Back() {
+  const s13 = document.getElementById('s13');
+  if (s13.classList.contains('tg-time')) return setS13Phase('info');
+  go(10);
+}
+
 function go(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   // Контакты имеют смысл только с выбранным временем (порядок с 28.09.2026).
@@ -1393,7 +1418,7 @@ function go(id) {
   window.scrollTo(0, 0);
   trackStep(id);
   if (id == 12 || id == 13) renderPlan();
-  if (id == 13) loadSlots();
+  if (id == 13) { setS13Phase('info'); loadSlots(); }
   if (id == 12) renderChosenSlot();
   if (id == '7a') updateProgressChart();
 }
@@ -1538,15 +1563,16 @@ async function loadSlots() {
 function markBookedSlots() {
   document.querySelectorAll('#slotsGrid .tslot').forEach(el => {
     if (bookedSlots.includes(el.dataset.key)) {
-      el.classList.add('booked');
-      el.onclick = null;
       if (selectedSlot && selectedSlot.key === el.dataset.key) {
         selectedSlot = null;
-        el.classList.remove('sel');
         const cta = document.getElementById('slotCta');
         cta.classList.add('disabled');
         cta.textContent = 'Это время только что заняли - выберите другое';
       }
+      // Занятое убираем из сетки совсем, пустой день тоже.
+      const col = el.closest('.day-col');
+      el.remove();
+      if (col && !col.querySelector('.tslot')) col.remove();
     }
   });
 }
@@ -1587,7 +1613,10 @@ function renderSlotGrid() {
       // Слот должен начинаться минимум через 3 часа - иначе преподаватель не успеет
       if (localDate.getTime() - nowTs < 3 * 60 * 60 * 1000) return;
       const dateKey = ymd(date) + '_' + formatMskTime(mskMin);
-      const isBooked = bookedSlots.includes(dateKey);
+      // Показываем только свободное время (10.10.2026): зачёркнутые слоты
+      // растягивали сетку вдвое и ничего не давали.
+      if (bookedSlots.includes(dateKey)) return;
+      const isBooked = false;
 
       const el = document.createElement('div');
       el.className = 'tslot' + (isBooked ? ' booked' : '');
@@ -1623,6 +1652,7 @@ function renderSlotGrid() {
   if (existingTzBar) existingTzBar.remove();
   const tzBar = document.createElement('div');
   tzBar.id = 'tzBar';
+  tzBar.className = 's13-time';
   tzBar.style.cssText = 'font-size:12px;font-weight:700;color:var(--purple-dark);text-align:center;' +
     'margin-bottom:10px;padding:9px 12px;background:var(--purple-light);border-radius:10px';
   {
