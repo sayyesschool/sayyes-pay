@@ -9,6 +9,7 @@ import { today, shiftDay, slotStartMs } from '@/lib/analytics';
 import { getThread } from '@/lib/thread';
 import { listPacks, payLink } from '@/lib/adminActions';
 import { introActive, introExpiry } from '@/services/intro';
+import { sourceLine } from '@/lib/leadSource';
 
 export const dynamic = 'force-dynamic';
 
@@ -73,6 +74,7 @@ export default async function ClientPage({ params, searchParams }) {
           </div>
           <div className="kv">
             <div><b>Код</b> {booking.id}</div>
+            <div><b>Источник</b> {sourceLine(booking)}</div>
             <div><b>Урок</b> {booking.slotDate || '—'} {booking.slotMsk || ''} (МСК)</div>
             <div><b>Telegram</b> {booking.telegram || '—'}</div>
             <div><b>Телефон</b> {booking.phone || '—'}</div>

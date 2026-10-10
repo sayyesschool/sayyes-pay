@@ -18,7 +18,7 @@ function cleanSource(value) {
 
 export async function POST(request) {
   try {
-    const { step, src, ad, vid } = await request.json();
+    const { step, src, ad, vid, ch } = await request.json();
 
     if (!step) return NextResponse.json({ error: 'Missing step' }, { status: 400 });
 
@@ -62,6 +62,16 @@ export async function POST(request) {
       const adBucket = name + '@' + adId;
 
       data[adBucket] = (data[adBucket] || 0) + 1;
+    }
+
+    // Разрез по каналу Telegram (посевы, с 10.10.2026): landing#cyprus_kipr.
+    // Канал приходит из параметра startapp ссылки t.me/SY_school_bot/app?startapp=<канал>.
+    const channel = String(ch || '').toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 40);
+
+    if (channel) {
+      const chBucket = name + '#' + channel;
+
+      data[chBucket] = (data[chBucket] || 0) + 1;
     }
 
     await kvSet(key, data, 60 * 60 * 24 * 90);

@@ -9,6 +9,7 @@ import {
   formatBookingConfirmation, bookingActionsKeyboard
 } from '@/lib/telegram';
 import { verifyInitData, tgDisplayName } from '@/lib/tgWebApp';
+import { leadSourceOf } from '@/lib/leadSource';
 import { notifyManagers } from '@/lib/managers';
 import { sendBookingConfirmation } from '@/lib/email';
 import { sendLead, sendSchedule } from '@/lib/meta';
@@ -168,6 +169,9 @@ export async function POST(request) {
       ...(tgUser ? { tgUserId: String(tgUser.id), source: 'telegram', tgChannel: tgChannel || null } : {}),
       createdAt: new Date().toISOString()
     };
+
+    // Источник пишем в каждую заявку (с 10.10.2026), а не вычисляем потом по меткам.
+    booking.source = leadSourceOf(booking);
 
     await createBooking(booking);
     await setPendingBooking(bookingId, booking);

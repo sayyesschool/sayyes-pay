@@ -1285,8 +1285,8 @@ function outsideAdGeo() {
 function trackStep(stepId) {
   const stepName = STEP_NAMES[stepId] || ('step_' + stepId);
   const stepNumber = STEP_ORDER.indexOf(stepName) + 1;
-  // Meta Pixel
-  if (typeof fbq === 'function') {
+  // Meta Pixel. Шаги визитов из Telegram в пиксель Меты не шлём: это не её трафик.
+  if (typeof fbq === 'function' && !TG_APP) {
     fbq('trackCustom', 'FunnelStep', {
       step: stepName, step_id: stepId,
       step_name: stepName, step_number: stepNumber, funnel_version: FUNNEL_VERSION
@@ -1303,7 +1303,7 @@ function trackStep(stepId) {
   fetch('/api/track', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ step: stepName, src: VISIT_SOURCE, ad: VISIT_AD, vid: VISIT_ID, ts: Date.now() })
+    body: JSON.stringify({ step: stepName, src: VISIT_SOURCE, ad: VISIT_AD, vid: VISIT_ID, ch: TG_CHANNEL, ts: Date.now() })
   }).catch(() => {});
 }
 
@@ -1932,7 +1932,7 @@ async function submitBooking() {
 
         // Пояс телефона вне рекламных стран: VPN из Туркменистана и Казахстана.
         // Заявку принимаем, но Мету на ней не учим. Список тот же, что в src/lib/meta.js.
-        if (!outsideAdGeo()) fbq('track', 'Lead', {
+        if (!outsideAdGeo() && !TG_APP) fbq('track', 'Lead', {
           content_name: 'trial_booking',
           content_category: 'funnel',
           lead_level: quizAnswers['Уровень'] || '',

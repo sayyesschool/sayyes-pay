@@ -1,4 +1,5 @@
 import { kvGet, kvKeys, kvMGet } from '@/lib/redis';
+import { leadSourceOf } from '@/lib/leadSource';
 
 // Всё считаем в базовом поясе расписания (UTC+3) — том же, в котором живут
 // слоты и команды бота. Иначе «сегодня» в админке и в /today разъезжаются.
@@ -86,21 +87,22 @@ export async function loadPayments() {
   // payment_intent. В вебхуке это починено, но старые двойные записи остались,
   // а деньги в отчёте считаются по этому списку — и сумма задваивалась.
   // Ключ дедупликации — идентификатор платёжного намерения.
-  const seen = new Set();
+  // Если записей две и только у одной есть заявка, оставляем её: иначе платёж,
+  // привязанный по почте, мог остаться в отчёте органикой.
+  const byPi = new Map();
   const unique = [];
 
   for (const rec of out) {
     const pi = rec.pi ? String(rec.pi) : null;
 
-    if (pi) {
-      if (seen.has(pi)) continue;
-      seen.add(pi);
-    }
+    if (!pi) { unique.push(rec); continue; }
 
-    unique.push(rec);
+    const prev = byPi.get(pi);
+
+    if (!prev || (!prev.bookingId && rec.bookingId)) byPi.set(pi, rec);
   }
 
-  return unique;
+  return unique.concat([...byPi.values()]);
 }
 
 // Свой трекер пишет счётчики по экранам воронки: track:YYYY-MM-DD.
@@ -300,7 +302,15 @@ export async function buildAnalytics({ from, to, source = 'all' } = {}) {
     .filter(rec => rec.at);
   const ledger = payments.concat(restored);
 
-  const sourceOf = rec => (rec.bookingId ? 'meta' : 'organic');
+  // Три источника денег (с 10.10.2026): Мета, Telegram, органика. Оплата с заявкой
+  // берёт источник заявки; заявка без рекламных меток считается воронкой Меты,
+  // как и раньше. Оплата без заявки: органика (старые ученики, счета, переводы).
+  const bookingById = Object.fromEntries(bookings.map(b => [b.id, b]));
+  const sourceOf = rec => {
+    if (!rec.bookingId) return 'organic';
+
+    return leadSourceOf(bookingById[rec.bookingId]) === 'telegram' ? 'telegram' : 'meta';
+  };
   const allRows = ledger
     .filter(rec => inRange(dayKey(rec.at)))
     .map(rec => ({ ...rec, source: sourceOf(rec) }))
@@ -308,6 +318,7 @@ export async function buildAnalytics({ from, to, source = 'all' } = {}) {
 
   const bySource = {
     meta: { count: 0, revenue: 0 },
+    telegram: { count: 0, revenue: 0 },
     organic: { count: 0, revenue: 0 }
   };
 
@@ -352,9 +363,22 @@ export async function buildAnalytics({ from, to, source = 'all' } = {}) {
 
   // Сколько проходит от урока до оплаты — окно спецпредложения три дня,
   // и полезно видеть, попадают ли люди в первые часы или тянут до конца.
-  const paidBookings = bookings.filter(booking => booking.paid && booking.paidAt && slotStartMs(booking));
+  // Только ПЕРВАЯ оплата после урока (решение Димы 10.10.2026): повторные покупки
+  // пакетов через недели тянули медиану вверх и прятали, как быстро платят за интро.
+  const firstPaidAt = {};
+
+  for (const rec of ledger) {
+    if (!rec.bookingId || !rec.at) continue;
+
+    const ms = new Date(rec.at).getTime();
+
+    if (!firstPaidAt[rec.bookingId] || ms < firstPaidAt[rec.bookingId]) firstPaidAt[rec.bookingId] = ms;
+  }
+
+  const paidBookings = bookings.filter(booking => firstPaidAt[booking.id] && slotStartMs(booking)
+    && (source === 'all' || sourceOf({ bookingId: booking.id }) === source));
   const gaps = paidBookings
-    .map(booking => (new Date(booking.paidAt).getTime() - slotStartMs(booking)) / (60 * 60 * 1000))
+    .map(booking => (firstPaidAt[booking.id] - slotStartMs(booking)) / (60 * 60 * 1000))
     .filter(hours => hours >= 0 && hours < 24 * 30)
     .sort((a, b) => a - b);
 

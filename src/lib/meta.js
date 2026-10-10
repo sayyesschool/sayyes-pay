@@ -1,3 +1,4 @@
+import { leadSourceOf } from '@/lib/leadSource';
 // Meta Conversions API — серверные события.
 //
 // Цикл сделки 7–30 дней, поэтому оптимизация идёт по событию дня 0 (Lead, дальше
@@ -166,6 +167,9 @@ export function outsideTargetTz(tz) {
 }
 
 function skipForTz(booking) {
+  // Лиды из Telegram (посевы, с 10.10.2026) Мету не учат: это не её трафик,
+  // и такие события только сбили бы оптимизацию кампаний.
+  if (leadSourceOf(booking) === 'telegram') return { skipped: 'telegram lead' };
   const tz = booking && (booking.tz || (booking.attribution && booking.attribution.tz));
   return outsideTargetTz(tz) ? { skipped: 'timezone outside ad geo: ' + tz } : null;
 }
@@ -426,6 +430,8 @@ export async function sendPurchase(p = {}) {
     const found = await findAttributionByContact({ email: p.email, phone: p.phone });
     booking = (found && found.booking) || null;
   }
+  // Оплата лида из Telegram в Мету не уходит: рекламу Меты она не окупает.
+  if (booking && leadSourceOf(booking) === 'telegram') return { skipped: 'telegram lead' };
   const attribution = (booking && booking.attribution) || {};
 
   return sendCapiEvent({

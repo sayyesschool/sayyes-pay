@@ -146,6 +146,7 @@ export async function listStripePayments(days = 30) {
       email,
       bookingId: record ? (record.bookingId || null) : null,
       linked: hasBooking,
+      recorded: Boolean(record),
       skipped: skip,
       guessId: guess ? guess.id : '',
       guessName: guess ? (guess.name || 'без имени') : ''
@@ -155,6 +156,32 @@ export async function listStripePayments(days = 30) {
   rows.sort((a, b) => (a.at < b.at ? 1 : -1));
 
   return rows;
+}
+
+// Оплаты Stripe, которых нет в базе вообще: до 10.10.2026 вебхук молча выбрасывал
+// платежи, не совпавшие ни с одной заявкой, и в аналитике органика была пустой.
+// Дописываем их как органику (без заявки). Привязать к заявке можно и потом.
+export async function recordUnlinked(rows) {
+  let added = 0;
+
+  for (const row of rows || []) {
+    if (row.recorded) continue;
+
+    await kvSet('payment:pi_' + row.id, {
+      at: row.at,
+      bookingId: null,
+      pi: row.id,
+      email: row.email || '',
+      label: row.label,
+      amount: row.amount,
+      currency: String(row.currency || 'eur').toLowerCase(),
+      via: 'Stripe'
+    });
+    row.recorded = true;
+    added++;
+  }
+
+  return added;
 }
 
 // Привязка руками из админки: платёж есть в Stripe, заявку называет менеджер.

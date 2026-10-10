@@ -1,3 +1,4 @@
+import { sourceLine, leadSourceOf } from '@/lib/leadSource';
 import { ZOOM_JOIN_URL, ZOOM_MEETING_ID, ZOOM_PASSCODE } from '@/lib/zoom';
 // Telegram Bot API helpers
 
@@ -307,7 +308,12 @@ export function formatBookingForManager(booking, action = 'new') {
         .join('\n');
   }
 
-  return `${emoji[action]} ${icons[action]} SAY YES!\n\n` +
+  // Источник в заголовке: менеджер сразу видит, Мета это или Telegram (с 10.10.2026).
+  const src = leadSourceOf(booking);
+  const srcTag = src === 'telegram' ? ' · TG' : src === 'meta' ? ' · Мета' : '';
+
+  return `${emoji[action]} ${icons[action]}${srcTag} SAY YES!\n\n` +
+    `Источник: ${sourceLine(booking)}\n` +
     `Имя: ${booking.name}\n` +
     `Telegram: ${booking.telegram || '—'}\n` +
     `Email: ${booking.email || '—'}\n` +

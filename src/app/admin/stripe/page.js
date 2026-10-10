@@ -2,7 +2,7 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { SESSION_COOKIE, readSession } from '@/lib/adminAuth';
 import { Shell } from '@/lib/adminShell';
-import { listStripePayments } from '@/lib/stripePayments';
+import { listStripePayments, recordUnlinked } from '@/lib/stripePayments';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,6 +37,8 @@ export default async function StripePage({ searchParams }) {
 
   try {
     rows = await listStripePayments(days);
+    // Заодно дописываем в базу оплаты, которых там нет: они попадут в органику аналитики.
+    await recordUnlinked(rows);
   } catch (e) {
     error = e.message;
   }

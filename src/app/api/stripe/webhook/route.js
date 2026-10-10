@@ -108,9 +108,22 @@ export async function POST(request) {
           }
         }
 
-        // Ни с одной заявкой платёж не сошёлся: значит, это не наша воронка,
-        // а обычная оплата школы. Молча пропускаем — раньше бот присылал их все.
+        // Ни с одной заявкой платёж не сошёлся: это не воронка, а обычная оплата школы.
+        // Менеджерам о ней не пишем (раньше бот присылал их все), но в базу кладём
+        // как органику: до 10.10.2026 такие оплаты не записывались вовсе, и в аналитике
+        // денег органика показывала 0, хотя школа получала деньги мимо воронки.
         if (!matchedId) {
+          await kvSet(key, {
+            at: new Date((pi.created || Math.floor(Date.now() / 1000)) * 1000).toISOString(),
+            bookingId: null,
+            pi: pi.id,
+            email,
+            label,
+            amount: pi.amount_received || pi.amount || 0,
+            currency: pi.currency || 'eur',
+            via: 'Stripe'
+          });
+
           return new Response('ok', { status: 200 });
         }
 
