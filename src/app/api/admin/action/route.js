@@ -8,6 +8,7 @@ import {
 } from '@/lib/adminActions';
 import { blockSlots, openSlots, setWeekHours } from '@/lib/schedule';
 import { attachPayment, detachPayment, unskipPayment } from '@/lib/stripePayments';
+import { addTgSpend, deleteTgSpend } from '@/lib/tgPerformance';
 
 // Все действия менеджера приходят сюда обычной формой, без единой строчки
 // клиентского JS: так админка работает на любом телефоне и не ломается,
@@ -44,6 +45,19 @@ export async function POST(request) {
     else if (action === 'archive-unmarked') result = await archiveUnmarked(form.get('days'), by);
     // Оплата есть в Stripe, а заявке о ней ничего не известно: счёт выставили
     // руками, вебхук не дошёл, платили не по нашей ссылке. Связываем их здесь.
+    // Расход на посевы в Telegram: вводит только управляющий (страница «Перформанс TG»).
+    else if (action === 'tg-spend-add' || action === 'tg-spend-del') {
+      if (session.role !== 'owner') {
+        result = { ok: false, error: 'Расходы вводят только управляющие' };
+      } else if (action === 'tg-spend-add') {
+        result = await addTgSpend({
+          channel: form.get('channel'), date: String(form.get('date') || ''),
+          amountEuro: form.get('amount'), note: form.get('note'), by
+        });
+      } else {
+        result = await deleteTgSpend(id);
+      }
+    }
     else if (action === 'attach-pi') {
       if (session.role !== 'owner') {
         result = { ok: false, error: 'Оплаты привязывают только управляющие' };

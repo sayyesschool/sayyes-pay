@@ -6,6 +6,8 @@ import { getAdsInsights } from '@/lib/metaAds';
 import { Shell } from '@/lib/adminShell';
 import { buildCreatives, CREATIVES_SINCE } from '@/lib/creatives';
 import { CreativesTab } from '@/lib/creativesView';
+import { buildTgPerformance } from '@/lib/tgPerformance';
+import { TgPerformanceTab } from '@/lib/tgPerformanceView';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,6 +30,7 @@ function brokenInRange(from, to) {
 
 const TABS = [
   { key: 'meta', label: 'Перформанс на Мете', owner: true },
+  { key: 'telegram', label: 'Перформанс TG', owner: true },
   { key: 'creatives', label: 'Креативы', owner: true },
   { key: 'funnel', label: 'Воронка', owner: false },
   { key: 'work', label: 'Заявки и уроки', owner: false },
@@ -85,6 +88,7 @@ export default async function AdminPage({ searchParams }) {
   const from = valid(params?.from) ? params.from : fallbackFrom;
   const sort = ['spend', 'lesson', 'bookings', 'attended'].includes(params?.sort) ? params.sort : 'spend';
   const creatives = tab === 'creatives' ? await buildCreatives({ from, to }) : null;
+  const tgPerf = tab === 'telegram' ? await buildTgPerformance({ from, to }) : null;
 
   const source = ['meta', 'telegram', 'organic'].includes(params?.source) ? params.source : 'all';
   const data = await buildAnalytics({ from, to, source });
@@ -220,6 +224,14 @@ export default async function AdminPage({ searchParams }) {
               </>
             )}
           </>
+        )}
+
+        {tab === 'telegram' && tgPerf && (
+          <TgPerformanceTab
+            data={tgPerf}
+            back={link('telegram', from, to)}
+            channelForLink={typeof params?.ch === 'string' ? params.ch : ''}
+          />
         )}
 
         {tab === 'creatives' && creatives && (
