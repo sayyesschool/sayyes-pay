@@ -310,7 +310,7 @@ export function formatBookingForManager(booking, action = 'new') {
 
   // Источник в заголовке: менеджер сразу видит, Мета это или Telegram (с 10.10.2026).
   const src = leadSourceOf(booking);
-  const srcTag = src === 'telegram' ? ' · TG' : src === 'meta' ? ' · Мета' : '';
+  const srcTag = src === 'telegram' ? ' · TG' : src === 'meta' ? ' · Мета' : src === 'google' ? ' · Google' : '';
 
   return `${emoji[action]} ${icons[action]}${srcTag} SAY YES!\n\n` +
     `Источник: ${sourceLine(booking)}\n` +

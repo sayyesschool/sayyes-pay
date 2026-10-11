@@ -309,7 +309,9 @@ export async function buildAnalytics({ from, to, source = 'all' } = {}) {
   const sourceOf = rec => {
     if (!rec.bookingId) return 'organic';
 
-    return leadSourceOf(bookingById[rec.bookingId]) === 'telegram' ? 'telegram' : 'meta';
+    const src = leadSourceOf(bookingById[rec.bookingId]);
+
+    return src === 'telegram' || src === 'google' ? src : 'meta';
   };
   const allRows = ledger
     .filter(rec => inRange(dayKey(rec.at)))
@@ -319,6 +321,7 @@ export async function buildAnalytics({ from, to, source = 'all' } = {}) {
   const bySource = {
     meta: { count: 0, revenue: 0 },
     telegram: { count: 0, revenue: 0 },
+    google: { count: 0, revenue: 0 },
     organic: { count: 0, revenue: 0 }
   };
 

@@ -807,7 +807,7 @@ const ATTRIBUTION = (function () {
   const fbclid = params.get('fbclid');
   if (fbclid) fresh.fbclid = fbclid;
   ['utm_source','utm_medium','utm_campaign','utm_content','utm_term','utm_id',
-   'campaign_id','adset_id','ad_id','gclid','ttclid'].forEach(k => {
+   'campaign_id','adset_id','ad_id','gclid','gbraid','wbraid','ttclid'].forEach(k => {
     const v = params.get(k);
     if (v) fresh[k] = v;
   });
@@ -823,6 +823,13 @@ const ATTRIBUTION = (function () {
   if (fbclid) fresh.fbc = 'fb.1.' + Date.now() + '.' + fbclid;
   else if (cookieFbc && !saved.fbc) fresh.fbc = cookieFbc;
 
+  // Новый рекламный заход переписывает прошлый целиком (последний клик): иначе после
+  // Google-клика остаётся старый fbclid, а после Меты старый gclid, и источник путается.
+  const isNewClick = fresh.fbclid || fresh.gclid || fresh.gbraid || fresh.wbraid || fresh.utm_source;
+  if (isNewClick) {
+    ['fbclid','fbc','gclid','gbraid','wbraid','utm_source','utm_medium','utm_campaign','utm_content',
+     'utm_term','utm_id','campaign_id','adset_id','ad_id','ttclid'].forEach(k => { if (!(k in fresh)) delete saved[k]; });
+  }
   const merged = Object.assign({}, saved, fresh);
   merged.savedAt = saved.savedAt || Date.now();
   try { localStorage.setItem(KEY, JSON.stringify(merged)); } catch (e) {}
@@ -1193,11 +1200,15 @@ const VISIT_SOURCE = (function () {
 
     // Мета дописывает fbclid к каждому клику по объявлению, поэтому он надёжнее
     // referrer: во встроенном браузере Инстаграма referrer часто пустой.
+    // Google Реклама: автопометка gclid (или gbraid/wbraid на iOS). Раньше fbclid-проверки,
+    // потому что в ссылке Google тоже может оказаться campaign_id.
+    if (params.get('gclid') || params.get('gbraid') || params.get('wbraid')) return 'google';
     if (params.get('fbclid') || params.get('campaign_id') || params.get('ad_id')) return 'meta';
 
     const utm = (params.get('utm_source') || '').toLowerCase();
 
     if (utm === 'meta' || utm === 'facebook' || utm === 'instagram' || utm === 'ig') return 'meta';
+    if (utm === 'google' || utm === 'adwords' || utm === 'googleads') return 'google';
     if (utm) return utm.replace(/[^a-z0-9_-]/g, '').slice(0, 20) || 'other';
 
     const ref = (document.referrer || '').toLowerCase();

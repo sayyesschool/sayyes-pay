@@ -90,7 +90,7 @@ export default async function AdminPage({ searchParams }) {
   const creatives = tab === 'creatives' ? await buildCreatives({ from, to }) : null;
   const tgPerf = tab === 'telegram' ? await buildTgPerformance({ from, to }) : null;
 
-  const source = ['meta', 'telegram', 'organic'].includes(params?.source) ? params.source : 'all';
+  const source = ['meta', 'telegram', 'google', 'organic'].includes(params?.source) ? params.source : 'all';
   const data = await buildAnalytics({ from, to, source });
   const needAds = owner && (tab === 'meta' || tab === 'funnel');
   const ads = needAds ? await getAdsInsights({ from, to }) : null;
@@ -125,6 +125,7 @@ export default async function AdminPage({ searchParams }) {
               <option value="all">все источники</option>
               <option value="meta">воронка (Мета)</option>
               <option value="telegram">Telegram</option>
+              <option value="google">Google</option>
               <option value="organic">органика</option>
             </select>
           )}
@@ -433,6 +434,10 @@ export default async function AdminPage({ searchParams }) {
                   <span>Telegram, {data.money.bySource.telegram.count} оплат</span>
                 </div>
                 <div className="kpi">
+                  <b>{money(data.money.bySource.google.revenue)}</b>
+                  <span>Google, {data.money.bySource.google.count} оплат</span>
+                </div>
+                <div className="kpi">
                   <b>{money(data.money.bySource.organic.revenue)}</b>
                   <span>органика, {data.money.bySource.organic.count} оплат</span>
                 </div>
@@ -441,7 +446,7 @@ export default async function AdminPage({ searchParams }) {
                 Воронка — оплаты, привязанные к заявке: эти люди пришли с рекламы, и только они
                 имеют отношение к её окупаемости. Органика — старые ученики, счета и переводы
                 мимо воронки. Ниже всё считается по выбранному источнику
-                {source === 'all' ? ' (сейчас по всем).' : source === 'meta' ? ' (сейчас только Мета).' : source === 'telegram' ? ' (сейчас только Telegram).' : ' (сейчас только органика).'}
+                {source === 'all' ? ' (сейчас по всем).' : source === 'meta' ? ' (сейчас только Мета).' : source === 'telegram' ? ' (сейчас только Telegram).' : source === 'google' ? ' (сейчас только Google).' : ' (сейчас только органика).'}
               </p>
             </div>
 
