@@ -23,6 +23,15 @@ fbq('track', 'PageView');
 </script>
 <noscript><img height="1" width="1" style="display:none" src="https://www.facebook.com/tr?id=1332532938846061&ev=PageView&noscript=1"/></noscript>
 <!-- End Facebook Pixel -->
+<!-- Google Ads (аккаунт SayYes 397-070-5541, с 11.10.2026). Конверсия «Запись на пробный урок»
+     уходит после успешной записи, рядом с Lead Меты. -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=AW-18507009227"></script>
+<script>
+window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'AW-18507009227');
+</script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -1985,6 +1994,17 @@ async function submitBooking() {
           value: leadValue,
           currency: 'EUR'
         }, { eventID: leadEventId });
+      }
+
+      // Google Ads: конверсия «Запись на пробный урок». Засчитывается, только если был клик
+      // по объявлению Google; transaction_id не даёт посчитать одну запись дважды.
+      if (typeof gtag === 'function' && !TG_APP) {
+        try {
+          gtag('event', 'conversion', {
+            send_to: 'AW-18507009227/xCu2CJasoZkdEMuZ6vhE',
+            transaction_id: String(data.bookingId || leadEventId || '')
+          });
+        } catch (e) {}
       }
 
       // Telegram: сразу в чат с ботом. Если бот уже прислал подтверждение (разрешение
