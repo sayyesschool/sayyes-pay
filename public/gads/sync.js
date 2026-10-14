@@ -118,20 +118,27 @@ function main() {
   // --- Ключевые фразы ---
   (cfg.adGroups || []).forEach(function (agCfg) {
     try {
-      var ags = campaign.adGroups().withCondition("ad_group.name = '" + agCfg.name + "'").get();
-      if (!ags.hasNext()) { errors.push('Нет группы: ' + agCfg.name); return; }
-      var ag = ags.next();
+      // "*" = все группы кампании (у нас одна).
+      var agIt = agCfg.name === '*' ? campaign.adGroups().get()
+        : campaign.adGroups().withCondition("ad_group.name = '" + agCfg.name + "'").get();
+      if (!agIt.hasNext()) { errors.push('Нет группы: ' + agCfg.name); return; }
+      while (agIt.hasNext()) syncAdGroup(agIt.next(), agCfg);
+    } catch (e) { errors.push('Фразы ' + agCfg.name + ': ' + e); }
+  });
+
+  function syncAdGroup(ag, agCfg) {
+    try {
       var wrap = function (t) { return agCfg.match === 'exact' ? '[' + t + ']' : agCfg.match === 'broad' ? t : '"' + t + '"'; };
-      var want = agCfg.keywords.map(function (t) { return wrap(t.toLowerCase()); });
+      var want = agCfg.keywords.map(function (t) { return bare(t); });
       var existing = {};
       var ks = ag.keywords().withCondition("ad_group_criterion.status != 'REMOVED'").get();
       while (ks.hasNext()) {
         var k = ks.next();
-        existing[k.getText().toLowerCase()] = k;
+        existing[bare(k.getText())] = k;
       }
       want.forEach(function (t) {
         if (!existing[t]) {
-          if (!dry) ag.newKeywordBuilder().withText(t).build();
+          if (!dry) ag.newKeywordBuilder().withText(wrap(t)).build();
           changes.push('+фраза ' + t);
         } else if (existing[t].isPaused()) {
           if (!dry) existing[t].enable();
@@ -146,21 +153,24 @@ function main() {
           }
         });
       }
-    } catch (e) { errors.push('Фразы ' + agCfg.name + ': ' + e); }
-  });
+    } catch (e) { errors.push('Фразы ' + ag.getName() + ': ' + e); }
+  }
 
   // --- Минус-слова кампании ---
   try {
-    var negWant = (cfg.negativeKeywords || []).map(function (t) { return t.toLowerCase(); });
+    // Сравниваем по тексту без кавычек и скобок: Google отдаёт тип соответствия отдельно.
+    var negRaw = {};
+    (cfg.negativeKeywords || []).forEach(function (t) { negRaw[bare(t)] = t; });
+    var negWant = Object.keys(negRaw);
     var negHave = {};
     var ns = campaign.negativeKeywords().get();
     while (ns.hasNext()) {
       var n = ns.next();
-      negHave[n.getText().toLowerCase()] = n;
+      negHave[bare(n.getText())] = n;
     }
     negWant.forEach(function (t) {
       if (!negHave[t]) {
-        if (!dry) campaign.createNegativeKeyword(t);
+        if (!dry) campaign.createNegativeKeyword(negRaw[t]);
         changes.push('+минус ' + t);
       }
     });
@@ -203,6 +213,10 @@ function main() {
   } catch (e) { errors.push('Статистика: ' + e); }
 
   report(cfg, changes, errors, stats, terms, dry);
+}
+
+function bare(t) {
+  return String(t).toLowerCase().replace(/^[\s"\[+]+|[\s"\]]+$/g, '').replace(/\s+/g, ' ');
 }
 
 function report(cfg, changes, errors, stats, terms, dry) {
