@@ -188,17 +188,26 @@ function main() {
   var stats = null;
   var terms = [];
   try {
-    var s = campaign.getStatsFor('LAST_7_DAYS');
+    var sq = AdsApp.search('SELECT metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.conversions FROM campaign ' +
+      'WHERE campaign.id = ' + campaign.getId() + ' AND segments.date ' + during(7));
+    var st = { impressions: 0, clicks: 0, cost: 0, conversions: 0 };
+    while (sq.hasNext()) {
+      var sr = sq.next();
+      st.impressions += Number(sr.metrics.impressions || 0);
+      st.clicks += Number(sr.metrics.clicks || 0);
+      st.cost += Number(sr.metrics.costMicros || 0) / 1e6;
+      st.conversions += Number(sr.metrics.conversions || 0);
+    }
     stats = {
       status: campaign.isEnabled() ? 'enabled' : (campaign.isPaused() ? 'paused' : 'other'),
-      impressions: s.getImpressions(),
-      clicks: s.getClicks(),
-      cost: s.getCost(),
-      conversions: s.getConversions(),
-      avgCpc: s.getAverageCpc()
+      impressions: st.impressions,
+      clicks: st.clicks,
+      cost: Math.round(st.cost * 100) / 100,
+      conversions: st.conversions,
+      avgCpc: st.clicks ? Math.round(st.cost / st.clicks * 100) / 100 : 0
     };
     var q = AdsApp.search('SELECT search_term_view.search_term, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.conversions ' +
-      'FROM search_term_view WHERE campaign.id = ' + campaign.getId() + ' AND segments.date DURING LAST_7_DAYS ' +
+      'FROM search_term_view WHERE campaign.id = ' + campaign.getId() + ' AND segments.date ' + during(7) + ' ' +
       'ORDER BY metrics.impressions DESC LIMIT 100');
     while (q.hasNext()) {
       var r = q.next();
@@ -217,14 +226,14 @@ function main() {
   var kwDaily = [];
   try {
     var dq = AdsApp.search('SELECT segments.date, metrics.impressions, metrics.clicks, metrics.cost_micros FROM campaign ' +
-      'WHERE campaign.id = ' + campaign.getId() + ' AND segments.date DURING LAST_30_DAYS');
+      'WHERE campaign.id = ' + campaign.getId() + ' AND segments.date ' + during(30));
     while (dq.hasNext()) {
       var dr = dq.next();
       daily.push({ date: dr.segments.date, impressions: Number(dr.metrics.impressions || 0),
         clicks: Number(dr.metrics.clicks || 0), cost: Number(dr.metrics.costMicros || 0) / 1e6 });
     }
     var kq = AdsApp.search('SELECT segments.date, ad_group_criterion.keyword.text, metrics.impressions, metrics.clicks, metrics.cost_micros ' +
-      'FROM keyword_view WHERE campaign.id = ' + campaign.getId() + ' AND segments.date DURING LAST_30_DAYS AND metrics.impressions > 0');
+      'FROM keyword_view WHERE campaign.id = ' + campaign.getId() + ' AND segments.date ' + during(30) + ' AND metrics.impressions > 0');
     while (kq.hasNext()) {
       var kr = kq.next();
       kwDaily.push({ date: kr.segments.date, keyword: kr.adGroupCriterion.keyword.text, impressions: Number(kr.metrics.impressions || 0),
@@ -233,6 +242,14 @@ function main() {
   } catch (e) { errors.push('Дни: ' + e); }
 
   report(cfg, changes, errors, stats, terms, dry, daily, kwDaily);
+}
+
+// Период явными датами, включая сегодня: LAST_7_DAYS и LAST_30_DAYS в Google Ads сегодняшний день не включают.
+function during(days) {
+  var tz = AdsApp.currentAccount().getTimeZone();
+  var now = new Date();
+  var from = new Date(now.getTime() - (days - 1) * 24 * 3600 * 1000);
+  return "BETWEEN '" + Utilities.formatDate(from, tz, 'yyyy-MM-dd') + "' AND '" + Utilities.formatDate(now, tz, 'yyyy-MM-dd') + "'";
 }
 
 function bare(t) {
