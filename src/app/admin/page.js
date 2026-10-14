@@ -8,6 +8,8 @@ import { buildCreatives, CREATIVES_SINCE } from '@/lib/creatives';
 import { CreativesTab } from '@/lib/creativesView';
 import { buildTgPerformance } from '@/lib/tgPerformance';
 import { TgPerformanceTab } from '@/lib/tgPerformanceView';
+import { buildGooglePerformance } from '@/lib/googlePerformance';
+import { GooglePerformanceTab } from '@/lib/googlePerformanceView';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,6 +33,7 @@ function brokenInRange(from, to) {
 const TABS = [
   { key: 'meta', label: 'Перформанс на Мете', owner: true },
   { key: 'telegram', label: 'Перформанс TG', owner: true },
+  { key: 'google', label: 'Перформанс Google', owner: true },
   { key: 'creatives', label: 'Креативы', owner: true },
   { key: 'funnel', label: 'Воронка', owner: false },
   { key: 'work', label: 'Заявки и уроки', owner: false },
@@ -89,6 +92,7 @@ export default async function AdminPage({ searchParams }) {
   const sort = ['spend', 'lesson', 'bookings', 'attended'].includes(params?.sort) ? params.sort : 'spend';
   const creatives = tab === 'creatives' ? await buildCreatives({ from, to }) : null;
   const tgPerf = tab === 'telegram' ? await buildTgPerformance({ from, to }) : null;
+  const gPerf = tab === 'google' ? await buildGooglePerformance({ from, to }) : null;
 
   const source = ['meta', 'telegram', 'google', 'organic'].includes(params?.source) ? params.source : 'all';
   const data = await buildAnalytics({ from, to, source });
@@ -234,6 +238,8 @@ export default async function AdminPage({ searchParams }) {
             channelForLink={typeof params?.ch === 'string' ? params.ch : ''}
           />
         )}
+
+        {tab === 'google' && gPerf && <GooglePerformanceTab data={gPerf} />}
 
         {tab === 'creatives' && creatives && (
           <CreativesTab

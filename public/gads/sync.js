@@ -212,23 +212,45 @@ function main() {
     }
   } catch (e) { errors.push('Статистика: ' + e); }
 
-  report(cfg, changes, errors, stats, terms, dry);
+  // --- Расход, клики и показы по дням и по фразам за 30 дней (для «Перформанс Google») ---
+  var daily = [];
+  var kwDaily = [];
+  try {
+    var dq = AdsApp.search('SELECT segments.date, metrics.impressions, metrics.clicks, metrics.cost_micros FROM campaign ' +
+      'WHERE campaign.id = ' + campaign.getId() + ' AND segments.date DURING LAST_30_DAYS');
+    while (dq.hasNext()) {
+      var dr = dq.next();
+      daily.push({ date: dr.segments.date, impressions: Number(dr.metrics.impressions || 0),
+        clicks: Number(dr.metrics.clicks || 0), cost: Number(dr.metrics.costMicros || 0) / 1e6 });
+    }
+    var kq = AdsApp.search('SELECT segments.date, ad_group_criterion.keyword.text, metrics.impressions, metrics.clicks, metrics.cost_micros ' +
+      'FROM keyword_view WHERE campaign.id = ' + campaign.getId() + ' AND segments.date DURING LAST_30_DAYS AND metrics.impressions > 0');
+    while (kq.hasNext()) {
+      var kr = kq.next();
+      kwDaily.push({ date: kr.segments.date, keyword: kr.adGroupCriterion.keyword.text, impressions: Number(kr.metrics.impressions || 0),
+        clicks: Number(kr.metrics.clicks || 0), cost: Number(kr.metrics.costMicros || 0) / 1e6 });
+    }
+  } catch (e) { errors.push('Дни: ' + e); }
+
+  report(cfg, changes, errors, stats, terms, dry, daily, kwDaily);
 }
 
 function bare(t) {
   return String(t).toLowerCase().replace(/^[\s"\[+]+|[\s"\]]+$/g, '').replace(/\s+/g, ' ');
 }
 
-function report(cfg, changes, errors, stats, terms, dry) {
+function report(cfg, changes, errors, stats, terms, dry, daily, kwDaily) {
   var body = {
     version: cfg && cfg.version,
     dryRun: !!dry,
     changes: changes,
     errors: errors,
     stats: stats,
-    searchTerms: terms
+    searchTerms: terms,
+    daily: daily || [],
+    keywordsDaily: kwDaily || []
   };
-  Logger.log(JSON.stringify(body, null, 1));
+  Logger.log(JSON.stringify({ version: body.version, changes: changes, errors: errors, stats: stats, days: body.daily.length, keywordRows: body.keywordsDaily.length }, null, 1));
   try {
     UrlFetchApp.fetch(REPORT_URL, {
       method: 'post',
