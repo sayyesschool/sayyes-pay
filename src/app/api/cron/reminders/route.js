@@ -4,6 +4,7 @@ import { sendMessage, formatReminder, formatHandout, bookingActionsKeyboard, for
 import { notifyManagers, notifyHost } from '@/lib/managers';
 import { sendHandoutEmail, sendConfirmRequestEmail, sendLessonReminderEmail, sendReviveEmail, sendSlotReleasedEmail } from '@/lib/email';
 import { reviveTelegram, reviveKeyboard, reviveDueAt } from '@/lib/revive';
+import { isClientNight, clientDayHoursBetween } from '@/lib/time';
 
 // Protect cron endpoint
 const CRON_SECRET = process.env.CRON_SECRET;
@@ -98,12 +99,17 @@ export async function GET(request) {
 
       const hoursUntil = (slotDate - now) / (1000 * 60 * 60);
 
+      // Ночью по времени клиента (22:00-9:00) ему не пишем: ни просьб подтвердить,
+      // ни памяток, ни реанимации. Касание дожидается утра. Исключение одно:
+      // напоминание за час до урока, человек в это время уже собирается на урок.
+      const clientNight = isClientNight(booking, now);
+
       // Окна намеренно широкие, а не «ровно за сутки». GitHub Actions на бесплатном
       // тарифе выполняет расписание не каждые 15 минут, как записано, а раз в 4–5 часов:
       // 2 сентября запуски были в 07:06, 11:39 и 15:52. Узкое двухчасовое окно такой
       // планировщик просто перепрыгивает, и напоминание не уходит вообще.
       // От повторов защищает флаг reminded24h, а не ширина окна.
-      if (booking.chatId && !booking.reminded24h && hoursUntil > 1.5 && hoursUntil < 25) {
+      if (booking.chatId && !booking.reminded24h && !clientNight && hoursUntil > 1.5 && hoursUntil < 25) {
         // За сутки просим явного «буду»: без него мы не знаем, кто придёт,
         // а человек не делает ни одного действия между заявкой и уроком.
         await sendMessage(
@@ -118,7 +124,7 @@ export async function GET(request) {
 
       // Тем, у кого нет чата с ботом, то же самое письмом. Без этого человек
       // между заявкой и уроком не получал от нас ни одного касания.
-      if (!booking.chatId && booking.email && !booking.mailed24h && hoursUntil > 1.5 && hoursUntil < 25) {
+      if (!booking.chatId && booking.email && !booking.mailed24h && !clientNight && hoursUntil > 1.5 && hoursUntil < 25) {
         // Флаг ставим только если письмо реально ушло. 18.09.2026 у почтового
         // провайдера кончились кредиты — письма падали, а флаг вставал, и крон
         // к этим людям больше не возвращался. Поломка почты не должна навсегда
@@ -137,7 +143,7 @@ export async function GET(request) {
       // То есть теряем мы их на канале, а не на нежелании: одного письма за сутки
       // им мало. Окно 6,5–14 часов подобрано так, чтобы письмо успело уйти
       // ДО автоснятия неподтверждённых, которое срабатывает за 6 часов до урока.
-      if (!booking.chatId && booking.email && !booking.confirmed && !booking.mailed12h
+      if (!booking.chatId && booking.email && !booking.confirmed && !booking.mailed12h && !clientNight
         && hoursUntil > 6.5 && hoursUntil < 14) {
         const mail = await sendConfirmRequestEmail(booking);
 
@@ -183,7 +189,7 @@ export async function GET(request) {
       // письмо всё равно уйдёт.
       // Записался заранее — шлём за сутки до урока. Записался впритык — через 2,5 часа
       // после записи. Ближе чем за полтора часа до начала уже не шлём: это спам.
-      if (!booking.handoutSent && hoursUntil > 1.5) {
+      if (!booking.handoutSent && !clientNight && hoursUntil > 1.5) {
         const createdAt = booking.createdAt ? new Date(booking.createdAt) : null;
         const leadHours = createdAt ? (slotDate - createdAt) / (1000 * 60 * 60) : 0;
         const dueAt = leadHours > 24
@@ -250,6 +256,12 @@ export async function GET(request) {
       const createdAtMs = startedAt ? new Date(startedAt).getTime() : null;
       const leadHours = createdAtMs ? (slotDate.getTime() - createdAtMs) / (1000 * 60 * 60) : 999;
 
+      // 23.10.2026: порога «12 часов от записи» мало, если эти часы ночные. Кристина
+      // записалась в 22:30 по своему времени, запись сняли в 06:00 МСК, пока она спала.
+      // Снимаем, только если с момента записи у человека было не меньше 6 дневных часов
+      // (9:00-22:00 по его поясу) и сейчас у него не ночь.
+      const dayHoursToConfirm = createdAtMs ? clientDayHoursBetween(booking, createdAtMs, now.getTime()) : 999;
+
       // Вернули руками — больше не трогаем. 16.09.2026 это стоило трёх живых уроков:
       // Дима вернул записи через /restore, а крон в ту же минуту снял их снова — урок
       // ближе шести часов, подтверждения нет, условие сошлось. Получилась петля,
@@ -260,6 +272,8 @@ export async function GET(request) {
         && !booking.restoredAt
         && booking.status !== 'cancelled'
         && leadHours >= 12
+        && dayHoursToConfirm >= 6
+        && !clientNight
         && hoursUntil > 0 && hoursUntil < 6) {
         await updateBooking(booking.id, {
           status: 'cancelled',
@@ -325,7 +339,7 @@ export async function GET(request) {
       // REVIVE_ENABLED=1 в переменных окружения. Без неё код живёт, но молчит —
       // тексты сначала смотрят глазами через /revive в боте.
       if (process.env.REVIVE_ENABLED === '1'
-        && booking.attended === false && !booking.reviveStopped && (booking.reviveStep || 0) < 3) {
+        && booking.attended === false && !booking.reviveStopped && (booking.reviveStep || 0) < 3 && !clientNight) {
         let startedAt = booking.reviveStartAt ? new Date(booking.reviveStartAt).getTime() : 0;
 
         if (!startedAt) {

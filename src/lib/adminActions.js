@@ -326,7 +326,7 @@ export async function rescheduleBooking(bookingId, slotKey, by) {
 
   if (booking.chatId) {
     await sendMessage(booking.chatId,
-      'Мы перенесли ваш пробный урок.\n\nНовое время: ' + date + ', ' + time + ' (МСК)\n\n'
+      'Мы перенесли ваш пробный урок.\n\nНовое время: ' + clientWhen(updated) + '\n\n'
       + 'Если время не подходит — напишите, подберём другое.');
   }
 

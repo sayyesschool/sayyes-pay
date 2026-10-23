@@ -137,3 +137,36 @@ export function tzNoteFor(booking) {
   const label = tzLabel(booking);
   return label ? `для вашего пояса: ${label}` : 'для вашего часового пояса';
 }
+
+// --- Тихие часы клиента ---
+// 23.10.2026 Кристина записалась в 22:30 по своему времени на урок в 11:00 следующего дня.
+// Памятка с просьбой подтвердить пришла ей ночью, а в 06:00 МСК автоматика сняла
+// запись: формально до урока было 12,5 часа, но все они пришлись на сон.
+// Правило: клиенту не пишем ночью по ЕГО времени, а «время на подтверждение»
+// считаем только дневными часами.
+export const DAY_START_HOUR = 9;
+export const DAY_END_HOUR = 22;
+
+export function clientHour(booking, date = new Date()) {
+  const { tz } = resolveTz(booking);
+  const p = partsIn(date, tz);
+  if (!p) return date.getUTCHours();
+  return Number(p.hour) % 24;
+}
+
+// Ночь у клиента: с 22:00 до 9:00 по его поясу.
+export function isClientNight(booking, date = new Date()) {
+  const h = clientHour(booking, date);
+  return h >= DAY_END_HOUR || h < DAY_START_HOUR;
+}
+
+// Сколько дневных часов клиента (9:00-22:00 по его поясу) прошло между двумя моментами.
+export function clientDayHoursBetween(booking, fromMs, toMs) {
+  if (!fromMs || !toMs || toMs <= fromMs) return 0;
+  const STEP = 15 * 60 * 1000;
+  let awake = 0;
+  for (let t = fromMs; t < toMs; t += STEP) {
+    if (!isClientNight(booking, new Date(t))) awake += Math.min(STEP, toMs - t);
+  }
+  return awake / (60 * 60 * 1000);
+}
