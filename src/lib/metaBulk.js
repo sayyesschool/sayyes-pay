@@ -308,7 +308,9 @@ export const accountId = ACCOUNT;
 // объявления можно класть только в опубликованную группу.
 export async function createStructure(spec) {
   const act = '/act_' + ACCOUNT();
-  const camp = await graph('POST', act + '/campaigns', {
+  // campaign_id в спеке: группы добавляются в уже идущую кампанию (31.10.2026,
+  // тест новых креативов отдельной группой). Без него создаётся новая кампания.
+  const camp = spec.campaign_id ? { id: String(spec.campaign_id) } : await graph('POST', act + '/campaigns', {
     name: spec.campaign,
     objective: spec.objective || 'OUTCOME_LEADS',
     buying_type: 'AUCTION',
