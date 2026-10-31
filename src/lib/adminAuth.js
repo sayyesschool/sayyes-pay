@@ -1,27 +1,16 @@
 import crypto from 'crypto';
-import { MANAGER_USERNAMES } from '@/lib/telegram';
+import { rightsOf, has, SUPER_USERNAMES } from '@/lib/access';
+
+// Права хранятся в «Доступах» (src/lib/access.js). Сессия подписывает только
+// username, права читаются при каждом запросе: снятое право действует сразу,
+// без перелогина.
+export const OWNER_USERNAMES = SUPER_USERNAMES;
+
+export { has };
 
 // Секрет для подписи сессии берём из токена бота: он и так есть в окружении,
-// и отдельную переменную заводить незачем. Сменится токен — разлогинятся все,
-// это приемлемо.
+// и отдельную переменную заводить незачем. Сменится токен - разлогинятся все.
 const secret = () => process.env.TELEGRAM_BOT_TOKEN || 'sy-dev-secret';
-
-// Управляющие видят деньги и аналитику целиком. Остальные менеджеры — только
-// свою работу. Список переопределяется переменной окружения.
-export const OWNER_USERNAMES = (process.env.OWNER_TG_USERNAMES || 'dp_1988,olia_pi')
-  .split(',')
-  .map(name => name.trim().replace(/^@/, '').toLowerCase())
-  .filter(Boolean);
-
-export function roleOf(username) {
-  const name = String(username || '').trim().replace(/^@/, '').toLowerCase();
-
-  if (!name) return null;
-  if (OWNER_USERNAMES.includes(name)) return 'owner';
-  if (MANAGER_USERNAMES.includes(name)) return 'manager';
-
-  return null;
-}
 
 export const SESSION_COOKIE = 'sy_admin';
 
@@ -34,7 +23,7 @@ export function signSession(username, days = 30) {
   return body + '.' + sig;
 }
 
-export function readSession(token) {
+export async function readSession(token) {
   if (!token) return null;
 
   const parts = String(token).split('.');
@@ -47,9 +36,14 @@ export function readSession(token) {
   if (sig !== want) return null;
   if (!Number(exp) || Number(exp) < Date.now()) return null;
 
-  const role = roleOf(username);
+  const rights = await rightsOf(username);
 
-  if (!role) return null;
+  if (!rights.length) return null;
 
-  return { username, role };
+  // role оставлен для старых проверок и подписи в шапке: owner = супер-админ.
+  return { username, rights, role: has(rights, 'super') ? 'owner' : 'manager' };
+}
+
+export function can(session, right) {
+  return Boolean(session) && has(session.rights, right);
 }

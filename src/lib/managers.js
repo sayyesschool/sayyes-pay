@@ -1,5 +1,6 @@
 import { getManagerChatId, kvGet } from '@/lib/redis';
-import { sendMessage, MANAGER_USERNAMES } from '@/lib/telegram';
+import { sendMessage } from '@/lib/telegram';
+import { managerUsernames } from '@/lib/access';
 
 // Telegram не даёт боту писать человеку первым, поэтому chat id менеджера
 // появляется только после того, как он сам написал боту. Храним его по username.
@@ -9,7 +10,8 @@ import { sendMessage, MANAGER_USERNAMES } from '@/lib/telegram';
 export async function getManagerChatMap() {
   const map = {};
 
-  for (const username of MANAGER_USERNAMES) {
+  // Список менеджеров берётся из «Доступов» (право «Базовый» и супер-админы).
+  for (const username of await managerUsernames()) {
     const own = await kvGet(`manager_chat:${username}`);
     const fallback = await kvGet(`user_chat:${username}`);
     const id = own || fallback;
@@ -29,8 +31,10 @@ export async function getManagerChatIds() {
 
   // Старый глобальный слот: его перезаписывает каждый новый менеджер, нажавший /start,
   // поэтому он только дополнение, а не источник правды.
+  // С 31.10.2026 (раздел «Доступы») берём его, только если персональных чатов нет вовсе:
+  // иначе удалённый из доступов человек, последним нажавший /start, продолжал бы получать заявки.
   const primary = await getManagerChatId();
-  if (primary && !ids.includes(String(primary))) ids.push(String(primary));
+  if (primary && !ids.length) ids.push(String(primary));
 
   return ids;
 }
@@ -107,4 +111,24 @@ export async function notifyManagers(text, keyboard) {
   }
 
   return ids.length;
+}
+
+// Сообщение конкретным людям по username (например, супер-админам об изменении доступов).
+export async function notifyUsers(usernames, text) {
+  let sent = 0;
+
+  for (const username of usernames || []) {
+    const id = (await kvGet(`manager_chat:${username}`)) || (await kvGet(`user_chat:${username}`));
+
+    if (!id) continue;
+
+    try {
+      await sendMessage(String(id), text);
+      sent++;
+    } catch (e) {
+      console.error('notifyUsers error:', username, e);
+    }
+  }
+
+  return sent;
 }

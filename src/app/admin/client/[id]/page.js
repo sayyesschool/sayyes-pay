@@ -1,6 +1,6 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { SESSION_COOKIE, readSession } from '@/lib/adminAuth';
+import { SESSION_COOKIE, readSession, can } from '@/lib/adminAuth';
 import { statusTags } from '@/lib/adminUi';
 import { Shell } from '@/lib/adminShell';
 import { getBooking, getBookedSlots } from '@/lib/redis';
@@ -37,9 +37,10 @@ function fmt(value) {
 
 export default async function ClientPage({ params, searchParams }) {
   const store = await cookies();
-  const session = readSession(store.get(SESSION_COOKIE)?.value);
+  const session = await readSession(store.get(SESSION_COOKIE)?.value);
 
   if (!session) redirect('/admin/login');
+  if (!can(session, 'base')) redirect('/admin/work');
 
   const { id } = await params;
   const query = await searchParams;

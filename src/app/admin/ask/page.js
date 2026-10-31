@@ -15,7 +15,7 @@ const EXAMPLES = [
 
 export default async function AskPage({ searchParams }) {
   const store = await cookies();
-  const session = readSession(store.get(SESSION_COOKIE)?.value);
+  const session = await readSession(store.get(SESSION_COOKIE)?.value);
 
   if (!session) redirect('/admin/login');
 

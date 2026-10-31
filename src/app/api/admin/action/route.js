@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { SESSION_COOKIE, readSession } from '@/lib/adminAuth';
+import { SESSION_COOKIE, readSession, can } from '@/lib/adminAuth';
+import { addUser, saveRights, removeUser, RIGHTS, superUsernames } from '@/lib/access';
+import { notifyUsers } from '@/lib/managers';
 import {
   markAttendance, cancelBooking, rescheduleBooking,
   sendPayLink, markPaid, messageStudent, archiveUnmarked, restoreBooking,
@@ -15,20 +17,57 @@ import { addTgSpend, deleteTgSpend } from '@/lib/tgPerformance';
 // когда у ведущей плохой интернет в момент урока.
 export async function POST(request) {
   const store = await cookies();
-  const session = readSession(store.get(SESSION_COOKIE)?.value);
+  const session = await readSession(store.get(SESSION_COOKIE)?.value);
 
   if (!session) return NextResponse.redirect(new URL('/admin/login', request.url), 303);
 
   const form = await request.formData();
-  const action = String(form.get('action') || '');
+  let action = String(form.get('action') || '');
+  // Кнопка «Удалить» в таблице доступов несёт имя прямо в значении: она живёт в общей форме прав.
+  let delUser = '';
+
+  if (action.startsWith('access-del:')) {
+    delUser = action.slice('access-del:'.length);
+    action = 'access-del';
+  }
   const id = String(form.get('id') || '');
   const back = String(form.get('back') || '/admin/work');
   const by = session.username;
 
   let result = { ok: false, error: 'Неизвестное действие' };
 
+  // Какое право нужно для действия. Всё, чего нет в списке, относится к «Базовому».
+  const NEED = {
+    'tg-spend-add': 'finance', 'tg-spend-del': 'finance',
+    'attach-pi': 'finance', 'detach-pi': 'finance', 'unskip-pi': 'finance',
+    'week-hours': 'schedule', 'slot-close': 'schedule', 'slot-open': 'schedule',
+    'access-add': 'super', 'access-save': 'super', 'access-del': 'super'
+  };
+  const need = NEED[action] || 'base';
+
+  if (!can(session, need)) {
+    const url = new URL(back, request.url);
+
+    url.searchParams.set('msg', 'Ошибка: нет права для этого действия');
+
+    return NextResponse.redirect(url, 303);
+  }
+
   try {
-    if (action === 'attended') result = await markAttendance(id, true, by);
+    if (action === 'access-add') {
+      result = await addUser(form.get('username'), RIGHTS.filter(r => form.get('r_' + r)), by);
+    }
+    else if (action === 'access-save') {
+      const table = {};
+
+      for (const name of form.getAll('user').map(String)) {
+        table[name] = RIGHTS.filter(r => form.get(name + '__' + r));
+      }
+
+      result = await saveRights(table, by);
+    }
+    else if (action === 'access-del') result = await removeUser(delUser || String(form.get('username') || ''), by);
+    else if (action === 'attended') result = await markAttendance(id, true, by);
     else if (action === 'noshow') result = await markAttendance(id, false, by);
     else if (action === 'cancel') result = await cancelBooking(id, by);
     else if (action === 'restore') result = await restoreBooking(id, by);
@@ -45,59 +84,32 @@ export async function POST(request) {
     else if (action === 'archive-unmarked') result = await archiveUnmarked(form.get('days'), by);
     // Оплата есть в Stripe, а заявке о ней ничего не известно: счёт выставили
     // руками, вебхук не дошёл, платили не по нашей ссылке. Связываем их здесь.
-    // Расход на посевы в Telegram: вводит только управляющий (страница «Перформанс TG»).
-    else if (action === 'tg-spend-add' || action === 'tg-spend-del') {
-      if (session.role !== 'owner') {
-        result = { ok: false, error: 'Расходы вводят только управляющие' };
-      } else if (action === 'tg-spend-add') {
-        result = await addTgSpend({
-          channel: form.get('channel'), date: String(form.get('date') || ''),
-          amountEuro: form.get('amount'), note: form.get('note'), by
-        });
-      } else {
-        result = await deleteTgSpend(id);
-      }
+    // Расход на посевы в Telegram (страница «Перформанс TG»), право «Финансы».
+    else if (action === 'tg-spend-add') {
+      result = await addTgSpend({
+        channel: form.get('channel'), date: String(form.get('date') || ''),
+        amountEuro: form.get('amount'), note: form.get('note'), by
+      });
     }
-    else if (action === 'attach-pi') {
-      if (session.role !== 'owner') {
-        result = { ok: false, error: 'Оплаты привязывают только управляющие' };
-      } else {
-        result = await attachPayment(String(form.get('pi') || ''), id, by);
-      }
-    }
+    else if (action === 'tg-spend-del') result = await deleteTgSpend(id);
+    else if (action === 'attach-pi') result = await attachPayment(String(form.get('pi') || ''), id, by);
     // И наоборот: счёт постоянному ученику мог совпасть по почте с заявкой.
     // К воронке он отношения не имеет, и метка держит его отвязанным навсегда.
-    else if (action === 'detach-pi' || action === 'unskip-pi') {
-      if (session.role !== 'owner') {
-        result = { ok: false, error: 'Оплаты привязывают только управляющие' };
-      } else {
-        const pi = String(form.get('pi') || '');
-
-        result = action === 'detach-pi' ? await detachPayment(pi, by) : await unskipPayment(pi);
-      }
-    }
-    // Расписанием распоряжаются только управляющие: это не ежедневная работа,
-    // а решение про загрузку школы.
-    // Часы работы на день недели: задаётся раз, действует на все будущие
-    // такие дни. До этого короткий день приходилось собирать вручную каждую неделю.
+    else if (action === 'detach-pi') result = await detachPayment(String(form.get('pi') || ''), by);
+    else if (action === 'unskip-pi') result = await unskipPayment(String(form.get('pi') || ''));
+    // Часы работы на день недели: задаётся раз, действует на все будущие такие дни.
     else if (action === 'week-hours') {
-      if (session.role !== 'owner') {
-        result = { ok: false, error: 'Расписание меняют только управляющие' };
-      } else {
-        result = await setWeekHours(
-          form.get('dow'),
-          String(form.get('from') || ''),
-          String(form.get('to') || '')
-        );
-      }
+      result = await setWeekHours(form.get('dow'), String(form.get('from') || ''), String(form.get('to') || ''));
     }
-    else if (action === 'slot-close' || action === 'slot-open') {
-      if (session.role !== 'owner') {
-        result = { ok: false, error: 'Расписание меняют только управляющие' };
-      } else {
-        const slots = form.getAll('slot').map(String).filter(Boolean);
+    else if (action === 'slot-close') result = await blockSlots(form.getAll('slot').map(String).filter(Boolean), by);
+    else if (action === 'slot-open') result = await openSlots(form.getAll('slot').map(String).filter(Boolean));
 
-        result = action === 'slot-close' ? await blockSlots(slots, by) : await openSlots(slots);
+    // Изменения доступов видят все супер-админы: права раздаются молча только у плохих систем.
+    if (result.ok && result.notice) {
+      try {
+        await notifyUsers(await superUsernames(), result.notice);
+      } catch (e) {
+        console.error('Access notice error:', e);
       }
     }
   } catch (e) {

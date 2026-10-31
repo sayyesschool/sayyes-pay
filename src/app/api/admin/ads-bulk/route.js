@@ -1,5 +1,5 @@
 import { cookies } from 'next/headers';
-import { SESSION_COOKIE, readSession } from '@/lib/adminAuth';
+import { SESSION_COOKIE, readSession, can } from '@/lib/adminAuth';
 import { loadLibrary, parseCsv, planRow, runBulk, ready, accountId, createStructure } from '@/lib/metaBulk';
 
 export const dynamic = 'force-dynamic';
@@ -21,9 +21,9 @@ function page(title, body) {
 
 export async function POST(request) {
   const store = await cookies();
-  const session = readSession(store.get(SESSION_COOKIE)?.value);
+  const session = await readSession(store.get(SESSION_COOKIE)?.value);
 
-  if (!session || session.role !== 'owner') return page('Нет доступа', '<p>Только для управляющих.</p>');
+  if (!session || !can(session, 'super')) return page('Нет доступа', '<p>Только для супер-админов.</p>');
 
   const problem = ready();
   if (problem) return page('Не настроено', '<p class="err">' + esc(problem) + '</p>');

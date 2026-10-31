@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function WikiPage({ params, searchParams }) {
   const store = await cookies();
-  const session = readSession(store.get(SESSION_COOKIE)?.value);
+  const session = await readSession(store.get(SESSION_COOKIE)?.value);
 
   if (!session) redirect('/admin/login');
 

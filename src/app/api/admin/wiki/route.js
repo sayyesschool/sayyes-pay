@@ -6,7 +6,7 @@ import { syncSeed } from '@/lib/wikiSeed';
 
 export async function POST(request) {
   const store = await cookies();
-  const session = readSession(store.get(SESSION_COOKIE)?.value);
+  const session = await readSession(store.get(SESSION_COOKIE)?.value);
 
   if (!session) return NextResponse.redirect(new URL('/admin/login', request.url), 303);
 

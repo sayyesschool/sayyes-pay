@@ -1,6 +1,6 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { SESSION_COOKIE, readSession } from '@/lib/adminAuth';
+import { SESSION_COOKIE, readSession, can } from '@/lib/adminAuth';
 import { statusTags, whenLabel } from '@/lib/adminUi';
 import { Shell } from '@/lib/adminShell';
 import { loadBookings, slotStartMs, dayKey, today } from '@/lib/analytics';
@@ -90,9 +90,11 @@ function List({ items, empty }) {
 
 export default async function ManagePage({ searchParams }) {
   const store = await cookies();
-  const session = readSession(store.get(SESSION_COOKIE)?.value);
+  const session = await readSession(store.get(SESSION_COOKIE)?.value);
 
   if (!session) redirect('/admin/login');
+  // Только «Финансы»: сразу в аналитику.
+  if (!can(session, 'base') && !can(session, 'schedule')) redirect('/admin');
 
   const params = await searchParams;
   const query = String(params?.q || '');
@@ -101,7 +103,7 @@ export default async function ManagePage({ searchParams }) {
   const month = /^\d{4}-\d{2}$/.test(String(params?.month || '')) ? params.month : todayKey.slice(0, 7);
   const selected = /^\d{4}-\d{2}-\d{2}$/.test(String(params?.day || '')) ? params.day : todayKey;
 
-  const owner = session.role === 'owner';
+  const owner = can(session, 'schedule');
   const all = await loadBookings();
   const booked = owner ? await getBookedSlots() : [];
   const blocked = owner ? await getBlocked() : [];

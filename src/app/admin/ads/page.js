@@ -1,6 +1,6 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { SESSION_COOKIE, readSession } from '@/lib/adminAuth';
+import { SESSION_COOKIE, readSession, can } from '@/lib/adminAuth';
 import { Shell } from '@/lib/adminShell';
 import { COLUMNS, STRUCTURE_SAMPLE } from '@/lib/metaBulk';
 
@@ -15,10 +15,10 @@ const SAMPLE = [
 
 export default async function AdsPage() {
   const store = await cookies();
-  const session = readSession(store.get(SESSION_COOKIE)?.value);
+  const session = await readSession(store.get(SESSION_COOKIE)?.value);
 
   if (!session) redirect('/admin/login');
-  if (session.role !== 'owner') redirect('/admin/work');
+  if (!can(session, 'super')) redirect('/admin/work');
 
   return (
     <Shell session={session} active="ads" title="Выгрузка объявлений">

@@ -1,6 +1,6 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { SESSION_COOKIE, readSession } from '@/lib/adminAuth';
+import { SESSION_COOKIE, readSession, can } from '@/lib/adminAuth';
 import { buildAnalytics, shiftDay, today } from '@/lib/analytics';
 import { getAdsInsights } from '@/lib/metaAds';
 import { Shell } from '@/lib/adminShell';
@@ -73,11 +73,11 @@ function monthEdges(back) {
 
 export default async function AdminPage({ searchParams }) {
   const store = await cookies();
-  const session = readSession(store.get(SESSION_COOKIE)?.value);
+  const session = await readSession(store.get(SESSION_COOKIE)?.value);
 
   if (!session) redirect('/admin/login');
 
-  const owner = session.role === 'owner';
+  const owner = can(session, 'finance');
 
   // Аналитика — только для управляющих. Менеджерам туда не нужно,
   // и скрыть пункт в меню недостаточно: адрес можно набрать руками.

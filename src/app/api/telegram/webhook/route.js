@@ -22,10 +22,11 @@ import {
   sendMessage, editMessage, answerCallback, forwardMessage,
   bookingActionsKeyboard, confirmCancelKeyboard, slotsKeyboard,
   managerActionsKeyboard, formatBookingConfirmation, formatBookingForManager,
-  formatReminder, isManager, attendanceKeyboard, makeDeepLink, MANAGER_USERNAME, MANAGER_USERNAMES,
+  formatReminder, attendanceKeyboard, makeDeepLink, MANAGER_USERNAME,
   formatManagerCard
 } from '@/lib/telegram';
 import { notifyManagers, isManagerChat, getManagerChatIds, getManagerChatMap } from '@/lib/managers';
+import { isBotManager, managerUsernames } from '@/lib/access';
 
 // Verify webhook secret (optional extra security)
 const WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET;
@@ -176,7 +177,7 @@ async function handleStart(chatId, username, args) {
       return;
     }
 
-    if (!isManager(username)) {
+    if (!(await isBotManager(username))) {
       await sendMessage(chatId, 'Этот аккаунт не в списке менеджеров школы — в админку он не пускает.');
 
       return;
@@ -197,7 +198,7 @@ async function handleStart(chatId, username, args) {
   }
 
   // Check if manager
-  if (isManager(username)) {
+  if ((await isBotManager(username))) {
     // Персональный ключ: раньше был один общий слот, и каждый новый
     // менеджер выталкивал из уведомлений предыдущего.
     await kvSet(`manager_chat:${String(username).toLowerCase()}`, String(chatId));
@@ -880,7 +881,7 @@ function statsWindow(text) {
 // молчание бота у конкретного человека никак не видно со стороны.
 async function handleWhoCommand(chatId) {
   const map = await getManagerChatMap();
-  const lines = MANAGER_USERNAMES.map(username => {
+  const lines = (await managerUsernames()).map(username => {
     const id = map[username];
     return `${id ? '✅' : '⛔️'} @${username}${id ? '' : ' — не нажал «Начать», уведомления не идут'}`;
   });
@@ -2870,7 +2871,7 @@ export async function POST(request) {
         return NextResponse.json({ ok: true });
       }
 
-      if (!isManager(username)) {
+      if (!(await isBotManager(username))) {
         const autoLinkedId = await linkByUsername(chatId, username);
         if (autoLinkedId) return NextResponse.json({ ok: true });
 
@@ -2886,7 +2887,7 @@ export async function POST(request) {
       // Кто пишет, выясняем до того, как решать, чей это сценарий. Менеджер со своей
       // тестовой записью попадал в клиентскую пересылку: его «привет» уходил всем
       // менеджерам с шапкой «Сообщение от …». Режим пересылки у менеджеров гасим.
-      const senderIsManager = isManager(username) || await isManagerChat(chatId);
+      const senderIsManager = (await isBotManager(username)) || await isManagerChat(chatId);
 
       if (senderIsManager) {
         await kvDel(`relay:${chatId}`);

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { kvGet, kvDel } from '@/lib/redis';
-import { SESSION_COOKIE, roleOf, signSession } from '@/lib/adminAuth';
+import { SESSION_COOKIE, signSession } from '@/lib/adminAuth';
+import { rightsOf, has } from '@/lib/access';
 
 export async function GET(request) {
   const nonce = new URL(request.url).searchParams.get('n');
@@ -12,10 +13,11 @@ export async function GET(request) {
   if (!record) return NextResponse.json({ ok: false, error: 'expired' });
   if (!record.username) return NextResponse.json({ ok: false });
 
-  const role = roleOf(record.username);
+  const rights = await rightsOf(record.username);
+  const role = has(rights, 'super') ? 'owner' : 'manager';
 
-  // Код подтверждён из бота, но аккаунт не менеджер — дальше не пускаем.
-  if (!role) {
+  // Код подтверждён из бота, но у аккаунта нет ни одного права - дальше не пускаем.
+  if (!rights.length) {
     await kvDel('adminlogin:' + nonce);
 
     return NextResponse.json({ ok: false, error: 'no-access' });
