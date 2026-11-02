@@ -41,13 +41,21 @@ export function resolveTz(booking) {
   return tz ? { tz, assumed: false } : { tz: DEFAULT_TZ(), assumed: true };
 }
 
+// Форматтер на каждый пояс создаётся один раз: создание Intl.DateTimeFormat
+// дорогое, а крон зовёт эту функцию для каждой заявки.
+const FMT = new Map();
+
 function partsIn(date, tz) {
   try {
-    const fmt = new Intl.DateTimeFormat('en-GB', {
-      timeZone: tz,
-      hour: '2-digit', minute: '2-digit', hour12: false,
-      year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'short'
-    });
+    let fmt = FMT.get(tz);
+    if (!fmt) {
+      fmt = new Intl.DateTimeFormat('en-GB', {
+        timeZone: tz,
+        hour: '2-digit', minute: '2-digit', hour12: false,
+        year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'short'
+      });
+      FMT.set(tz, fmt);
+    }
     const out = {};
     for (const p of fmt.formatToParts(date)) out[p.type] = p.value;
     return out;
@@ -161,8 +169,13 @@ export function isClientNight(booking, date = new Date()) {
 }
 
 // Сколько дневных часов клиента (9:00-22:00 по его поясу) прошло между двумя моментами.
+// 02.11.2026: раньше считалось шагами по 15 минут за ВЕСЬ срок с момента записи,
+// для старых заявок это месяцы, и крон с 23.10 перестал укладываться во время.
+// Нам важно только, набралось ли 6 дневных часов, а за любые 48 часов их
+// заведомо больше 6, поэтому длинные промежутки дальше не считаем.
 export function clientDayHoursBetween(booking, fromMs, toMs) {
   if (!fromMs || !toMs || toMs <= fromMs) return 0;
+  if (toMs - fromMs > 48 * 60 * 60 * 1000) return 48;
   const STEP = 15 * 60 * 1000;
   let awake = 0;
   for (let t = fromMs; t < toMs; t += STEP) {

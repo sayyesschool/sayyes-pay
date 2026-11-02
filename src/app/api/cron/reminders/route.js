@@ -262,7 +262,8 @@ export async function GET(request) {
       // записалась в 22:30 по своему времени, запись сняли в 06:00 МСК, пока она спала.
       // Снимаем, только если с момента записи у человека было не меньше 6 дневных часов
       // (9:00-22:00 по его поясу) и сейчас у него не ночь.
-      const dayHoursToConfirm = createdAtMs ? clientDayHoursBetween(booking, createdAtMs, now.getTime()) : 999;
+      // Считается только когда остальные условия снятия уже сошлись (см. ниже).
+      const dayHoursToConfirm = () => (createdAtMs ? clientDayHoursBetween(booking, createdAtMs, now.getTime()) : 999);
 
       // Вернули руками — больше не трогаем. 16.09.2026 это стоило трёх живых уроков:
       // Дима вернул записи через /restore, а крон в ту же минуту снял их снова — урок
@@ -274,9 +275,9 @@ export async function GET(request) {
         && !booking.restoredAt
         && booking.status !== 'cancelled'
         && leadHours >= 12
-        && dayHoursToConfirm >= 6
+        && hoursUntil > 0 && hoursUntil < 6
         && !clientNight
-        && hoursUntil > 0 && hoursUntil < 6) {
+        && dayHoursToConfirm() >= 6) {
         await updateBooking(booking.id, {
           status: 'cancelled',
           releasedUnconfirmed: true,
