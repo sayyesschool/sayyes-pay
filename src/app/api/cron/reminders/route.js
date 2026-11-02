@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getAllActiveBookings, updateBooking, getManagerChatId, removeBookedSlot, kvGet, kvSet } from '@/lib/redis';
+import { getCronBookings, updateBooking, getManagerChatId, removeBookedSlot, kvGet, kvSet } from '@/lib/redis';
 import { sendMessage, formatReminder, formatHandout, bookingActionsKeyboard, formatAttendanceAsk, attendanceKeyboard, formatManagerCard, managerActionsKeyboard } from '@/lib/telegram';
 import { notifyManagers, notifyHost } from '@/lib/managers';
 import { sendHandoutEmail, sendConfirmRequestEmail, sendLessonReminderEmail, sendReviveEmail, sendSlotReleasedEmail } from '@/lib/email';
@@ -70,7 +70,9 @@ export async function GET(request) {
   }
 
   try {
-    const bookings = await getAllActiveBookings();
+    // Раз в час читается вся база, в остальные запуски только заявки с уроком рядом
+    // (getCronBookings в redis.js, 02.11.2026: так счёт Upstash падает в ~8 раз).
+    const { bookings, full } = await getCronBookings();
     const now = new Date();
     let sent24h = 0;
     let sent1h = 0;
@@ -338,7 +340,9 @@ export async function GET(request) {
       // Цепочка пишет живым людям сразу в два канала, поэтому включается отдельно:
       // REVIVE_ENABLED=1 в переменных окружения. Без неё код живёт, но молчит —
       // тексты сначала смотрят глазами через /revive в боте.
-      if (process.env.REVIVE_ENABLED === '1'
+      // Реанимация только в полных запусках: ей нужна вся база (проверка «записался
+      // заново»), а касания у неё через дни, часовой шаг ничего не меняет.
+      if (full && process.env.REVIVE_ENABLED === '1'
         && booking.attended === false && !booking.reviveStopped && (booking.reviveStep || 0) < 3 && !clientNight) {
         let startedAt = booking.reviveStartAt ? new Date(booking.reviveStartAt).getTime() : 0;
 
@@ -398,6 +402,7 @@ export async function GET(request) {
     return NextResponse.json({
       ok: true,
       checked: bookings.length,
+      full,
       funnelAlert,
       sent24h,
       sent1h,

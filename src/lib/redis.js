@@ -34,10 +34,9 @@ function decode(raw) {
   }
 }
 
-// Чтение пачкой. Конвейер Upstash считается за ОДИН запрос, сколько бы команд
-// в нём ни было. Раньше каждая заявка читалась отдельно, и одна загрузка
-// админки при 268 заявках стоила 268 обращений к хранилищу. За месяц так
-// набежало 980 тысяч чтений при 13 тысячах записей — и база встала на лимите.
+// Чтение пачкой: один сетевой запрос вместо сотни. ВНИМАНИЕ: в счёте Upstash
+// каждая команда внутри конвейера считается отдельно (проверено по документации
+// 02.11.2026). Пачка экономит время, а не деньги: прочитать 450 заявок стоит 450 команд.
 export async function kvMGet(keys) {
   if (!KV_URL || !KV_TOKEN || !Array.isArray(keys) || !keys.length) return [];
 
@@ -193,8 +192,7 @@ async function kvKeys(pattern) {
 
 // Пометить посетителя и сказать, первый ли он раз за сутки. SADD возвращает 1,
 // если элемент добавлен, и 0, если он уже был — этого достаточно, чтобы считать
-// людей, а не открытия страницы. Одна команда на заход: конвейер Upstash
-// считается за один запрос, сколько бы команд внутри ни было.
+// людей, а не открытия страницы. В счёте это две команды (SADD и EXPIRE).
 export async function kvSeenFirstTime(key, member, exSeconds) {
   if (!KV_URL || !KV_TOKEN) return true;
 
@@ -262,6 +260,7 @@ export async function createBooking(booking) {
   }
 
   await kvSet('booking:' + booking.id, booking);
+  await markCronFresh(booking.id);
 
   return booking;
 }
@@ -284,6 +283,13 @@ export async function updateBooking(bookingId, updates) {
   if (!booking) return null;
   const updated = { ...booking, ...updates };
   await kvSet(`booking:${updated.id}`, updated);
+
+  // Перенос, возврат, смена статуса или отметки: заявка сразу попадает в список
+  // крона, не дожидаясь ежечасного полного чтения.
+  if (['slot', 'status', 'attended', 'restoredAt', 'rescheduledAt'].some(k => k in (updates || {}))) {
+    await markCronFresh(updated.id);
+  }
+
   return updated;
 }
 
@@ -328,6 +334,97 @@ export async function setManagerChatId(chatId) {
 
 export async function getManagerChatId() {
   return await kvGet('manager_chat_id');
+}
+
+// --- Список заявок для крона напоминаний (02.11.2026) ---
+//
+// Крон ходит каждые 5 минут. Раньше каждый запуск читал ВСЕ заявки за всю историю
+// (~450), чтобы найти 10-20 с ближайшими уроками: 288 запусков x 450 = ~130 тыс.
+// команд в день, это и был счёт Upstash (сентябрь 3,76 $, октябрь 7,38 $).
+//
+// Теперь полное чтение раз в час. Оно откладывает в cron:active только заявки,
+// чьё время урока в окне от -80 до +30 часов. Остальные запуски читают этот список
+// плюс cron:fresh (новые, перенесённые, возвращённые заявки, см. createBooking и
+// updateBooking). Содержимое заявок каждый раз читается свежее, с опозданием
+// до часа может обновиться только состав списка.
+const CRON_ACTIVE = 'cron:active';
+const CRON_FRESH = 'cron:fresh';
+const CRON_FULL_EVERY_MS = 55 * 60 * 1000;
+
+async function kvCommand(parts) {
+  if (!KV_URL || !KV_TOKEN) return null;
+
+  try {
+    const resp = await fetch(KV_URL + '/' + parts.map(encodeURIComponent).join('/'), {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + KV_TOKEN }
+    });
+    const data = await resp.json();
+
+    if (data.error) {
+      note(parts[0] + ' ' + parts[1], data.error);
+      return null;
+    }
+
+    return data.result;
+  } catch (e) {
+    note(parts[0] + ' error ' + parts[1], e.message || e);
+    return null;
+  }
+}
+
+export async function markCronFresh(bookingId) {
+  if (!bookingId) return;
+  await kvCommand(['sadd', CRON_FRESH, String(bookingId)]);
+}
+
+function slotMs(booking) {
+  if (!booking || !booking.slot || booking.slot === 'no_time') return null;
+
+  const [d, t] = String(booking.slot).split('_');
+  const [y, mo, day] = (d || '').split('-').map(Number);
+  const [h, m] = (t || '').split(':').map(Number);
+
+  if ([y, mo, day, h, m].some(n => Number.isNaN(n))) return null;
+
+  return Date.UTC(y, mo - 1, day, h - 3, m);
+}
+
+function cronRelevant(booking, now) {
+  const at = slotMs(booking);
+
+  if (!at) return false;
+
+  const hours = (at - now) / 3600000;
+
+  return hours > -80 && hours < 30;
+}
+
+// full: true - прочитана вся база (раз в час); false - только список.
+export async function getCronBookings() {
+  const now = Date.now();
+  const state = await kvGet(CRON_ACTIVE);
+  const fresh = (await kvCommand(['smembers', CRON_FRESH])) || [];
+  const stale = !state || !Array.isArray(state.ids) || !state.at || now - Number(state.at) > CRON_FULL_EVERY_MS;
+
+  if (stale) {
+    const all = await getAllActiveBookings();
+    const ids = all.filter(b => cronRelevant(b, now)).map(b => b.id);
+
+    await kvSet(CRON_ACTIVE, { ids, at: now });
+
+    // Убираем из «свежих» только то, что видели до полного чтения: заявка,
+    // созданная прямо во время него, останется в списке до следующего часа.
+    for (const id of fresh) await kvCommand(['srem', CRON_FRESH, String(id)]);
+
+    return { bookings: all, full: true };
+  }
+
+  const ids = [...new Set([...state.ids, ...fresh.map(String)])];
+  const bookings = (await kvMGet(ids.map(id => 'booking:' + id)))
+    .filter(b => b && b.status === 'confirmed');
+
+  return { bookings, full: false };
 }
 
 // --- Get all active bookings (for reminders/reschedule) ---
