@@ -325,7 +325,14 @@ export function formatBookingForManager(booking, action = 'new') {
 // После того как окна напоминаний расширили, «за сутки» перестало значить «завтра»:
 // заявка может прийти ночью на сегодняшнее утро. Смотрим на реальную дату урока.
 function reminderWhenLabel(booking, hoursLeft) {
-  if (hoursLeft <= 2) return 'через час';
+  // 03.11.2026 (Дима): напоминание «за час» уходит в окне до 2 часов до урока,
+  // и «через час» за 1:50 путает. Пишем время урока в поясе ученика.
+  if (hoursLeft <= 2) {
+    const local = localSlot(booking);
+    const time = local ? local.time : booking.slotLocal;
+
+    return time ? 'в ' + time + (local && local.assumed ? ' (CET)' : '') : 'скоро';
+  }
 
   const start = slotStartMs(booking);
 

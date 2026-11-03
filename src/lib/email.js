@@ -624,7 +624,11 @@ export async function sendLessonReminderEmail(booking, hours, withHandout) {
   const when = whenText(booking);
   const soon = hours <= 1;
   // Не пишем «завтра»: напоминание уходит и тем, кто записался ночью на сегодня.
-  const title = soon ? 'Урок через час' : 'Напоминание об уроке: ' + esc(when);
+  const local = localSlot(booking);
+  const at = local ? local.time + (local.assumed ? ' (CET)' : '') : String(booking.slotLocal || '');
+  // Как в боте: не «через час», а время урока в поясе ученика (03.11.2026).
+  const soonText = at ? 'Пробный урок в ' + at : 'Пробный урок скоро';
+  const title = soon ? soonText : 'Напоминание об уроке: ' + esc(when);
   const html = layout(
     '<tr><td style="font-size:22px;font-weight:800;line-height:1.3;padding-bottom:14px">'
     + title + '</td></tr>'
@@ -649,7 +653,7 @@ export async function sendLessonReminderEmail(booking, hours, withHandout) {
   );
 
   return deliver(
-    baseMsg(booking, soon ? 'Пробный урок через час' : 'Напоминание: пробный урок ' + when, html),
+    baseMsg(booking, soon ? soonText : 'Напоминание: пробный урок ' + when, html),
     'reminder-' + hours + 'h'
   );
 }
