@@ -151,7 +151,7 @@ export function confirmCancelKeyboard(bookingId) {
 // Второй аргумент необязательный: без него клавиатура ведёт себя как раньше.
 // С ним кнопки показывают, какая отметка уже стоит — иначе по кнопкам не понять,
 // отмечали урок или нет.
-export function managerActionsKeyboard(bookingId, booking) {
+export function managerActionsKeyboard(bookingId, booking, options = {}) {
   const attended = booking && booking.attended;
   const cameText = attended === true ? '✅ Пришёл ✓' : '✅ Пришёл';
   const missedText = attended === false ? '🚫 Не пришёл ✓' : '🚫 Не пришёл';
@@ -173,7 +173,33 @@ export function managerActionsKeyboard(bookingId, booking) {
         [
           { text: '✍️ Написать ученику', callback_data: `mgr_write:${bookingId}` }
         ]
-      ]
+      ].concat(options.late
+        // Только в брифе ведущей перед уроком (04.11.2026): ученик не вышел вовремя.
+        ? [[{ text: '⏰ Не вышел, напомнить', callback_data: `mgr_late:${bookingId}` }]]
+        : [])
+    }
+  };
+}
+
+// Ученик не вышел на урок вовремя: ведущая жмёт «Не вышел, напомнить» (04.11.2026,
+// тексты согласованы Димой). Имя без фамилии, ссылка та же, что в напоминаниях.
+export function formatLateNudge(booking) {
+  const name = String(booking.name || '').trim().split(' ')[0];
+  const hi = name && !name.includes('@') ? name + ', мы' : 'Мы';
+
+  return `${hi} уже в Zoom и ждём вас на пробном уроке 🙂\n\n` +
+    `🔗 <a href="${ZOOM_JOIN_URL}">Подключиться к уроку</a>\n` +
+    `Идентификатор ${ZOOM_MEETING_ID}, код доступа ${ZOOM_PASSCODE}\n\n` +
+    `Если сейчас не получается, нажмите «Перенести», подберём другое время.`;
+}
+
+export function lateNudgeKeyboard(bookingId) {
+  return {
+    reply_markup: {
+      inline_keyboard: [[
+        { text: '🔄 Перенести', callback_data: `reschedule:${bookingId}` },
+        { text: '✍️ Написать менеджеру', callback_data: `contact:${bookingId}` }
+      ]]
     }
   };
 }

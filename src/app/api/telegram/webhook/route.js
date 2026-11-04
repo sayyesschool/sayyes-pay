@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { sendBookingConfirmation, mailProvider, sendIntroOfferEmail } from '@/lib/email';
+import { sendBookingConfirmation, mailProvider, sendIntroOfferEmail, sendLateNudgeEmail } from '@/lib/email';
 import { getProducts, stripe } from '@/services/stripe';
 import { getIntroProducts, getIntroProduct, introActive, introExpiry, nextIntroExpiry } from '@/services/intro';
 import { isSlotClosed } from '@/lib/capacity';
@@ -23,7 +23,7 @@ import {
   bookingActionsKeyboard, confirmCancelKeyboard, slotsKeyboard,
   managerActionsKeyboard, formatBookingConfirmation, formatBookingForManager,
   formatReminder, attendanceKeyboard, makeDeepLink, MANAGER_USERNAME,
-  formatManagerCard
+  formatManagerCard, formatLateNudge, lateNudgeKeyboard
 } from '@/lib/telegram';
 import { notifyManagers, isManagerChat, getManagerChatIds, getManagerChatMap } from '@/lib/managers';
 import { isBotManager, managerUsernames } from '@/lib/access';
@@ -2329,6 +2329,85 @@ async function handleMgrPayIntro(chatId, bookingId, packId, callbackQueryId) {
   );
 }
 
+// Ученик не вышел на урок вовремя (04.11.2026, макет согласован Димой).
+// Ведущая жмёт кнопку в брифе: ученику уходит «мы уже в Zoom и ждём вас»,
+// ведущей подтверждение с кнопками отметки. Через 10 минут крон напомнит ведущей
+// отметить приход, если отметки так и нет. «Не пришёл» ведущая ставит сама:
+// с этой отметки запускается реанимационная цепочка.
+function mskTime(ms) {
+  return new Date(ms).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Moscow' });
+}
+
+async function handleMgrLate(chatId, bookingId, callbackQueryId, from) {
+  const booking = await getBooking(bookingId);
+
+  if (!booking) {
+    await answerCallback(callbackQueryId, 'Запись не найдена');
+    return;
+  }
+
+  if (booking.status === 'cancelled') {
+    await answerCallback(callbackQueryId, 'Запись отменена');
+    return;
+  }
+
+  if (booking.attended === true || booking.attended === false) {
+    await answerCallback(callbackQueryId, 'Отметка уже стоит');
+    return;
+  }
+
+  const start = slotTimestamp(booking);
+  const now = Date.now();
+
+  if (!start || now < start) {
+    await answerCallback(callbackQueryId, 'Урок ещё не начался');
+    return;
+  }
+
+  if (now > start + 30 * 60 * 1000) {
+    await answerCallback(callbackQueryId, 'Прошло больше 30 минут после начала урока');
+    return;
+  }
+
+  if (booking.lateNudgedAt) {
+    await answerCallback(callbackQueryId, 'Уже отправлено в ' + mskTime(new Date(booking.lateNudgedAt).getTime()));
+    return;
+  }
+
+  let channel = '';
+
+  if (booking.chatId) {
+    await sendMessage(booking.chatId, formatLateNudge(booking), lateNudgeKeyboard(booking.id));
+    channel = 'Telegram';
+  } else if (booking.email) {
+    const mail = await sendLateNudgeEmail(booking);
+
+    if (mail && mail.ok) channel = 'почта';
+  }
+
+  if (!channel) {
+    await answerCallback(callbackQueryId, 'Не удалось отправить: нет ни чата с ботом, ни рабочей почты');
+    return;
+  }
+
+  await updateBooking(booking.id, {
+    lateNudgedAt: new Date(now).toISOString(),
+    lateNudgedBy: from && from.username ? '@' + from.username : null,
+    lateNudgeChat: String(chatId),
+    lateFollowupSent: false
+  });
+
+  await answerCallback(callbackQueryId, 'Напоминание отправлено');
+
+  const name = String(booking.name || 'ученику').trim().split(' ')[0];
+
+  await sendMessage(chatId,
+    `⏰ Напоминание отправлено ${name} в ${mskTime(now)} (${channel}).\n` +
+    `Если не подключится до ${mskTime(now + 10 * 60 * 1000)}, отметьте «Не пришёл»: запустится реанимационная цепочка.`,
+    attendanceKeyboard(booking.id)
+  );
+}
+
 async function handleMgrWrite(chatId, bookingId, callbackQueryId) {
   const booking = await getBooking(bookingId);
 
@@ -2613,6 +2692,9 @@ export async function POST(request) {
           break;
         case 'mgr_write':
           await handleMgrWrite(chatId, bookingId, callbackId);
+          break;
+        case 'mgr_late':
+          await handleMgrLate(chatId, bookingId, callbackId, from);
           break;
         case 'mgr_reschedule':
           await handleMgrReschedule(chatId, bookingId, callbackId);

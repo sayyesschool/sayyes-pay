@@ -232,12 +232,26 @@ export async function GET(request) {
       if (!booking.hostBriefed && minutesUntil > -15 && minutesUntil < 90) {
         const briefed = await notifyHost(
           `⏰ <b>Пробный урок через ${Math.round(minutesUntil)} мин</b>\n\n` + formatManagerCard(booking),
-          managerActionsKeyboard(booking.id)
+          managerActionsKeyboard(booking.id, null, { late: true })
         );
         if (briefed) {
           await updateBooking(booking.id, { hostBriefed: true });
           briefedHost++;
         }
+      }
+
+      // Ведущая нажала «Не вышел, напомнить» (handleMgrLate), прошло 10 минут,
+      // а отметки всё нет: напоминаем ей отметить приход или неприход (04.11.2026).
+      if (booking.lateNudgedAt && !booking.lateFollowupSent && booking.lateNudgeChat
+        && (booking.attended === undefined || booking.attended === null)
+        && now.getTime() - new Date(booking.lateNudgedAt).getTime() >= 10 * 60 * 1000) {
+        const name = String(booking.name || '').trim().split(' ')[0];
+
+        // Без рода в тексте: учатся и мужчины, а «не вышла» им приходило бы неверно.
+        await sendMessage(booking.lateNudgeChat,
+          '⏰ ' + (name ? name + ': у' : 'У') + 'рок без отметки, ученик так и не вышел? Отметьте приход или неприход.\n\n' + formatManagerCard(booking),
+          attendanceKeyboard(booking.id));
+        await updateBooking(booking.id, { lateFollowupSent: true });
       }
 
       // Автоснятие неподтверждённых записей за 6 часов до урока. Правило отключали

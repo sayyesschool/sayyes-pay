@@ -731,3 +731,24 @@ export async function sendSiteRequestEmail(lead) {
     ics: null
   }, 'site-request');
 }
+
+// Ученик не вышел на урок вовремя, чата с ботом нет (04.11.2026). Текст как в боте.
+export async function sendLateNudgeEmail(booking) {
+  if (!booking || !booking.email) return { skipped: 'no email' };
+
+  const name = String(booking.name || '').trim().split(' ')[0];
+  const hi = name && !name.includes('@') ? esc(name) + ', мы' : 'Мы';
+  const html = layout(
+    '<tr><td style="font-size:22px;font-weight:800;line-height:1.3;padding-bottom:14px">'
+    + 'Ждём вас на пробном уроке сейчас</td></tr>'
+    + '<tr><td style="font-size:14px;line-height:1.7;color:#444;padding-bottom:18px">'
+    + hi + ' уже в Zoom и ждём вас на пробном уроке 🙂<br>'
+    + '<span style="color:#6b4b8a">Идентификатор ' + ZOOM_MEETING_ID
+    + ', код доступа ' + ZOOM_PASSCODE + '</span></td></tr>'
+    + button(ZOOM_JOIN_URL, 'Подключиться в Zoom')
+    + '<tr><td style="font-size:13px;color:#888;line-height:1.6;padding-top:10px">'
+    + 'Если сейчас не получается, ответьте на это письмо, подберём другое время.</td></tr>'
+  );
+
+  return deliver(baseMsg(booking, 'Ждём вас на пробном уроке сейчас', html), 'late-nudge');
+}
