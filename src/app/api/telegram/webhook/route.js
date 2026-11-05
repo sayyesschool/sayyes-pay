@@ -26,7 +26,7 @@ import {
   formatManagerCard, formatLateNudge, lateNudgeKeyboard
 } from '@/lib/telegram';
 import { notifyManagers, isManagerChat, getManagerChatIds, getManagerChatMap } from '@/lib/managers';
-import { isBotManager, managerUsernames } from '@/lib/access';
+import { isBotManager, managerUsernames, superUsernames } from '@/lib/access';
 
 // Verify webhook secret (optional extra security)
 const WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET;
@@ -2423,6 +2423,8 @@ async function handleMgrWrite(chatId, bookingId, callbackQueryId) {
 
   await answerCallback(callbackQueryId);
   await kvSet(`mgr_reply:${chatId}`, String(booking.chatId), 86400);
+  // Ответ из личной карточки, а не из группы: отметку в группу не ставим.
+  await kvDel(`mgr_from_group:${chatId}`);
   await sendMessage(chatId,
     `Пишите сообщение — отправлю его ученику ${booking.name || ''}.\n` +
     '/done — закончить диалог.'
@@ -2570,6 +2572,32 @@ async function handleRelayFromUser(chatId, message) {
     ? { inline_keyboard: [[{ text: '✍️ Ответить ученику', callback_data: `mgr_write:${relayBookingId}` }]] }
     : undefined;
 
+  // Есть привязанная группа «вопросы клиентов» - сообщение уходит только туда,
+  // отвечают кнопкой «Ответить ученику». Не дошло (бота удалили из группы) -
+  // по-старому в личные чаты менеджеров, чтобы вопрос не потерялся.
+  const clientsChat = await kvGet(CLIENTS_CHAT_KEY);
+
+  if (clientsChat) {
+    let sent;
+
+    if (message.text) {
+      sent = await sendMessage(clientsChat, `${header}\n\n${message.text}`, replyKeyboard);
+    } else {
+      await forwardMessage(clientsChat, chatId, message.message_id);
+      sent = await sendMessage(clientsChat, header, replyKeyboard);
+    }
+
+    if (sent && sent.ok) {
+      await sendMessage(chatId,
+        'Сообщение отправлено менеджеру. Ожидайте ответа.\n\n' +
+        '<i>Отправьте /done чтобы закончить диалог</i>'
+      );
+      return true;
+    }
+
+    console.error('Clients group send failed, falling back to managers:', sent);
+  }
+
   for (const managerChatId of managerChatIds) {
     if (message.text) {
       await sendMessage(managerChatId, `${header}\n\n${message.text}`, replyKeyboard);
@@ -2621,7 +2649,80 @@ async function handleRelayFromManager(managerChatId, message) {
   }
 
   await sendMessage(managerChatId, 'Ответ отправлен ученику.');
+
+  // Если вопрос пришёл через группу, отмечаем там, что ответ ушёл: остальные
+  // видят, что вопрос закрыт, и не отвечают второй раз.
+  const fromGroup = await kvGet('mgr_from_group:' + managerChatId);
+
+  if (fromGroup) {
+    const who = message.from && message.from.username ? '@' + message.from.username : 'менеджер';
+    const lastB = lastBooking ? await getBooking(lastBooking) : null;
+
+    await sendMessage(fromGroup, `✅ Ответ отправлен: ${who} → ${(lastB && lastB.name) || 'ученику'}`);
+  }
+
   return true;
+}
+
+// --- Группа «вопросы клиентов» (05.11.2026) ---
+const CLIENTS_CHAT_KEY = 'clients_chat_id';
+
+async function handleGroupMessage(chat, text, from) {
+  const command = text.trim().split(/[\s@]/)[0].toLowerCase();
+  const username = from && from.username ? from.username.toLowerCase() : '';
+
+  if (command !== '/clients_here' && command !== '/clients_off') return;
+
+  if (!username || !(await superUsernames()).includes(username)) {
+    await sendMessage(chat.id, 'Привязать группу может только супер-админ.');
+    return;
+  }
+
+  if (command === '/clients_here') {
+    await kvSet(CLIENTS_CHAT_KEY, String(chat.id));
+    await sendMessage(chat.id,
+      'Сообщения учеников теперь приходят сюда.\n\n' +
+      'Ответить: кнопка «✍️ Ответить ученику» под сообщением, бот попросит текст в личке.\n' +
+      'Вернуть сообщения в личные чаты: /clients_off'
+    );
+  } else {
+    await kvDel(CLIENTS_CHAT_KEY);
+    await sendMessage(chat.id, 'Сообщения учеников снова приходят в личные чаты менеджеров.');
+  }
+}
+
+// «Ответить ученику» нажали в группе: диалог ведём в личке нажавшего,
+// иначе при двух одновременных ответах бот не поймёт, чей текст кому.
+async function handleMgrWriteFromGroup(groupChatId, bookingId, callbackQueryId, from) {
+  const username = from && from.username;
+
+  if (!(await isBotManager(username))) {
+    await answerCallback(callbackQueryId, 'Отвечать могут только менеджеры школы');
+    return;
+  }
+
+  const booking = await getBooking(bookingId);
+
+  if (!booking || !booking.chatId) {
+    await answerCallback(callbackQueryId, booking ? 'У ученика нет чата с ботом' : 'Запись не найдена');
+    return;
+  }
+
+  const personal = String(from.id);
+  const res = await sendMessage(personal,
+    `Пишите ответ для ${booking.name || 'ученика'}, отправлю его ученику.\n/done — закончить диалог.`
+  );
+
+  if (!res || !res.ok) {
+    await answerCallback(callbackQueryId, 'Сначала откройте бота в личке и нажмите «Начать»');
+    return;
+  }
+
+  await kvSet(`mgr_reply:${personal}`, String(booking.chatId), 86400);
+  await kvSet(`mgr_last:${personal}`, String(booking.id), 86400);
+  await kvSet(`mgr_from_group:${personal}`, String(groupChatId), 86400);
+  await answerCallback(callbackQueryId, 'Напишите ответ боту в личку');
+  await sendMessage(groupChatId, `✍️ @${username} отвечает ${booking.name || 'ученику'}`);
 }
 
 // --- Main webhook handler ---
@@ -2691,7 +2792,11 @@ export async function POST(request) {
           await handleMgrPayIntro(chatId, bookingId, params[1], callbackId);
           break;
         case 'mgr_write':
-          await handleMgrWrite(chatId, bookingId, callbackId);
+          if (message.chat.type !== 'private') {
+            await handleMgrWriteFromGroup(chatId, bookingId, callbackId, from);
+          } else {
+            await handleMgrWrite(chatId, bookingId, callbackId);
+          }
           break;
         case 'mgr_late':
           await handleMgrLate(chatId, bookingId, callbackId, from);
@@ -2746,6 +2851,14 @@ export async function POST(request) {
       const { chat, text, from } = update.message;
       const chatId = chat.id;
       const username = from?.username;
+
+      // Групповые чаты (05.11.2026: группа «вопросы клиентов»). Обрабатываем раньше
+      // всего остального: иначе сообщение из группы записало бы её id как личный чат
+      // менеджера (user_chat), и уведомления ушли бы в группу, а не человеку.
+      if (chat.type !== 'private') {
+        await handleGroupMessage(chat, text || '', from);
+        return NextResponse.json({ ok: true });
+      }
 
       // Save username→chatId mapping for daily summaries
       if (username) {
