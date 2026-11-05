@@ -1,4 +1,5 @@
 import { stripe } from '@/services/stripe';
+import { kvKeys, kvMGet } from '@/lib/redis';
 
 // Интро-оффер: два продукта в Stripe, которых нет в публичном прайсе.
 // getProducts() отдаёт только товары с metadata.external_id, у этих её нет —
@@ -75,8 +76,12 @@ export async function isIntroPriceId(priceId) {
 
 // Окно считается от отметки «Пришёл». Если менеджер отправит оффер повторно,
 // в заявку кладётся новый introExpiresAt: лучше продать позже, чем не продать.
+// 05.11.2026 (Дима): продления оффера нет. Если трое суток прошли, менеджер всё равно
+// может отправить спецпредложение: такая ссылка живёт без срока (introNoExpiry),
+// цепочку напоминаний не запускает, а контроль один - пакет покупается один раз на человека.
 export function introExpiry(booking) {
   if (!booking) return null;
+  if (booking.introNoExpiry) return null;
 
   if (booking.introExpiresAt) return new Date(booking.introExpiresAt);
 
@@ -86,6 +91,8 @@ export function introExpiry(booking) {
 }
 
 export function introActive(booking) {
+  if (booking && booking.introNoExpiry) return booking.attended === true && !booking.introPaid;
+
   const expiry = introExpiry(booking);
 
   return Boolean(expiry && expiry.getTime() > Date.now());
@@ -93,4 +100,41 @@ export function introActive(booking) {
 
 export function nextIntroExpiry() {
   return new Date(Date.now() + INTRO_WINDOW_HOURS * 3600 * 1000).toISOString();
+}
+
+// Можно ли менеджеру отправить спецпредложение: урок отмечен «Пришёл» и пакет ещё не куплен.
+export function introCanSend(booking) {
+  return Boolean(booking && booking.attended === true && !booking.introPaid);
+}
+
+// Что записать в заявку при отправке: внутри трёх суток срок не трогаем,
+// после них ссылка становится бессрочной. Отсчёт заново не начинается никогда.
+export function introSendPatch(booking) {
+  if (introActive(booking) && !booking.introNoExpiry) return {};
+  if (booking.introNoExpiry) return {};
+
+  return { introNoExpiry: true, introNoExpiryAt: new Date().toISOString() };
+}
+
+// Один интро-пакет на человека: ищем оплаченное спецпредложение во всех его заявках
+// (одна и та же почта, Telegram, телефон или чат с ботом).
+export async function introUsedByPerson(booking) {
+  if (!booking) return false;
+  if (booking.introPaid) return true;
+
+  const norm = v => String(v || '').trim().toLowerCase().replace(/^@/, '');
+  const digits = v => String(v || '').replace(/\D/g, '');
+  const mine = {
+    email: norm(booking.email), tg: norm(booking.telegram),
+    phone: digits(booking.phone), chat: String(booking.chatId || '')
+  };
+  const keys = await kvKeys('booking:*');
+  const all = await kvMGet(keys);
+
+  return all.some(b => b && b.id !== booking.id && b.introPaid && (
+    (mine.email && norm(b.email) === mine.email) ||
+    (mine.tg && norm(b.telegram) === mine.tg) ||
+    (mine.phone && mine.phone.length >= 7 && digits(b.phone) === mine.phone) ||
+    (mine.chat && String(b.chatId || '') === mine.chat)
+  ));
 }

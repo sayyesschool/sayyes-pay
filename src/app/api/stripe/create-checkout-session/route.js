@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 
 import { getBooking } from '@/lib/redis';
 import { createCheckoutSession } from '@/services/stripe';
-import { getIntroProducts, introActive } from '@/services/intro';
+import { getIntroProducts, introActive, introUsedByPerson } from '@/services/intro';
 
 export async function POST(request) {
   try {
@@ -53,6 +53,16 @@ export async function POST(request) {
         return NextResponse.json({
           error: "Спецпредложение уже оплачено",
           notice: "Это спецпредложение уже оплачено — второй раз платить не нужно. Менеджер свяжется с вами в Telegram."
+        }, {
+          status: 409
+        });
+      }
+
+      // Один интро-пакет на человека, по всем его заявкам (05.11.2026).
+      if (await introUsedByPerson(booking)) {
+        return NextResponse.json({
+          error: "Спецпредложение уже использовано",
+          notice: "Это спецпредложение можно купить один раз, и оно уже оплачено. Менеджер свяжется с вами в Telegram."
         }, {
           status: 409
         });

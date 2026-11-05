@@ -3,7 +3,7 @@ import { sendMessage, formatManagerCard, bookingActionsKeyboard } from '@/lib/te
 import { clientWhen } from '@/lib/time';
 import { notifyManagers } from '@/lib/managers';
 import { sendTrialAttended, sendPurchase } from '@/lib/meta';
-import { getIntroProduct, getIntroProducts, introActive, nextIntroExpiry } from '@/services/intro';
+import { getIntroProduct, getIntroProducts, introActive, nextIntroExpiry, introCanSend, introSendPatch, introUsedByPerson } from '@/services/intro';
 import { getProducts } from '@/services/stripe';
 import { sendIntroOfferEmail, sendBookingConfirmation } from '@/lib/email';
 import { getAllActiveBookings } from '@/lib/redis';
@@ -342,11 +342,12 @@ export async function rescheduleBooking(bookingId, slotKey, by) {
 }
 
 // --- Ссылка на оплату ---
-// Интро-пакеты доступны только после отметки «Пришёл» и внутри окна в трое суток.
+// Интро-пакеты доступны после отметки «Пришёл», пока пакет не куплен. После трёх суток
+// ссылка уходит бессрочной (05.11.2026), продления оффера нет.
 export async function listPacks(booking) {
   const packs = [];
 
-  if (introActive(booking)) {
+  if (introCanSend(booking)) {
     const intro = await getIntroProducts();
 
     for (const item of intro) {
@@ -375,14 +376,20 @@ export async function sendPayLink(bookingId, packId, by) {
 
   const intro = await getIntroProduct(packId);
 
-  if (intro && !introActive(booking)) {
-    return { ok: false, error: 'Спецпредложение доступно только после отметки «Пришёл» и трое суток после' };
+  if (intro && !introCanSend(booking)) {
+    return { ok: false, error: booking.introPaid ? 'Спецпредложение уже оплачено' : 'Спецпредложение доступно только после отметки «Пришёл»' };
   }
 
+  if (intro && await introUsedByPerson(booking)) {
+    return { ok: false, error: 'Этот человек уже покупал спецпредложение' };
+  }
+
+  const introPatch = intro ? introSendPatch(booking) : {};
+  const noExpiry = Boolean(intro && (introPatch.introNoExpiry || booking.introNoExpiry));
   const link = payLink(bookingId, packId);
   const name = intro ? intro.name : packId;
   const text = 'Ссылка на оплату: ' + name + '\n' + link
-    + (intro ? '\n\nПредложение действует трое суток после урока.' : '');
+    + (intro && !noExpiry ? '\n\nПредложение действует трое суток после урока.' : '');
 
   let sent = null;
 
@@ -395,6 +402,8 @@ export async function sendPayLink(bookingId, packId, by) {
   }
 
   await updateBooking(bookingId, {
+    ...introPatch,
+    ...(intro ? { introPack: packId, introSentAt: new Date().toISOString() } : {}),
     payLinkSentAt: new Date().toISOString(),
     payLinkPack: packId,
     payLinkBy: '@' + by

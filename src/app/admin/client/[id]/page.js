@@ -92,7 +92,7 @@ export default async function ClientPage({ params, searchParams }) {
                 + (Number(booking.paymentsCount || 1) > 1 ? ' · всего оплат ' + booking.paymentsCount + ' на ' + Math.round(Number(booking.paidTotal || 0) / 100) + ' EUR' : '')
               : '—'}</div>
             {offerUntil && (
-              <div><b>Спецоффер</b> {introActive(booking) ? 'активен до ' + fmt(offerUntil) : 'окно закрыто ' + fmt(offerUntil)}</div>
+              <div><b>Спецоффер</b> {booking.introNoExpiry ? (booking.introPaid ? 'оплачен' : 'ссылка без срока, до оплаты') : introActive(booking) ? 'активен до ' + fmt(offerUntil) : 'окно закрыто ' + fmt(offerUntil)}</div>
             )}
           </div>
         </div>
@@ -239,9 +239,15 @@ export default async function ClientPage({ params, searchParams }) {
               </select>
             </div>
             <button className="primary" type="submit">Отправить ученику</button>
-            {!introActive(booking) && (
+            {booking.attended !== true && (
               <p className="muted">
                 Спецпредложения по 30 EUR появятся в списке после отметки «Пришёл» и живут трое суток.
+              </p>
+            )}
+            {booking.attended === true && !booking.introPaid && !introActive(booking) && (
+              <p className="muted">
+                Трое суток прошли. Спецпредложение можно отправить ещё раз: ссылка будет без срока,
+                купить пакет можно один раз.
               </p>
             )}
           </form>

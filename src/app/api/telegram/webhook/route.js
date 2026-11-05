@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { sendBookingConfirmation, mailProvider, sendIntroOfferEmail, sendLateNudgeEmail } from '@/lib/email';
 import { getProducts, stripe } from '@/services/stripe';
-import { getIntroProducts, getIntroProduct, introActive, introExpiry, nextIntroExpiry } from '@/services/intro';
+import { getIntroProducts, getIntroProduct, introActive, introExpiry, nextIntroExpiry, introSendPatch, introUsedByPerson } from '@/services/intro';
 import { isSlotClosed } from '@/lib/capacity';
 import { addMessage } from '@/lib/thread';
 import { reviveTelegram, reviveKeyboard, reviveDueAt } from '@/lib/revive';
@@ -2247,9 +2247,13 @@ async function introMenu(booking) {
   }]);
 
   const expiry = introExpiry(booking);
-  const note = introActive(booking)
-    ? `\n\n🎁 Спецпредложение действует до ${introDeadlineText(expiry)}.`
-    : '\n\n🎁 Спецпредложение истекло. Отправите снова — отсчёт трёх суток пойдёт заново.';
+  const note = booking.introPaid
+    ? '\n\n🎁 Спецпредложение уже оплачено.'
+    : booking.introNoExpiry
+      ? '\n\n🎁 Ссылка на спецпредложение отправлена без срока, действует до оплаты.'
+      : introActive(booking)
+        ? `\n\n🎁 Спецпредложение действует до ${introDeadlineText(expiry)}.`
+        : '\n\n🎁 Трое суток прошли. Можно отправить ссылку ещё раз: она будет без срока, купить пакет можно один раз.';
 
   return { rows, note };
 }
@@ -2294,23 +2298,33 @@ async function handleMgrPayIntro(chatId, bookingId, packId, callbackQueryId) {
     return;
   }
 
-  const expiresAt = introActive(booking)
-    ? introExpiry(booking).toISOString()
-    : nextIntroExpiry();
+  if (await introUsedByPerson(booking)) {
+    await answerCallback(callbackQueryId, 'Этот человек уже покупал спецпредложение');
+    return;
+  }
+
+  // Внутри трёх суток срок прежний; после них ссылка бессрочная (05.11.2026).
+  // Отсчёт заново не начинается: продления оффера нет.
+  const patch = introSendPatch(booking);
+  const noExpiry = Boolean(patch.introNoExpiry || booking.introNoExpiry);
+  const expiresAt = noExpiry ? null : (introExpiry(booking) || new Date(nextIntroExpiry())).toISOString();
 
   await updateBooking(bookingId, {
-    introExpiresAt: expiresAt,
+    ...patch,
+    ...(expiresAt ? { introExpiresAt: expiresAt } : {}),
     introPack: product.external_id,
     introSentAt: new Date().toISOString()
   });
+
+  const untilText = noExpiry ? 'Без срока, до оплаты.' : 'Действует до ' + introDeadlineText(expiresAt) + '.';
 
   const link = `https://www.sayyestoenglish.com/?b=${encodeURIComponent(booking.id)}&p=${encodeURIComponent(product.external_id)}`;
   const price = `${Math.round(product.price / 100)} €`;
 
   if (!booking.chatId) {
     await answerCallback(callbackQueryId);
-    await sendIntroOfferEmail(booking, link, product.name + ' · ' + product.description, introDeadlineText(expiresAt));
-    await sendMessage(chatId, '🎁 Спецпредложение отправлено письмом: ' + (booking.name || 'ученик') + ' — ' + product.name + ', ' + price + '.\nДействует до ' + introDeadlineText(expiresAt) + '.');
+    await sendIntroOfferEmail(booking, link, product.name + ' · ' + product.description, noExpiry ? null : introDeadlineText(expiresAt));
+    await sendMessage(chatId, '🎁 Спецпредложение отправлено письмом: ' + (booking.name || 'ученик') + ' — ' + product.name + ', ' + price + '.\n' + untilText);
     return;
   }
 
@@ -2320,12 +2334,13 @@ async function handleMgrPayIntro(chatId, bookingId, packId, callbackQueryId) {
     '🎁 <b>Специальное предложение после пробного урока</b>\n\n' +
     `${product.name}\n${product.description}\nЦена: <b>${price}</b>\n\n` +
     `<a href="${link}">Перейти к оплате</a>\n\n` +
-    'Предложение действует трое суток. Заполнять ничего не нужно — чек придёт на почту, которую вы указали при записи.'
+    (noExpiry ? '' : 'Предложение действует трое суток. ') +
+    'Заполнять ничего не нужно — чек придёт на почту, которую вы указали при записи.'
   );
 
   await sendMessage(
     chatId,
-    `🎁 Спецпредложение отправлено: ${booking.name || 'ученик'} — ${product.name}, ${price}.\nДействует до ${introDeadlineText(expiresAt)}.`
+    `🎁 Спецпредложение отправлено: ${booking.name || 'ученик'} — ${product.name}, ${price}.\n${untilText}`
   );
 }
 
