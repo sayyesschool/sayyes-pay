@@ -357,7 +357,10 @@ function reminderWhenLabel(booking, hoursLeft) {
     const local = localSlot(booking);
     const time = local ? local.time : booking.slotLocal;
 
-    return time ? 'в ' + time + (local && local.assumed ? ' (CET)' : '') : 'скоро';
+    if (!time) return 'скоро';
+
+    // «по вашему времени» стоит в строке «Время:» ниже, в заголовке не повторяем.
+    return 'в ' + time + (local && local.assumed ? ' (CET)' : '');
   }
 
   const start = slotStartMs(booking);

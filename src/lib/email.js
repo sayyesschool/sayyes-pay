@@ -180,7 +180,7 @@ function confirmationHtml(booking, mode) {
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F3EDFA;border-radius:14px;padding:16px">
 <tr><td style="font-size:13px;color:#3D1B5E;line-height:1.9">
 <b>Дата:</b> ${esc(clientDate)}<br>
-<b>${timeLabel}:</b> ${esc(clientTime || '—')}<br>
+<b>${timeLabel}:</b> ${esc(clientTime || '—')}${local && !local.assumed && clientTime ? ' (по вашему времени)' : ''}<br>
 <b>Формат:</b> пробный урок · 30 минут · Zoom${tzNote ? `<br>
 <span style="color:#6b4b8a">Время указано ${esc(tzNote)}</span>` : ''}
 </td></tr></table></td></tr>`
@@ -448,7 +448,7 @@ function handoutSubject(booking) {
 
 function handoutHtml(booking) {
   const local = localSlot(booking);
-  const when = local ? `${local.date}, ${local.time}` : `${booking.slotDate || ''} ${booking.slotLocal || ''}`.trim();
+  const when = local ? `${local.date}, ${local.time}${local.assumed ? ' (CET)' : ' по вашему времени'}` : `${booking.slotDate || ''} ${booking.slotLocal || ''}`.trim();
   const botLink = `${BOT_LINK_BASE}?start=${encodeURIComponent(booking.id || '')}`;
   return layout(`
 <tr><td style="font-size:22px;font-weight:800;line-height:1.3;padding-bottom:14px">Ждём вас на уроке ${esc(when)}</td></tr>
@@ -555,7 +555,8 @@ async function deliver(msg, tag) {
 function whenText(booking) {
   const local = localSlot(booking);
 
-  if (local) return local.date + ', ' + local.time;
+  // 05.11.2026: прямо пишем, чьё это время, иначе ученики путают пояса.
+  if (local) return local.date + ', ' + local.time + (local.assumed ? ' (CET)' : ' по вашему времени');
 
   return (String(booking.slotDate || '') + ' ' + String(booking.slotLocal || '')).trim() || 'по расписанию';
 }
@@ -625,7 +626,7 @@ export async function sendLessonReminderEmail(booking, hours, withHandout) {
   const soon = hours <= 1;
   // Не пишем «завтра»: напоминание уходит и тем, кто записался ночью на сегодня.
   const local = localSlot(booking);
-  const at = local ? local.time + (local.assumed ? ' (CET)' : '') : String(booking.slotLocal || '');
+  const at = local ? local.time + (local.assumed ? ' (CET)' : ' по вашему времени') : String(booking.slotLocal || '');
   // Как в боте: не «через час», а время урока в поясе ученика (03.11.2026).
   const soonText = at ? 'Пробный урок в ' + at : 'Пробный урок скоро';
   const title = soon ? soonText : 'Напоминание об уроке: ' + esc(when);

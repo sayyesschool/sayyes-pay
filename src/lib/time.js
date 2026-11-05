@@ -95,7 +95,8 @@ export function localTimeString(booking, slotKey) {
 // без известного пояса показываем центральноевропейское и помечаем его CET.
 export function clientTimeLine(booking, slotKey) {
   const local = localSlot(booking, slotKey);
-  if (local) return local.assumed ? `Время (CET): ${local.time}` : `Время: ${local.time}`;
+  // 05.11.2026 (Дима): ученики путают время с чужим поясом, поэтому прямо пишем, чьё оно.
+  if (local) return local.assumed ? `Время (CET): ${local.time}` : `Время: ${local.time} (по вашему времени)`;
   const saved = booking && booking.slotLocal;
   if (saved && (!slotKey || slotKey === booking.slot)) return `Время: ${saved}`;
   return 'Время: уточним с вами';
@@ -110,7 +111,7 @@ export function clientDateLine(booking, slotKey) {
 // «Пт, 28 авг, 18:00» — одной строкой
 export function clientWhen(booking, slotKey) {
   const local = localSlot(booking, slotKey);
-  if (local) return `${local.date}, ${local.time}${local.assumed ? ' (CET)' : ''}`;
+  if (local) return `${local.date}, ${local.time}${local.assumed ? ' (CET)' : ' по вашему времени'}`;
   const d = (booking && booking.slotDate) || '—';
   const t = (booking && booking.slotLocal) || '—';
   return `${d}, ${t}`;

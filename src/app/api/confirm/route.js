@@ -38,7 +38,7 @@ function page(title, text, tone) {
 function whenText(booking) {
   const local = localSlot(booking);
 
-  if (local) return local.date + ', ' + local.time;
+  if (local) return local.date + ', ' + local.time + (local.assumed ? ' (CET)' : ' по вашему времени');
 
   return (String(booking.slotDate || '') + ' ' + String(booking.slotLocal || '')).trim();
 }
