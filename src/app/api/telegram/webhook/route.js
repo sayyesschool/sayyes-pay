@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { sendBookingConfirmation, mailProvider, sendIntroOfferEmail, sendLateNudgeEmail } from '@/lib/email';
 import { getProducts, stripe } from '@/services/stripe';
-import { getIntroProducts, getIntroProduct, introActive, introExpiry, nextIntroExpiry, introSendPatch, introUsedByPerson } from '@/services/intro';
+import { getIntroProducts, getIntroProduct, introActive, introExpiry, nextIntroExpiry, introSendPatch, introUsedByPerson, introDeadlineFor } from '@/services/intro';
 import { isSlotClosed } from '@/lib/capacity';
 import { addMessage } from '@/lib/thread';
 import { reviveTelegram, reviveKeyboard, reviveDueAt } from '@/lib/revive';
@@ -10,6 +10,8 @@ import { sendSchedule, sendTrialAttended, sendTrialConfirmed, sendPurchase } fro
 import { countEventsByDay } from '@/lib/metaEvents';
 import { payerEmail, skippedIds } from '@/lib/stripePayments';
 import { restoreBooking, offerReschedule } from '@/lib/adminActions';
+import { launchOffer, stopOffer, pauseOfferForChat, saveOfferReason, OFFER_REASONS } from '@/lib/offerChain';
+import { getProfiles } from '@/lib/access';
 import {
   getBooking, updateBooking, getBookedSlots, removeBookedSlot, addBookedSlot,
   setUserBooking, getUserBooking, clearUserBooking,
@@ -803,7 +805,7 @@ async function handleAttendance(chatId, bookingId, attended, callbackQueryId, me
   // Повторное нажатие «Пришёл» не должно молча продлевать спецпредложение,
   // а «Не пришёл» обязан его закрыть: оффер — за состоявшийся урок.
   const introPatch = attended
-    ? (booking.introExpiresAt ? {} : { introExpiresAt: nextIntroExpiry() })
+    ? (booking.introExpiresAt ? {} : { introExpiresAt: introDeadlineFor(booking) })
     : { introExpiresAt: null };
 
   // Кто нажал — раньше не сохранялось нигде, и вопрос «кто отметил?»
@@ -2212,6 +2214,7 @@ async function handleMgrPaySend(chatId, bookingId, packId, callbackQueryId) {
   );
 
   await sendMessage(chatId, `Ссылка отправлена: ${booking.name || 'ученик'} — ${product.name} · ${product.description}, ${price}.`);
+  await updateBooking(booking.id, { payLinkSentAt: new Date().toISOString(), lastManualPayLinkAt: new Date().toISOString() });
 }
 
 // Дедлайн для менеджера: базовый пояс расписания, тот же, в котором работает /today.
@@ -2313,7 +2316,9 @@ async function handleMgrPayIntro(chatId, bookingId, packId, callbackQueryId) {
     ...patch,
     ...(expiresAt ? { introExpiresAt: expiresAt } : {}),
     introPack: product.external_id,
-    introSentAt: new Date().toISOString()
+    introSentAt: new Date().toISOString(),
+    payLinkSentAt: new Date().toISOString(),
+    lastManualPayLinkAt: new Date().toISOString()
   });
 
   const untilText = noExpiry ? 'Без срока, до оплаты.' : 'Действует до ' + introDeadlineText(expiresAt) + '.';
@@ -2821,6 +2826,44 @@ export async function POST(request) {
             await handleMgrWrite(chatId, bookingId, callbackId);
           }
           break;
+        // Цепочка после пробного (06.11.2026): запуск, выбор имени, стоп, ответ клиента кнопкой.
+        case 'offstart': {
+          const profiles = (await getProfiles()).filter(p => p.name);
+
+          if (!profiles.length) {
+            await answerCallback(callbackId, 'Заполните «Имя для клиентов» в разделе «Доступы»');
+            break;
+          }
+
+          await answerCallback(callbackId);
+          await sendMessage(chatId, '🎁 От чьего имени отправить оффер?', {
+            reply_markup: { inline_keyboard: profiles.map(p => [{ text: p.name, callback_data: `offgo:${bookingId}:${p.username}` }]) }
+          });
+          break;
+        }
+        case 'offgo': {
+          const r = await launchOffer(bookingId, params[1], (from && from.username) || 'manager');
+
+          await answerCallback(callbackId, r.ok ? 'Запущено' : r.error);
+          await sendMessage(chatId, r.ok ? r.message : '⚠️ ' + r.error);
+          break;
+        }
+        case 'offstop': {
+          const r = await stopOffer(bookingId, (from && from.username) || 'manager');
+
+          await answerCallback(callbackId, r.ok ? r.message : r.error);
+          break;
+        }
+        case 'offr': {
+          const b = await saveOfferReason(bookingId, params[1]);
+
+          await answerCallback(callbackId, b ? 'Спасибо!' : 'Не получилось сохранить');
+          if (b) {
+            await sendMessage(chatId, 'Спасибо, что ответили! Если захотите вернуться к обучению, просто напишите сюда 🙂');
+            await notifyManagers('🎁 Причина после оффера: ' + (b.name || 'ученик') + ' — ' + OFFER_REASONS[params[1]]);
+          }
+          break;
+        }
         case 'mgr_offresch': {
           const r = await offerReschedule(bookingId, (from && from.username) || 'manager');
 
@@ -3125,6 +3168,9 @@ export async function POST(request) {
       if (senderIsManager) {
         await kvDel(`relay:${chatId}`);
       } else {
+        // Любой ответ клиента в боте ставит цепочку оффера на паузу: дальше пишет менеджер.
+        try { await pauseOfferForChat(chatId); } catch (e) { console.error('Offer pause error:', e); }
+
         const relayHandled = await handleRelayFromUser(chatId, update.message);
         if (relayHandled) return NextResponse.json({ ok: true });
       }

@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { SESSION_COOKIE, readSession, can } from '@/lib/adminAuth';
-import { addUser, saveRights, removeUser, RIGHTS, superUsernames } from '@/lib/access';
+import { addUser, saveRights, removeUser, RIGHTS, superUsernames, saveProfiles } from '@/lib/access';
+import { launchOffer, stopOffer } from '@/lib/offerChain';
 import { notifyUsers } from '@/lib/managers';
 import {
   markAttendance, cancelBooking, rescheduleBooking,
@@ -59,12 +60,20 @@ export async function POST(request) {
     }
     else if (action === 'access-save') {
       const table = {};
+      const profiles = {};
 
       for (const name of form.getAll('user').map(String)) {
         table[name] = RIGHTS.filter(r => form.get(name + '__' + r));
       }
 
-      result = await saveRights(table, by);
+      for (const name of form.getAll('profile').map(String)) {
+        profiles[name] = { name: form.get(name + '__name') || '', email: form.get(name + '__email') || '' };
+      }
+
+      const p = await saveProfiles(profiles, by);
+
+      result = p.ok ? await saveRights(table, by) : p;
+      if (result.ok && p.changed) result.message = (result.message === 'Изменений нет' ? '' : result.message + '. ') + 'Профили для клиентов сохранены';
     }
     else if (action === 'access-del') result = await removeUser(delUser || String(form.get('username') || ''), by);
     else if (action === 'attended') result = await markAttendance(id, true, by);
@@ -77,6 +86,8 @@ export async function POST(request) {
     else if (action === 'resend-mail-all') {
       result = await resendAllConfirmations(by, form.getAll('pick').map(String).filter(Boolean));
     }
+    else if (action === 'offer-launch') result = await launchOffer(id, String(form.get('manager') || ''), by);
+    else if (action === 'offer-stop') result = await stopOffer(id, by);
     else if (action === 'offer-reschedule') result = await offerReschedule(id, by);
     else if (action === 'reschedule') result = await rescheduleBooking(id, String(form.get('slot') || ''), by);
     else if (action === 'paylink') result = await sendPayLink(id, String(form.get('pack') || ''), by);

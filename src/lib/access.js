@@ -197,3 +197,51 @@ export async function removeUser(username, by) {
 
   return { ok: true, message: '@' + name + ' удалён', notice: '➖ @' + by + ' удалил @' + name + ' из доступов' };
 }
+
+// --- Профили для клиентов (06.11.2026, цепочка после пробного) ---
+// «Имя для клиентов» подписывает сообщения оффера («Это Кристина из Say Yes!»),
+// «Почта для ответов» ставится в Reply-To писем цепочки. Хранятся для всех,
+// включая супер-админов из настроек сервера.
+const PROFILES_KEY = 'admin:profiles';
+
+export async function getProfiles() {
+  const stored = (await kvGet(PROFILES_KEY)) || {};
+  const users = await getUsers();
+  const names = [...SUPER_USERNAMES, ...Object.keys(users)];
+
+  return names.map(username => ({
+    username,
+    name: (stored[username] && stored[username].name) || '',
+    email: (stored[username] && stored[username].email) || ''
+  }));
+}
+
+export async function saveProfiles(table, by) {
+  const stored = (await kvGet(PROFILES_KEY)) || {};
+  const changes = [];
+
+  for (const [username, p] of Object.entries(table || {})) {
+    const name = String(p.name || '').trim().slice(0, 40);
+    const email = String(p.email || '').trim().slice(0, 120);
+
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { ok: false, error: 'Почта для ответов у @' + username + ' указана неверно' };
+
+    const before = stored[username] || {};
+
+    if ((before.name || '') === name && (before.email || '') === email) continue;
+
+    stored[username] = { name, email };
+    changes.push('@' + username + ': ' + (name || 'без имени') + (email ? ', ' + email : ''));
+  }
+
+  if (!changes.length) return { ok: true, changed: 0 };
+
+  await kvSet(PROFILES_KEY, stored);
+
+  const log = (await kvGet(LOG_KEY)) || [];
+
+  log.unshift({ by: '@' + by, who: changes.map(c => c.split(':')[0]).join(', '), change: 'профиль для клиентов: ' + changes.join('; '), at: new Date().toISOString() });
+  await kvSet(LOG_KEY, log.slice(0, 200));
+
+  return { ok: true, changed: changes.length };
+}

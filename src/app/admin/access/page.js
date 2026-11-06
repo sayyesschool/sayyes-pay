@@ -2,7 +2,7 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { SESSION_COOKIE, readSession, can } from '@/lib/adminAuth';
 import { Shell } from '@/lib/adminShell';
-import { RIGHTS, RIGHT_LABEL, SUPER_USERNAMES, getUsers, getAccessLog } from '@/lib/access';
+import { RIGHTS, RIGHT_LABEL, SUPER_USERNAMES, getUsers, getAccessLog, getProfiles } from '@/lib/access';
 import { TRIAL_HOST_USERNAMES } from '@/lib/managers';
 import { kvGet } from '@/lib/redis';
 
@@ -17,6 +17,7 @@ const CSS = [
   '.syad .acc th{color:#71717a;font-weight:500;font-size:12px}',
   '.syad .acc th:first-child,.syad .acc td:first-child{text-align:left}',
   '.syad .acc input[type=checkbox]{width:18px;height:18px}',
+  '.syad .acc input[type=text],.syad .acc input[type=email]{width:130px;padding:6px 8px;font-size:13px}',
   '.syad .sa{background:#f3e8ff;color:#5b21b6;font-size:12px;padding:2px 8px;border-radius:999px}',
   '.syad .addrow{display:flex;gap:10px;align-items:center;flex-wrap:wrap}',
   '.syad .addrow label{display:inline-flex;gap:6px;align-items:center;font-size:14px}'
@@ -48,6 +49,7 @@ export default async function AccessPage({ searchParams }) {
   const users = await getUsers();
   const names = Object.keys(users).sort();
   const log = await getAccessLog(15);
+  const prof = Object.fromEntries((await getProfiles()).map(p => [p.username, p]));
   const bot = {};
 
   for (const name of [...SUPER_USERNAMES, ...names]) bot[name] = await botStatus(name);
@@ -56,6 +58,18 @@ export default async function AccessPage({ searchParams }) {
     TRIAL_HOST_USERNAMES.includes(name) ? 'ведёт уроки' : '',
     bot[name] ? 'бот ✓' : 'бот не запущен'
   ].filter(Boolean).join(' · ');
+
+  const profileCells = name => (
+    <>
+      <td>
+        <input type="hidden" name="profile" value={name} />
+        <input type="text" name={name + '__name'} defaultValue={(prof[name] && prof[name].name) || ''} placeholder="Кристина" aria-label={'Имя для клиентов @' + name} />
+      </td>
+      <td>
+        <input type="email" name={name + '__email'} defaultValue={(prof[name] && prof[name].email) || ''} placeholder="name@sayyes.school" aria-label={'Почта для ответов @' + name} />
+      </td>
+    </>
+  );
 
   return (
     <Shell session={session} active="access" title="Доступы">
@@ -72,6 +86,8 @@ export default async function AccessPage({ searchParams }) {
                 <tr>
                   <th>Telegram</th>
                   {RIGHTS.map(r => <th key={r}>{RIGHT_LABEL[r]}</th>)}
+                  <th>Имя для клиентов</th>
+                  <th>Почта для ответов</th>
                   <th></th>
                 </tr>
               </thead>
@@ -81,6 +97,7 @@ export default async function AccessPage({ searchParams }) {
                     <td>@{name}<div className="muted">из настроек сервера · {note(name)}</div></td>
                     <td>✓</td><td>✓</td><td>✓</td>
                     <td><span className="sa">супер-админ</span></td>
+                    {profileCells(name)}
                     <td className="muted">нельзя снять</td>
                   </tr>
                 ))}
@@ -102,6 +119,7 @@ export default async function AccessPage({ searchParams }) {
                         />
                       </td>
                     ))}
+                    {profileCells(name)}
                     <td>
                       {name !== session.username && (
                         <button type="submit" name="action" value={'access-del:' + name}>Удалить</button>
@@ -112,11 +130,13 @@ export default async function AccessPage({ searchParams }) {
               </tbody>
             </table>
           </div>
-          {names.length > 0 && (
-            <div className="btns" style={{ marginTop: 12 }}>
-              <button type="submit" name="action" value="access-save">Сохранить права</button>
-            </div>
-          )}
+          <div className="btns" style={{ marginTop: 12 }}>
+            <button type="submit" name="action" value="access-save">Сохранить</button>
+          </div>
+          <p className="muted">
+            «Имя для клиентов» подписывает сообщения оффера после пробного («Это Кристина из Say Yes!»),
+            на «Почту для ответов» приходят ответы на письма оффера. Без имени сотрудника нельзя выбрать при запуске оффера.
+          </p>
         </form>
       </div>
 

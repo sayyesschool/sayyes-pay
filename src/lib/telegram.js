@@ -173,6 +173,13 @@ export function managerActionsKeyboard(bookingId, booking, options = {}) {
         [
           { text: '📅 Предложить перенос', callback_data: `mgr_offresch:${bookingId}` }
         ],
+        // Цепочка после пробного: запуск возможен после «Пришёл» и только один раз.
+        ...(booking && booking.attended === true && !booking.offer && !booking.introPaid
+          ? [[{ text: '🎁 Запустить оффер', callback_data: `offstart:${bookingId}` }]]
+          : []),
+        ...(booking && booking.offer && !booking.offer.stopped && !booking.offer.done
+          ? [[{ text: '⏹ Остановить цепочку', callback_data: `offstop:${bookingId}` }]]
+          : []),
         [
           { text: '✍️ Написать ученику', callback_data: `mgr_write:${bookingId}` }
         ]

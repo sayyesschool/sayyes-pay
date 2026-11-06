@@ -138,3 +138,19 @@ export async function introUsedByPerson(booking) {
     (mine.chat && String(b.chatId || '') === mine.chat)
   ));
 }
+
+// Срок оффера: 72 часа от КОНЦА урока, а не от нажатия «Пришёл» (06.11.2026,
+// итоговая цепочка). Отметку иногда ставят на следующий день, и срок уезжал.
+export function introDeadlineFor(booking) {
+  if (booking && booking.slot && booking.slot !== 'no_time') {
+    const [d, t] = String(booking.slot).split('_');
+    const [y, mo, dd] = d.split('-').map(Number);
+    const [hh, mm] = String(t).split(':').map(Number);
+
+    if (![y, mo, dd, hh, mm].some(Number.isNaN)) {
+      return new Date(Date.UTC(y, mo - 1, dd, hh - 3, mm) + 30 * 60 * 1000 + INTRO_WINDOW_HOURS * 3600 * 1000).toISOString();
+    }
+  }
+
+  return nextIntroExpiry();
+}

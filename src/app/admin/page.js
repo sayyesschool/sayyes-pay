@@ -1,7 +1,8 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { SESSION_COOKIE, readSession, can } from '@/lib/adminAuth';
-import { buildAnalytics, shiftDay, today } from '@/lib/analytics';
+import { buildAnalytics, shiftDay, today, loadBookings } from '@/lib/analytics';
+import { OFFER_REASONS } from '@/lib/offerChain';
 import { getAdsInsights } from '@/lib/metaAds';
 import { Shell } from '@/lib/adminShell';
 import { buildCreatives, CREATIVES_SINCE } from '@/lib/creatives';
@@ -93,6 +94,21 @@ export default async function AdminPage({ searchParams }) {
   const creatives = tab === 'creatives' ? await buildCreatives({ from, to }) : null;
   const tgPerf = tab === 'telegram' ? await buildTgPerformance({ from, to }) : null;
   const gPerf = tab === 'google' ? await buildGooglePerformance({ from, to }) : null;
+  // Ответы «что помешало» из цепочки после пробного (06.11.2026), по дате ответа.
+  let offerReasons = null;
+
+  if (tab === 'money') {
+    offerReasons = { total: 0, byCode: {} };
+
+    for (const b of await loadBookings()) {
+      const r = b.offerReason;
+      const day = r && r.at ? String(new Date(new Date(r.at).getTime() + 3 * 3600 * 1000).toISOString()).slice(0, 10) : '';
+
+      if (!r || day < from || day > to) continue;
+      offerReasons.total++;
+      offerReasons.byCode[r.code] = (offerReasons.byCode[r.code] || 0) + 1;
+    }
+  }
 
   const source = ['meta', 'telegram', 'google', 'organic'].includes(params?.source) ? params.source : 'all';
   const data = await buildAnalytics({ from, to, source });
@@ -424,6 +440,24 @@ export default async function AdminPage({ searchParams }) {
               <p className="muted">Эти счётчики — по всей базе, а не только за выбранный период. Нажмите на число, чтобы увидеть список.</p>
             </div>
           </>
+        )}
+
+        {tab === 'money' && offerReasons && (
+          <div className="card">
+            <h2>Почему не купили спецпредложение</h2>
+            {offerReasons.total === 0 ? (
+              <p className="muted">За период ответов на вопрос «что помешало» нет.</p>
+            ) : (
+              <table>
+                <tbody>
+                  {Object.entries(OFFER_REASONS).map(([code, text]) => (
+                    <tr key={code}><td>{text}</td><td>{offerReasons.byCode[code] || 0}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            <p className="muted">Ответы кнопками на сообщение 4 цепочки после пробного урока (только в боте; ответы на письма сюда не попадают).</p>
+          </div>
         )}
 
         {tab === 'money' && (

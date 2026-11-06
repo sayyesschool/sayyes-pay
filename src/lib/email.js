@@ -771,3 +771,25 @@ export async function sendRescheduleOfferEmail(booking, link) {
 
   return deliver(baseMsg(booking, 'Выберите новое время для пробного урока', html), 'reschedule-offer');
 }
+
+// Письма цепочки после пробного (06.11.2026). Тексты собирает offerChain.js,
+// здесь только оформление: абзацы, кнопка «Забронировать», подпись менеджера,
+// ответ уходит на «Почту для ответов» менеджера из «Доступов».
+export async function sendOfferChainEmail(booking, { subject, paragraphs, link, managerName, replyTo }) {
+  if (!booking || !booking.email) return { skipped: 'no email' };
+
+  const body = (paragraphs || []).map(p =>
+    '<tr><td style="font-size:14px;line-height:1.7;color:#444;padding-bottom:14px">' + p + '</td></tr>'
+  ).join('');
+  const html = layout(
+    body
+    + (link ? button(link, 'Забронировать') : '')
+    + '<tr><td style="font-size:14px;line-height:1.7;color:#444;padding-top:14px">'
+    + esc(managerName || 'Команда') + ', Say Yes!</td></tr>'
+  );
+  const msg = baseMsg(booking, subject, html);
+
+  if (replyTo) msg.replyTo = replyTo;
+
+  return deliver(msg, 'offer-chain');
+}

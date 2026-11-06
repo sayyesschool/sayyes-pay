@@ -3,7 +3,7 @@ import { sendMessage, formatManagerCard, bookingActionsKeyboard } from '@/lib/te
 import { clientWhen } from '@/lib/time';
 import { notifyManagers } from '@/lib/managers';
 import { sendTrialAttended, sendPurchase } from '@/lib/meta';
-import { getIntroProduct, getIntroProducts, introActive, nextIntroExpiry, introCanSend, introSendPatch, introUsedByPerson } from '@/services/intro';
+import { getIntroProduct, getIntroProducts, introActive, nextIntroExpiry, introCanSend, introSendPatch, introUsedByPerson, introDeadlineFor } from '@/services/intro';
 import { getProducts } from '@/services/stripe';
 import { sendIntroOfferEmail, sendBookingConfirmation, sendRescheduleOfferEmail } from '@/lib/email';
 import { getAllActiveBookings } from '@/lib/redis';
@@ -58,7 +58,7 @@ export async function markAttendance(bookingId, attended, by) {
   }
 
   const introPatch = attended
-    ? (booking.introExpiresAt ? {} : { introExpiresAt: nextIntroExpiry() })
+    ? (booking.introExpiresAt ? {} : { introExpiresAt: introDeadlineFor(booking) })
     : { introExpiresAt: null };
 
   await updateBooking(bookingId, {
@@ -405,6 +405,8 @@ export async function sendPayLink(bookingId, packId, by) {
     ...introPatch,
     ...(intro ? { introPack: packId, introSentAt: new Date().toISOString() } : {}),
     payLinkSentAt: new Date().toISOString(),
+    // Ручная ссылка после запуска цепочки отменяет её сообщение 4 (итоговая цепочка 06.11.2026).
+    lastManualPayLinkAt: new Date().toISOString(),
     payLinkPack: packId,
     payLinkBy: '@' + by
   });

@@ -10,6 +10,8 @@ import { getThread } from '@/lib/thread';
 import { listPacks, payLink } from '@/lib/adminActions';
 import { introActive, introExpiry } from '@/services/intro';
 import { sourceLine } from '@/lib/leadSource';
+import { getProfiles } from '@/lib/access';
+import { mskText } from '@/lib/offerChain';
 
 export const dynamic = 'force-dynamic';
 
@@ -64,6 +66,16 @@ export default async function ClientPage({ params, searchParams }) {
   for (let i = 0; i < 14; i++) days.push(shiftDay(today(), i));
   const answers = booking.quizAnswers || {};
   const offerUntil = introExpiry(booking);
+  const offerNames = booking.attended === true && !booking.offer ? (await getProfiles()).filter(p => p.name) : [];
+  const offer = booking.offer || null;
+  const offerState = !offer ? '' : offer.stopped ? 'остановлена' : booking.introPaid ? 'оплачено' : offer.done ? 'завершена' : offer.paused ? 'на паузе: ученик ответил, дальше пишет менеджер' : 'идёт';
+  const stepLine = n => {
+    if (!offer) return '';
+    if (offer.sent && offer.sent[n]) return n + ' ✓ ' + mskText(new Date(offer.sent[n]).getTime());
+    if (offer.sent && offer.sent[n + '_skip']) return n + ' пропущено';
+    if (!offer.plan || !offer.plan[n]) return n + ' не нужно';
+    return n + ' в план ' + mskText(new Date(offer.plan[n]).getTime());
+  };
 
   return (
     <Shell session={session} active="work" title={booking.name || 'Без имени'}>
@@ -228,6 +240,52 @@ export default async function ClientPage({ params, searchParams }) {
             </form>
           </div>
         </details>
+
+        {booking.attended === true && (
+          <div className="card">
+            <h2>Оффер после пробного</h2>
+            {!offer && !booking.introPaid && (offerNames.length ? (
+              <form method="post" action="/api/admin/action">
+                <input type="hidden" name="action" value="offer-launch" />
+                <input type="hidden" name="id" value={booking.id} />
+                <input type="hidden" name="back" value={back} />
+                <div className="field">
+                  <label>От чьего имени</label>
+                  <select name="manager" defaultValue={offerNames.some(p => p.username === session.username) ? session.username : ''} required>
+                    <option value="" disabled>— выберите имя —</option>
+                    {offerNames.map(p => <option key={p.username} value={p.username}>{p.name}</option>)}
+                  </select>
+                </div>
+                <button className="primary" type="submit">🎁 Запустить оффер</button>
+                <p className="muted">
+                  Сообщение 1 уйдёт сразу (днём по времени ученика), дальше цепочка сама: напоминания
+                  до конца оффера и вопрос «что помешало» утром после. Ссылку вручную отправлять не нужно.
+                </p>
+              </form>
+            ) : (
+              <p className="muted">Нет ни одного «Имени для клиентов»: заполните его в разделе «Доступы».</p>
+            ))}
+            {offer && (
+              <>
+                <p>
+                  От имени <b>{offer.manager.name}</b>, конец оффера {mskText(new Date(offer.deadline).getTime())} МСК.
+                  Статус: <b>{offerState}</b>.
+                </p>
+                <p className="muted">Сообщения: {[1, 2, 3, 4].map(stepLine).join(' · ')}</p>
+                {!offer.stopped && !offer.done && !booking.introPaid && (
+                  <form method="post" action="/api/admin/action">
+                    <input type="hidden" name="action" value="offer-stop" />
+                    <input type="hidden" name="id" value={booking.id} />
+                    <input type="hidden" name="back" value={back} />
+                    <button type="submit">⏹ Остановить цепочку</button>
+                    <span className="muted"> Нужна, если ученик ответил на письмо: ответы на почту система не видит.</span>
+                  </form>
+                )}
+              </>
+            )}
+            {booking.offerReason && <p>Что помешало: <b>{booking.offerReason.text}</b></p>}
+          </div>
+        )}
 
         <div className="card">
           <h2>Оплата</h2>

@@ -5,6 +5,8 @@ import { notifyManagers, notifyHost } from '@/lib/managers';
 import { sendHandoutEmail, sendConfirmRequestEmail, sendLessonReminderEmail, sendReviveEmail, sendSlotReleasedEmail } from '@/lib/email';
 import { reviveTelegram, reviveKeyboard, reviveDueAt } from '@/lib/revive';
 import { isClientNight, clientDayHoursBetween } from '@/lib/time';
+import { processOffer, offerReminderDue } from '@/lib/offerChain';
+import { kvGet as kvGetRaw } from '@/lib/redis';
 
 // Protect cron endpoint
 const CRON_SECRET = process.env.CRON_SECRET;
@@ -82,6 +84,7 @@ export async function GET(request) {
     let released = 0;
     let mailed = 0;
     let revived = 0;
+    let offersSent = 0;
 
     for (const booking of bookings) {
       if (!booking.slot || booking.slot === 'no_time') continue;
@@ -238,6 +241,31 @@ export async function GET(request) {
           await updateBooking(booking.id, { hostBriefed: true });
           briefedHost++;
         }
+      }
+
+      // Цепочка после пробного урока (offerChain.js, 06.11.2026).
+      if (booking.offer) {
+        try {
+          offersSent += await processOffer(booking, now.getTime());
+        } catch (e) {
+          console.error('Offer chain error:', booking.id, e);
+        }
+      }
+
+      // Оффер не запущен: напомнить тому, кто отметил «Пришёл» (через 2 часа и утром).
+      const offerRemind = offerReminderDue(booking, now.getTime());
+
+      if (offerRemind) {
+        const marker = String(booking.attendedBy || '').replace(/^@/, '').toLowerCase();
+        const markerChat = marker ? ((await kvGetRaw('manager_chat:' + marker)) || (await kvGetRaw('user_chat:' + marker))) : null;
+        const text = '🎁 Оффер после пробного не запущен: ' + (booking.name || 'ученик')
+          + ' (урок ' + (booking.slotDate || '') + ' ' + (booking.slotMsk || '') + ' МСК). Если он нужен, запустите.';
+        const kb = { reply_markup: { inline_keyboard: [[{ text: '🎁 Запустить оффер', callback_data: 'offstart:' + booking.id }]] } };
+
+        if (markerChat) await sendMessage(markerChat, text, kb);
+        else await notifyManagers(text, kb);
+
+        await updateBooking(booking.id, { offerRemindStage: offerRemind });
       }
 
       // Ведущая нажала «Не вышел, напомнить» (handleMgrLate), прошло 10 минут,
@@ -418,6 +446,7 @@ export async function GET(request) {
       ok: true,
       checked: bookings.length,
       full,
+      offersSent,
       funnelAlert,
       sent24h,
       sent1h,
