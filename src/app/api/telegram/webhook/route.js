@@ -2590,16 +2590,24 @@ async function handleRelayFromUser(chatId, message) {
   // Есть привязанная группа «вопросы клиентов» - сообщение уходит только туда,
   // отвечают кнопкой «Ответить ученику». Не дошло (бота удалили из группы) -
   // по-старому в личные чаты менеджеров, чтобы вопрос не потерялся.
-  const clientsChat = await kvGet(CLIENTS_CHAT_KEY);
+  let clientsChat = await kvGet(CLIENTS_CHAT_KEY);
 
   if (clientsChat) {
-    let sent;
+    const deliver = async target => {
+      if (message.text) return sendMessage(target, `${header}\n\n${message.text}`, replyKeyboard);
+      await forwardMessage(target, chatId, message.message_id);
+      return sendMessage(target, header, replyKeyboard);
+    };
+    let sent = await deliver(clientsChat);
 
-    if (message.text) {
-      sent = await sendMessage(clientsChat, `${header}\n\n${message.text}`, replyKeyboard);
-    } else {
-      await forwardMessage(clientsChat, chatId, message.message_id);
-      sent = await sendMessage(clientsChat, header, replyKeyboard);
+    // 06.11.2026: группу превратили в супергруппу (добавили участника), у неё новый id.
+    // Telegram сообщает его в ошибке - запоминаем и отправляем туда же ещё раз.
+    const migrated = sent && sent.parameters && sent.parameters.migrate_to_chat_id;
+
+    if (migrated) {
+      clientsChat = String(migrated);
+      await kvSet(CLIENTS_CHAT_KEY, clientsChat);
+      sent = await deliver(clientsChat);
     }
 
     if (sent && sent.ok) {
@@ -2871,6 +2879,14 @@ export async function POST(request) {
       // всего остального: иначе сообщение из группы записало бы её id как личный чат
       // менеджера (user_chat), и уведомления ушли бы в группу, а не человеку.
       if (chat.type !== 'private') {
+        // Группа стала супергруппой: переносим привязку на новый id.
+        const newId = update.message.migrate_to_chat_id;
+        const oldId = update.message.migrate_from_chat_id;
+        const bound = await kvGet(CLIENTS_CHAT_KEY);
+
+        if (newId && bound === String(chatId)) await kvSet(CLIENTS_CHAT_KEY, String(newId));
+        if (oldId && bound === String(oldId)) await kvSet(CLIENTS_CHAT_KEY, String(chatId));
+
         await handleGroupMessage(chat, text || '', from);
         return NextResponse.json({ ok: true });
       }
