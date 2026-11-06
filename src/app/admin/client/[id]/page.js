@@ -141,6 +141,14 @@ export default async function ClientPage({ params, searchParams }) {
                 <button type="submit">Дослать письмо</button>
               </form>
             )}
+            {booking.status !== 'cancelled' && booking.attended !== true && (booking.chatId || booking.email) && (
+              <form method="post" action="/api/admin/action">
+                <input type="hidden" name="action" value="offer-reschedule" />
+                <input type="hidden" name="id" value={booking.id} />
+                <input type="hidden" name="back" value={back} />
+                <button type="submit">📅 Предложить перенос</button>
+              </form>
+            )}
             {(booking.releasedUnconfirmed || booking.status === 'cancelled') && (
               <form method="post" action="/api/admin/action">
                 <input type="hidden" name="action" value="restore" />

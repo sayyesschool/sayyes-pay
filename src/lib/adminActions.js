@@ -5,7 +5,7 @@ import { notifyManagers } from '@/lib/managers';
 import { sendTrialAttended, sendPurchase } from '@/lib/meta';
 import { getIntroProduct, getIntroProducts, introActive, nextIntroExpiry, introCanSend, introSendPatch, introUsedByPerson } from '@/services/intro';
 import { getProducts } from '@/services/stripe';
-import { sendIntroOfferEmail, sendBookingConfirmation } from '@/lib/email';
+import { sendIntroOfferEmail, sendBookingConfirmation, sendRescheduleOfferEmail } from '@/lib/email';
 import { getAllActiveBookings } from '@/lib/redis';
 import { addMessage } from '@/lib/thread';
 
@@ -557,4 +557,48 @@ export async function messageStudent(bookingId, text, by) {
   await notifyManagers('✍️ @' + by + ' написал(а) ученику ' + (booking.name || booking.id) + ':\n\n' + text.trim());
 
   return { ok: true, message: 'Сообщение отправлено' };
+}
+
+// «📅 Предложить перенос» (06.11.2026, макет согласован Димой): после неявки ученик
+// получает кнопку выбора нового времени. 05.11 ученица «перезаписалась» без записи в
+// системе и пришла не в своё время: перенос текстом из переписки терялся.
+// Одна функция для бота и админки.
+export function rescheduleLink(bookingId) {
+  return 'https://www.sayyestoenglish.com/learn_easy?reschedule=' + encodeURIComponent(bookingId);
+}
+
+export async function offerReschedule(bookingId, by) {
+  const booking = await getBooking(bookingId);
+
+  if (!booking) return { ok: false, error: 'Запись не найдена' };
+  if (booking.status === 'cancelled') return { ok: false, error: 'Запись отменена, перенос по ней не пройдёт: пусть запишется заново' };
+  if (booking.attended === true) return { ok: false, error: 'Урок уже отмечен состоявшимся' };
+
+  const link = rescheduleLink(booking.id);
+  const name = String(booking.name || '').trim().split(' ')[0];
+  const hi = name && !name.includes('@') ? name + ', жаль' : 'Жаль';
+  const text = hi + ', что не получилось встретиться 🙂 Ваше место за вами: выберите новое время'
+    + ' для пробного урока, это займёт минуту.';
+  let channel = '';
+
+  if (booking.chatId) {
+    const res = await sendMessage(booking.chatId, text, {
+      reply_markup: { inline_keyboard: [[{ text: '📅 Выбрать новое время', url: link }]] }
+    });
+
+    if (res && res.ok) channel = 'Telegram';
+  }
+
+  if (!channel && booking.email) {
+    const mail = await sendRescheduleOfferEmail(booking, link);
+
+    if (mail && mail.ok) channel = 'почта';
+  }
+
+  if (!channel) return { ok: false, error: 'Некуда отправить: нет ни чата с ботом, ни рабочей почты', link };
+
+  await addMessage(bookingId, { from: 'manager', text: '📅 Предложение перенести урок: ' + link, by: '@' + by });
+  await updateBooking(bookingId, { rescheduleOfferedAt: new Date().toISOString(), rescheduleOfferedBy: '@' + by });
+
+  return { ok: true, message: '📅 Ссылка на перенос отправлена ' + (booking.name || 'ученику') + ' (' + channel + ')', link };
 }

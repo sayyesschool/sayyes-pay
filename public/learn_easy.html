@@ -852,7 +852,7 @@ const ATTRIBUTION = (function () {
       if (fbp) out.fbp = fbp;
       // Собранный при клике fbc не затираем кукой - она может быть от прошлого клика
       if (fbc && !out.fbc) out.fbc = fbc;
-      out.tz = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+      out.tz = window.SY_USER_TZ || Intl.DateTimeFormat().resolvedOptions().timeZone || '';
       return out;
     }
   };
@@ -1469,6 +1469,63 @@ function pick(el, next) {
 let selectedSlot = null;
 let bookedSlots = [];
 let TZ_LABEL = '';
+// Пояс ученика (06.11.2026, макет согласован Димой). По умолчанию пояс устройства,
+// но его можно сменить над сеткой времени. 05.11 ученица записалась с устройства
+// в поясе GMT+1, а жила в GMT+3, и пришла на два часа раньше.
+const DEVICE_TZ = (function () { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch (e) { return 'UTC'; } })();
+let USER_TZ = DEVICE_TZ;
+window.SY_USER_TZ = USER_TZ;
+const TZ_RU = {
+  'Europe/Moscow':'Москва','Europe/Minsk':'Минск','Europe/Istanbul':'Стамбул','Asia/Istanbul':'Стамбул',
+  'Asia/Tbilisi':'Тбилиси','Asia/Yerevan':'Ереван','Asia/Baku':'Баку','Asia/Dubai':'Дубай',
+  'Asia/Jerusalem':'Тель-Авив','Asia/Tel_Aviv':'Тель-Авив','Asia/Nicosia':'Никосия','Asia/Famagusta':'Никосия',
+  'Asia/Almaty':'Алматы','Asia/Tashkent':'Ташкент','Europe/Kyiv':'Киев','Europe/Kiev':'Киев',
+  'Europe/Chisinau':'Кишинёв','Europe/London':'Лондон','Europe/Dublin':'Дублин','Europe/Lisbon':'Лиссабон',
+  'Europe/Madrid':'Мадрид','Europe/Paris':'Париж','Europe/Berlin':'Берлин','Europe/Warsaw':'Варшава',
+  'Europe/Prague':'Прага','Europe/Vienna':'Вена','Europe/Rome':'Рим','Europe/Amsterdam':'Амстердам',
+  'Europe/Brussels':'Брюссель','Europe/Zurich':'Цюрих','Europe/Stockholm':'Стокгольм','Europe/Oslo':'Осло',
+  'Europe/Copenhagen':'Копенгаген','Europe/Budapest':'Будапешт','Europe/Belgrade':'Белград',
+  'Europe/Helsinki':'Хельсинки','Europe/Riga':'Рига','Europe/Vilnius':'Вильнюс','Europe/Tallinn':'Таллин',
+  'Europe/Athens':'Афины','Europe/Sofia':'София','Europe/Bucharest':'Бухарест','Europe/Bratislava':'Братислава',
+  'Europe/Ljubljana':'Любляна','Europe/Zagreb':'Загреб','Europe/Luxembourg':'Люксембург','Europe/Malta':'Мальта',
+  'Atlantic/Reykjavik':'Рейкьявик','Atlantic/Canary':'Канары','Atlantic/Madeira':'Мадейра'
+};
+// Список «Выбрать другой пояс». Etc/GMT-N в IANA означает GMT+N (знак наоборот).
+const TZ_CHOICES = [
+  ['Europe/Moscow','Москва'],['Europe/Minsk','Минск'],['Europe/Istanbul','Стамбул'],['Asia/Tbilisi','Тбилиси'],
+  ['Asia/Yerevan','Ереван'],['Asia/Dubai','Дубай'],['Europe/London','Лондон'],['Europe/Berlin','Берлин'],
+  ['Europe/Kyiv','Киев'],['Asia/Nicosia','Никосия'],
+  ['Etc/GMT','Другой: GMT+0'],['Etc/GMT-1','Другой: GMT+1'],['Etc/GMT-2','Другой: GMT+2'],['Etc/GMT-3','Другой: GMT+3'],
+  ['Etc/GMT-4','Другой: GMT+4'],['Etc/GMT-5','Другой: GMT+5'],['Etc/GMT+1','Другой: GMT-1']
+];
+function tzOffsetLabel(tz) {
+  try {
+    const p = new Intl.DateTimeFormat('en-GB', { timeZone: tz, timeZoneName: 'shortOffset' })
+      .formatToParts(new Date()).find(x => x.type === 'timeZoneName');
+    return p ? p.value : '';
+  } catch (e) { return ''; }
+}
+function tzCity(tz) {
+  if (TZ_RU[tz]) return TZ_RU[tz];
+  if (tz.indexOf('Etc/') === 0) return '';
+  return tz.split('/').pop().replace(/_/g, ' ');
+}
+function tzNow(tz) {
+  try { return new Intl.DateTimeFormat('ru', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: tz }).format(new Date()); }
+  catch (e) { return ''; }
+}
+function setUserTz(tz) {
+  try { new Intl.DateTimeFormat('en', { timeZone: tz }); } catch (e) { return; }
+  USER_TZ = tz;
+  window.SY_USER_TZ = tz;
+  try { localStorage.setItem('sy_user_tz', tz); } catch (e) {}
+  renderSlotGrid();
+  markBookedSlots();
+}
+try {
+  const savedTz = localStorage.getItem('sy_user_tz');
+  if (savedTz) { new Intl.DateTimeFormat('en', { timeZone: savedTz }); USER_TZ = savedTz; window.SY_USER_TZ = savedTz; }
+} catch (e) {}
 const MSK_OFFSET = 3; // базовый пояс расписания школы, UTC+3
 const DAYS_RU = ['Вс','Пн','Вт','Ср','Чт','Пт','Сб'];
 const MONTHS_RU = ['янв','фев','мар','апр','мая','июн','июл','авг','сен','окт','ноя','дек'];
@@ -1551,7 +1608,7 @@ function formatTime(date) {
   // Use Intl explicitly with the browser's local timezone
   return new Intl.DateTimeFormat('ru', {
     hour: '2-digit', minute: '2-digit', hour12: false,
-    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
+    timeZone: USER_TZ
   }).format(date);
 }
 
@@ -1677,15 +1734,40 @@ function renderSlotGrid() {
   tzBar.style.cssText = 'font-size:12px;font-weight:700;color:var(--purple-dark);text-align:center;' +
     'margin-bottom:10px;padding:9px 12px;background:var(--purple-light);border-radius:10px';
   {
-    const offsetMin = -new Date().getTimezoneOffset();
-    const sign = offsetMin >= 0 ? '+' : '−';
-    const h = Math.floor(Math.abs(offsetMin) / 60);
-    const m = Math.abs(offsetMin) % 60;
-    const utcLabel = 'UTC' + sign + h + (m ? ':' + String(m).padStart(2, '0') : '');
-    const city = userTZ.split('/').pop().replace(/_/g, ' ');
-    TZ_LABEL = city + ', ' + utcLabel;
+    const city = tzCity(USER_TZ);
+    const offset = tzOffsetLabel(USER_TZ);
+    TZ_LABEL = city ? (offset ? city + ', ' + offset : city) : offset;
+    const now = tzNow(USER_TZ);
+    tzBar.textContent = '';
+    const line1 = document.createElement('div');
+    line1.textContent = '🕐 Время указано для пояса ' + (city ? city + ' (' + offset + ')' : offset) + '.' + (now ? ' Сейчас там ' + now + '.' : '');
+    const line2 = document.createElement('div');
+    line2.style.cssText = 'font-weight:400;margin-top:4px';
+    line2.appendChild(document.createTextNode('Не совпадает с вашими часами? '));
+    const link = document.createElement('a');
+    link.href = '#';
+    link.textContent = 'Выбрать другой пояс';
+    link.style.cssText = 'color:var(--purple-dark);font-weight:700;text-decoration:underline';
+    const sel = document.createElement('select');
+    sel.style.cssText = 'display:none;margin-top:8px;width:100%;padding:8px;border-radius:8px;border:1px solid var(--purple);font-size:14px';
+    const ph = document.createElement('option');
+    ph.value = ''; ph.textContent = 'Выберите ваш пояс';
+    sel.appendChild(ph);
+    TZ_CHOICES.forEach(function (c) {
+      const o = document.createElement('option');
+      const off = tzOffsetLabel(c[0]);
+      o.value = c[0];
+      o.textContent = c[1].indexOf('Другой') === 0 ? c[1] : c[1] + (off ? ' (' + off + ')' : '');
+      if (c[0] === USER_TZ) o.selected = true;
+      sel.appendChild(o);
+    });
+    link.onclick = function (e) { e.preventDefault(); sel.style.display = 'block'; };
+    sel.onchange = function () { if (sel.value) setUserTz(sel.value); };
+    line2.appendChild(link);
+    tzBar.appendChild(line1);
+    tzBar.appendChild(line2);
+    tzBar.appendChild(sel);
   }
-  tzBar.textContent = '🕐 Всё время указано для вашего пояса: ' + TZ_LABEL;
   grid.parentNode.insertBefore(tzBar, grid);
 
   loading.style.display = 'none';
@@ -1833,7 +1915,8 @@ async function submitBooking() {
           slot: selectedSlot.key,
           slotMsk: selectedSlot.msk,
           slotDate: selectedSlot.date,
-          slotLocal: selectedSlot.localTime || ''
+          slotLocal: selectedSlot.localTime || '',
+          tz: USER_TZ
         })
       });
       if (resp.ok) {

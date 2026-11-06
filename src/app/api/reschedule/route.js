@@ -12,6 +12,15 @@ export async function POST(request) {
   try {
     const body = await request.json();
     const { bookingId, slot, slotMsk, slotDate, slotLocal } = body;
+    // Пояс, выбранный в воронке (06.11.2026: его можно сменить над сеткой времени).
+    // Берём только настоящее имя пояса, иначе оставляем прежний.
+    let tz = '';
+    try {
+      if (body.tz && typeof body.tz === 'string' && body.tz.length < 64) {
+        new Intl.DateTimeFormat('en', { timeZone: body.tz });
+        tz = body.tz;
+      }
+    } catch (e) { tz = ''; }
 
     if (!bookingId || !slot) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -45,6 +54,7 @@ export async function POST(request) {
       slotMsk: slotMsk || '',
       slotDate: slotDate || '',
       slotLocal: slotLocal || '',
+      ...(tz ? { tz } : {}),
       // Момент переноса. От него, а не от первой заявки, крон считает защиту
       // от автоснятия: после переноса человек получает просьбу подтвердить
       // заново, и времени у него ровно столько же, сколько у новой записи.

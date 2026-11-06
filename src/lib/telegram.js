@@ -171,6 +171,9 @@ export function managerActionsKeyboard(bookingId, booking, options = {}) {
           { text: '💳 Ссылка на оплату', callback_data: `mgr_pay:${bookingId}` }
         ],
         [
+          { text: '📅 Предложить перенос', callback_data: `mgr_offresch:${bookingId}` }
+        ],
+        [
           { text: '✍️ Написать ученику', callback_data: `mgr_write:${bookingId}` }
         ]
       ].concat(options.late

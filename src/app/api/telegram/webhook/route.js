@@ -9,7 +9,7 @@ import { clientTimeLine, clientDateLine, clientWhen, localTimeString, localSlot,
 import { sendSchedule, sendTrialAttended, sendTrialConfirmed, sendPurchase } from '@/lib/meta';
 import { countEventsByDay } from '@/lib/metaEvents';
 import { payerEmail, skippedIds } from '@/lib/stripePayments';
-import { restoreBooking } from '@/lib/adminActions';
+import { restoreBooking, offerReschedule } from '@/lib/adminActions';
 import {
   getBooking, updateBooking, getBookedSlots, removeBookedSlot, addBookedSlot,
   setUserBooking, getUserBooking, clearUserBooking,
@@ -2821,6 +2821,13 @@ export async function POST(request) {
             await handleMgrWrite(chatId, bookingId, callbackId);
           }
           break;
+        case 'mgr_offresch': {
+          const r = await offerReschedule(bookingId, (from && from.username) || 'manager');
+
+          await answerCallback(callbackId, r.ok ? 'Отправлено' : r.error);
+          if (r.ok) await sendMessage(chatId, r.message);
+          break;
+        }
         case 'mgr_late':
           await handleMgrLate(chatId, bookingId, callbackId, from);
           break;

@@ -1,7 +1,7 @@
 import { getBooking, updateBooking } from '@/lib/redis';
 import { sendTrialConfirmed } from '@/lib/meta';
 import { notifyManagers } from '@/lib/managers';
-import { localSlot } from '@/lib/time';
+import { localSlot, yourTime } from '@/lib/time';
 
 // Подтверждение записи ссылкой из письма — для тех, у кого нет Telegram.
 // Делает ровно то же, что кнопка «Буду на уроке» в боте: ставит отметку,
@@ -38,7 +38,7 @@ function page(title, text, tone) {
 function whenText(booking) {
   const local = localSlot(booking);
 
-  if (local) return local.date + ', ' + local.time + (local.assumed ? ' (CET)' : ' по вашему времени');
+  if (local) return local.date + ', ' + local.time + (local.assumed ? ' (CET)' : ' ' + yourTime(booking));
 
   return (String(booking.slotDate || '') + ' ' + String(booking.slotLocal || '')).trim();
 }

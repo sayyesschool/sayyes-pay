@@ -6,7 +6,7 @@ import { notifyUsers } from '@/lib/managers';
 import {
   markAttendance, cancelBooking, rescheduleBooking,
   sendPayLink, markPaid, messageStudent, archiveUnmarked, restoreBooking,
-  resendConfirmation, resendAllConfirmations
+  resendConfirmation, resendAllConfirmations, offerReschedule
 } from '@/lib/adminActions';
 import { blockSlots, openSlots, setWeekHours } from '@/lib/schedule';
 import { attachPayment, detachPayment, unskipPayment } from '@/lib/stripePayments';
@@ -77,6 +77,7 @@ export async function POST(request) {
     else if (action === 'resend-mail-all') {
       result = await resendAllConfirmations(by, form.getAll('pick').map(String).filter(Boolean));
     }
+    else if (action === 'offer-reschedule') result = await offerReschedule(id, by);
     else if (action === 'reschedule') result = await rescheduleBooking(id, String(form.get('slot') || ''), by);
     else if (action === 'paylink') result = await sendPayLink(id, String(form.get('pack') || ''), by);
     else if (action === 'paid') result = await markPaid(id, form.get('amount'), String(form.get('pack') || ''), by);

@@ -96,7 +96,7 @@ export function localTimeString(booking, slotKey) {
 export function clientTimeLine(booking, slotKey) {
   const local = localSlot(booking, slotKey);
   // 05.11.2026 (Дима): ученики путают время с чужим поясом, поэтому прямо пишем, чьё оно.
-  if (local) return local.assumed ? `Время (CET): ${local.time}` : `Время: ${local.time} (по вашему времени)`;
+  if (local) return local.assumed ? `Время (CET): ${local.time}` : `Время: ${local.time} (${yourTimeInline(booking)})`;
   const saved = booking && booking.slotLocal;
   if (saved && (!slotKey || slotKey === booking.slot)) return `Время: ${saved}`;
   return 'Время: уточним с вами';
@@ -111,7 +111,7 @@ export function clientDateLine(booking, slotKey) {
 // «Пт, 28 авг, 18:00» — одной строкой
 export function clientWhen(booking, slotKey) {
   const local = localSlot(booking, slotKey);
-  if (local) return `${local.date}, ${local.time}${local.assumed ? ' (CET)' : ' по вашему времени'}`;
+  if (local) return `${local.date}, ${local.time}${local.assumed ? ' (CET)' : ' ' + yourTime(booking)}`;
   const d = (booking && booking.slotDate) || '—';
   const t = (booking && booking.slotLocal) || '—';
   return `${d}, ${t}`;
@@ -139,11 +139,52 @@ export function tzLabel(booking) {
   return offset ? `${city}, ${offset}` : city;
 }
 
+// Города по-русски для поясов, из которых к нам чаще всего записываются (06.11.2026).
+// Для остальных показываем только смещение GMT: английское имя пояса путает.
+const TZ_RU = {
+  'Europe/Moscow': 'Москва', 'Europe/Minsk': 'Минск', 'Europe/Istanbul': 'Стамбул', 'Asia/Istanbul': 'Стамбул',
+  'Asia/Tbilisi': 'Тбилиси', 'Asia/Yerevan': 'Ереван', 'Asia/Baku': 'Баку', 'Asia/Dubai': 'Дубай',
+  'Asia/Jerusalem': 'Тель-Авив', 'Asia/Tel_Aviv': 'Тель-Авив', 'Asia/Nicosia': 'Никосия', 'Asia/Famagusta': 'Никосия',
+  'Asia/Almaty': 'Алматы', 'Asia/Tashkent': 'Ташкент', 'Europe/Kyiv': 'Киев', 'Europe/Kiev': 'Киев',
+  'Europe/Chisinau': 'Кишинёв', 'Europe/London': 'Лондон', 'Europe/Dublin': 'Дублин', 'Europe/Lisbon': 'Лиссабон',
+  'Europe/Madrid': 'Мадрид', 'Europe/Paris': 'Париж', 'Europe/Berlin': 'Берлин', 'Europe/Warsaw': 'Варшава',
+  'Europe/Prague': 'Прага', 'Europe/Vienna': 'Вена', 'Europe/Rome': 'Рим', 'Europe/Amsterdam': 'Амстердам',
+  'Europe/Brussels': 'Брюссель', 'Europe/Zurich': 'Цюрих', 'Europe/Stockholm': 'Стокгольм', 'Europe/Oslo': 'Осло',
+  'Europe/Copenhagen': 'Копенгаген', 'Europe/Budapest': 'Будапешт', 'Europe/Belgrade': 'Белград',
+  'Europe/Helsinki': 'Хельсинки', 'Europe/Riga': 'Рига', 'Europe/Vilnius': 'Вильнюс', 'Europe/Tallinn': 'Таллин',
+  'Europe/Athens': 'Афины', 'Europe/Sofia': 'София', 'Europe/Bucharest': 'Бухарест', 'Europe/Bratislava': 'Братислава',
+  'Europe/Ljubljana': 'Любляна', 'Europe/Zagreb': 'Загреб', 'Europe/Luxembourg': 'Люксембург', 'Europe/Malta': 'Мальта',
+  'Atlantic/Reykjavik': 'Рейкьявик', 'Atlantic/Canary': 'Канары', 'Atlantic/Madeira': 'Мадейра'
+};
+
+// «Берлин, GMT+1» для клиентских сообщений. Пояс неизвестен - пустая строка
+// (там и так стоит пометка CET).
+export function tzHuman(booking) {
+  const { tz, assumed } = resolveTz(booking);
+  if (assumed) return '';
+  const offset = offsetLabel(tz);
+  const city = TZ_RU[tz];
+  if (city) return offset ? `${city}, ${offset}` : city;
+  return offset || '';
+}
+
+// «по вашему времени, Берлин, GMT+1» - для скобок после времени: «15:00 (…)»
+export function yourTimeInline(booking) {
+  const human = tzHuman(booking);
+  return human ? `по вашему времени, ${human}` : 'по вашему времени';
+}
+
+// «по вашему времени (Берлин, GMT+1)»
+export function yourTime(booking) {
+  const human = tzHuman(booking);
+  return human ? `по вашему времени (${human})` : 'по вашему времени';
+}
+
 // Готовая фраза для писем и сообщений: «Время указано …»
 export function tzNoteFor(booking) {
   const { assumed } = resolveTz(booking);
   if (assumed) return 'по центральноевропейскому времени (CET)';
-  const label = tzLabel(booking);
+  const label = tzHuman(booking) || tzLabel(booking);
   return label ? `для вашего пояса: ${label}` : 'для вашего часового пояса';
 }
 

@@ -13,7 +13,7 @@ import { ZOOM_JOIN_URL, ZOOM_MEETING_ID, ZOOM_PASSCODE } from '@/lib/zoom';
 // Приоритет: POSTMARK_TOKEN → ZEPTOMAIL_TOKEN → SENDGRID_API_KEY → RESEND_API_KEY.
 // Не задан ни один — модуль молча ничего не делает и никогда не роняет запись.
 
-import { localSlot, tzNoteFor } from '@/lib/time';
+import { localSlot, tzNoteFor, yourTime, yourTimeInline } from '@/lib/time';
 import { reviveEmailBody, reviveSubject } from '@/lib/revive';
 import { kvSet, kvGet, kvDel } from '@/lib/redis';
 
@@ -180,7 +180,7 @@ function confirmationHtml(booking, mode) {
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F3EDFA;border-radius:14px;padding:16px">
 <tr><td style="font-size:13px;color:#3D1B5E;line-height:1.9">
 <b>Дата:</b> ${esc(clientDate)}<br>
-<b>${timeLabel}:</b> ${esc(clientTime || '—')}${local && !local.assumed && clientTime ? ' (по вашему времени)' : ''}<br>
+<b>${timeLabel}:</b> ${esc(clientTime || '—')}${local && !local.assumed && clientTime ? ' (' + esc(yourTimeInline(booking)) + ')' : ''}<br>
 <b>Формат:</b> пробный урок · 30 минут · Zoom${tzNote ? `<br>
 <span style="color:#6b4b8a">Время указано ${esc(tzNote)}</span>` : ''}
 </td></tr></table></td></tr>`
@@ -448,7 +448,7 @@ function handoutSubject(booking) {
 
 function handoutHtml(booking) {
   const local = localSlot(booking);
-  const when = local ? `${local.date}, ${local.time}${local.assumed ? ' (CET)' : ' по вашему времени'}` : `${booking.slotDate || ''} ${booking.slotLocal || ''}`.trim();
+  const when = local ? `${local.date}, ${local.time}${local.assumed ? ' (CET)' : ' ' + yourTime(booking)}` : `${booking.slotDate || ''} ${booking.slotLocal || ''}`.trim();
   const botLink = `${BOT_LINK_BASE}?start=${encodeURIComponent(booking.id || '')}`;
   return layout(`
 <tr><td style="font-size:22px;font-weight:800;line-height:1.3;padding-bottom:14px">Ждём вас на уроке ${esc(when)}</td></tr>
@@ -556,7 +556,7 @@ function whenText(booking) {
   const local = localSlot(booking);
 
   // 05.11.2026: прямо пишем, чьё это время, иначе ученики путают пояса.
-  if (local) return local.date + ', ' + local.time + (local.assumed ? ' (CET)' : ' по вашему времени');
+  if (local) return local.date + ', ' + local.time + (local.assumed ? ' (CET)' : ' ' + yourTime(booking));
 
   return (String(booking.slotDate || '') + ' ' + String(booking.slotLocal || '')).trim() || 'по расписанию';
 }
@@ -752,4 +752,22 @@ export async function sendLateNudgeEmail(booking) {
   );
 
   return deliver(baseMsg(booking, 'Ждём вас на пробном уроке сейчас', html), 'late-nudge');
+}
+
+// Предложение перенести урок после неявки (06.11.2026, макет согласован). Текст как в боте.
+export async function sendRescheduleOfferEmail(booking, link) {
+  if (!booking || !booking.email || !link) return { skipped: 'no email' };
+
+  const name = String(booking.name || '').trim().split(' ')[0];
+  const hi = name && !name.includes('@') ? esc(name) + ', жаль' : 'Жаль';
+  const html = layout(
+    '<tr><td style="font-size:22px;font-weight:800;line-height:1.3;padding-bottom:14px">'
+    + 'Выберите новое время для пробного урока</td></tr>'
+    + '<tr><td style="font-size:14px;line-height:1.7;color:#444;padding-bottom:18px">'
+    + hi + ', что не получилось встретиться 🙂 Ваше место за вами: выберите новое время'
+    + ' для пробного урока, это займёт минуту.</td></tr>'
+    + button(link, 'Выбрать новое время')
+  );
+
+  return deliver(baseMsg(booking, 'Выберите новое время для пробного урока', html), 'reschedule-offer');
 }
