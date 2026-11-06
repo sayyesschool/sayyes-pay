@@ -469,7 +469,8 @@ export function offerReminderDue(booking, nowMs) {
   const m = new Date(marked + 3 * H);
   const nextMorning = Date.UTC(m.getUTCFullYear(), m.getUTCMonth(), m.getUTCDate() + 1, 10 - 3, 0);
 
-  if (stage < 1 && nowMs >= marked + 2 * H) return 1;
+  // Отметили давно (например, вчера): одно напоминание, а не два подряд.
+  if (stage < 1 && nowMs >= marked + 2 * H) return nowMs >= nextMorning ? 2 : 1;
   if (stage < 2 && nowMs >= nextMorning) return 2;
 
   return 0;
