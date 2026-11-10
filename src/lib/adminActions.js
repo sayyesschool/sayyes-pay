@@ -5,7 +5,8 @@ import { notifyManagers } from '@/lib/managers';
 import { sendTrialAttended, sendPurchase } from '@/lib/meta';
 import { getIntroProduct, getIntroProducts, introActive, nextIntroExpiry, introCanSend, introSendPatch, introUsedByPerson, introDeadlineFor } from '@/services/intro';
 import { getProducts } from '@/services/stripe';
-import { sendIntroOfferEmail, sendBookingConfirmation, sendRescheduleOfferEmail } from '@/lib/email';
+import { sendIntroOfferEmail, sendBookingConfirmation, sendRescheduleOfferEmail, sendManagerReplyEmail } from '@/lib/email';
+import { getProfiles } from '@/lib/access';
 import { getAllActiveBookings } from '@/lib/redis';
 import { addMessage } from '@/lib/thread';
 
@@ -603,4 +604,40 @@ export async function offerReschedule(bookingId, by) {
   await updateBooking(bookingId, { rescheduleOfferedAt: new Date().toISOString(), rescheduleOfferedBy: '@' + by });
 
   return { ok: true, message: '📅 Ссылка на перенос отправлена ' + (booking.name || 'ученику') + ' (' + channel + ')', link };
+}
+
+// Ответ ученику письмом из карточки (10.11.2026). Уходит от info@ с именем
+// менеджера, запустившего оффер («Кристина | Say Yes!»), а если оффер не запускали,
+// с именем того, кто отвечает. Продолжает ту же цепочку писем (In-Reply-To).
+export async function replyByEmail(bookingId, text, by) {
+  const booking = await getBooking(bookingId);
+
+  if (!booking) return { ok: false, error: 'Запись не найдена' };
+  if (!booking.email) return { ok: false, error: 'У ученика нет почты' };
+  if (!text || !String(text).trim()) return { ok: false, error: 'Пустое письмо' };
+
+  let managerName = booking.offer && booking.offer.manager ? booking.offer.manager.name : '';
+
+  if (!managerName) {
+    const me = (await getProfiles()).find(p => p.username === String(by || '').toLowerCase());
+
+    managerName = (me && me.name) || '';
+  }
+
+  const base = booking.mailLastSubject || 'Say Yes!';
+  const subject = /^re:/i.test(base) ? base : 'Re: ' + base;
+  const res = await sendManagerReplyEmail(booking, {
+    text: String(text).trim(),
+    managerName,
+    subject,
+    inReplyTo: booking.mailLastInboundId || booking.mailLastOutId || null,
+    references: booking.mailLastReferences || null
+  });
+
+  if (!res || !res.ok) return { ok: false, error: 'Письмо не ушло: проблема на стороне почты, попробуйте позже' };
+
+  await addMessage(booking.id, { from: 'manager', by: '@' + by, channel: 'email', subject, text: String(text).trim() });
+  await updateBooking(booking.id, { mailThread: true, mailLastOutId: res.messageId, mailLastSubject: subject.replace(/^re:\s*/i, '') });
+
+  return { ok: true, message: 'Письмо отправлено от ' + (managerName ? managerName + ' | ' : '') + 'Say Yes!' };
 }

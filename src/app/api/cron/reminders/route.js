@@ -6,6 +6,7 @@ import { sendHandoutEmail, sendConfirmRequestEmail, sendLessonReminderEmail, sen
 import { reviveTelegram, reviveKeyboard, reviveDueAt } from '@/lib/revive';
 import { isClientNight, clientDayHoursBetween } from '@/lib/time';
 import { processOffer, offerReminderDue } from '@/lib/offerChain';
+import { syncInbox } from '@/lib/mailbox';
 import { kvGet as kvGetRaw } from '@/lib/redis';
 
 // Protect cron endpoint
@@ -442,12 +443,22 @@ export async function GET(request) {
 
     const funnelAlert = await watchFunnel();
 
+    // Ответы учеников на письма (ящик info@ по IMAP, src/lib/mailbox.js).
+    let mail = null;
+
+    try {
+      mail = await syncInbox();
+    } catch (e) {
+      console.error('Mailbox sync failed:', e);
+    }
+
     return NextResponse.json({
       ok: true,
       checked: bookings.length,
       full,
       offersSent,
       funnelAlert,
+      mail,
       sent24h,
       sent1h,
       sentHandout,

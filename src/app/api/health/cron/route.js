@@ -8,6 +8,8 @@ export const dynamic = 'force-dynamic';
 export async function GET() {
   const last = await kvGet('cron:daily-summary:last');
   const active = await kvGet('cron:active');
+  const mailState = await kvGet('mailsync:state');
+  const mailError = await kvGet('mailsync:error');
 
   return NextResponse.json({
     dailySummary: last || { note: 'запусков с записью статуса ещё не было' },
@@ -15,6 +17,12 @@ export async function GET() {
     // полное чтение базы и сколько заявок в списке. Полное чтение раз в ~55 минут.
     reminders: active && active.at
       ? { lastFullScan: new Date(Number(active.at)).toISOString(), activeIds: (active.ids || []).length }
-      : { note: 'полного чтения ещё не было' }
+      : { note: 'полного чтения ещё не было' },
+    // Забор ответов из ящика info@ (без содержимого писем).
+    mailbox: {
+      configured: Boolean(process.env.ZOHO_IMAP_USER && process.env.ZOHO_IMAP_PASSWORD),
+      lastSync: mailState ? mailState.at : null,
+      lastError: mailError || null
+    }
   });
 }

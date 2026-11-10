@@ -223,6 +223,7 @@ async function sendPostmark(msg) {
     MessageStream: process.env.POSTMARK_STREAM || 'outbound'
   };
   if (msg.replyTo) body.ReplyTo = msg.replyTo;
+  if (msg.headers) body.Headers = Object.entries(msg.headers).map(([Name, Value]) => ({ Name, Value }));
   if (msg.ics) {
     body.Attachments = [{
       Name: 'say-yes-probny-urok.ics',
@@ -249,6 +250,7 @@ async function sendZeptoMail(msg) {
     htmlbody: msg.html
   };
   if (msg.replyTo) body.reply_to = [{ address: msg.replyTo }];
+  if (msg.headers) body.mime_headers = msg.headers;
   if (msg.ics) {
     body.attachments = [{
       name: 'say-yes-probny-urok.ics',
@@ -277,6 +279,7 @@ async function sendSendGrid(msg) {
     content: [{ type: 'text/html', value: msg.html }]
   };
   if (msg.replyTo) body.reply_to = { email: msg.replyTo };
+  if (msg.headers) body.headers = msg.headers;
   if (msg.ics) {
     body.attachments = [{
       content: Buffer.from(msg.ics, 'utf-8').toString('base64'),
@@ -303,6 +306,7 @@ async function sendResend(msg) {
     html: msg.html
   };
   if (msg.replyTo) body.reply_to = msg.replyTo;
+  if (msg.headers) body.headers = msg.headers;
   if (msg.ics) {
     body.attachments = [{
       filename: 'say-yes-probny-urok.ics',
@@ -775,7 +779,22 @@ export async function sendRescheduleOfferEmail(booking, link) {
 // Письма цепочки после пробного (06.11.2026). Тексты собирает offerChain.js,
 // здесь только оформление: абзацы, кнопка «Забронировать», подпись менеджера,
 // ответ уходит на «Почту для ответов» менеджера из «Доступов».
-export async function sendOfferChainEmail(booking, { subject, paragraphs, link, managerName, replyTo }) {
+// Письма цепочки и ответы менеджеров идут от общего ящика info@ с именем менеджера
+// в строке «От кого»: «Кристина | Say Yes!» <info@sayyestoenglish.com> (10.11.2026).
+// Ответы ученика приходят в тот же ящик, сайт забирает их по IMAP (src/lib/mailbox.js).
+export const INFO_MAIL = () => process.env.MAIL_INFO_ADDRESS || 'info@sayyestoenglish.com';
+
+// Message-ID с кодом заявки: почтовые программы возвращают его в In-Reply-To
+// и References, и ответ привязывается к ученику даже с другого адреса.
+export function mailMessageId(bookingId) {
+  return '<sy.' + bookingId + '.' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6) + '@sayyestoenglish.com>';
+}
+
+function infoFrom(managerName) {
+  return { name: (managerName ? managerName + ' | ' : '') + 'Say Yes!', email: INFO_MAIL() };
+}
+
+export async function sendOfferChainEmail(booking, { subject, paragraphs, link, managerName }) {
   if (!booking || !booking.email) return { skipped: 'no email' };
 
   const body = (paragraphs || []).map(p =>
@@ -787,9 +806,33 @@ export async function sendOfferChainEmail(booking, { subject, paragraphs, link, 
     + '<tr><td style="font-size:14px;line-height:1.7;color:#444;padding-top:14px">'
     + esc(managerName || 'Команда') + ', Say Yes!</td></tr>'
   );
-  const msg = baseMsg(booking, subject, html);
+  const messageId = mailMessageId(booking.id);
+  const msg = { ...baseMsg(booking, subject, html), from: infoFrom(managerName), replyTo: INFO_MAIL(), headers: { 'Message-ID': messageId } };
+  const res = await deliver(msg, 'offer-chain');
 
-  if (replyTo) msg.replyTo = replyTo;
+  return { ...res, messageId };
+}
 
-  return deliver(msg, 'offer-chain');
+// Ответ менеджера из карточки ученика: продолжает ту же цепочку писем.
+export async function sendManagerReplyEmail(booking, { text, managerName, subject, inReplyTo, references }) {
+  if (!booking || !booking.email || !text) return { skipped: 'no email or text' };
+
+  const paragraphs = String(text).trim().split(/\n{2,}/).map(p =>
+    '<tr><td style="font-size:14px;line-height:1.7;color:#444;padding-bottom:14px">' + esc(p).replace(/\n/g, '<br>') + '</td></tr>'
+  ).join('');
+  const html = layout(
+    paragraphs
+    + '<tr><td style="font-size:14px;line-height:1.7;color:#444;padding-top:6px">'
+    + esc(managerName || 'Команда') + ', Say Yes!</td></tr>'
+  );
+  const messageId = mailMessageId(booking.id);
+  const headers = { 'Message-ID': messageId };
+
+  if (inReplyTo) headers['In-Reply-To'] = inReplyTo;
+  if (references || inReplyTo) headers.References = [references, inReplyTo].filter(Boolean).join(' ').slice(-900);
+
+  const msg = { ...baseMsg(booking, subject || 'Say Yes!: ответ на ваше письмо', html), from: infoFrom(managerName), replyTo: INFO_MAIL(), headers };
+  const res = await deliver(msg, 'manager-reply');
+
+  return { ...res, messageId };
 }

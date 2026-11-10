@@ -5,7 +5,8 @@ import { kvGet, kvSet } from '@/lib/redis';
 // Храним последние 50 сообщений по заявке полгода.
 const KEY = bookingId => 'thread:' + bookingId;
 
-export async function addMessage(bookingId, { from, text, by }) {
+// channel: 'bot' (по умолчанию) или 'email' - письма цепочки и ответы на них (10.11.2026).
+export async function addMessage(bookingId, { from, text, by, channel, subject }) {
   if (!bookingId || !text) return;
 
   try {
@@ -16,7 +17,8 @@ export async function addMessage(bookingId, { from, text, by }) {
       at: new Date().toISOString(),
       from,
       by: by || null,
-      text: String(text).slice(0, 2000)
+      ...(channel === 'email' ? { channel: 'email', subject: subject ? String(subject).slice(0, 200) : null } : {}),
+      text: String(text).slice(0, 4000)
     });
 
     await kvSet(KEY(bookingId), list.slice(-50), 60 * 60 * 24 * 180);

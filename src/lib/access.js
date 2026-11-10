@@ -222,7 +222,8 @@ export async function saveProfiles(table, by) {
 
   for (const [username, p] of Object.entries(table || {})) {
     const name = String(p.name || '').trim().slice(0, 40);
-    const email = String(p.email || '').trim().slice(0, 120);
+    // Почта для ответов больше не нужна (10.11.2026): ответы идут в общий info@.
+    const email = '';
 
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { ok: false, error: 'Почта для ответов у @' + username + ' указана неверно' };
 

@@ -364,9 +364,11 @@ export default async function ClientPage({ params, searchParams }) {
           {thread.length > 0 ? (
             <div className="thread">
               {thread.map((item, index) => (
-                <div className={'bubble ' + (item.from === 'student' ? 'in' : 'out')} key={index}>
+                <div className={'bubble ' + (item.from === 'student' ? 'in' : 'out')} key={index} style={{ whiteSpace: 'pre-wrap' }}>
+                  {item.channel === 'email' && item.subject ? <b style={{ display: 'block', marginBottom: 4 }}>✉️ {item.subject}</b> : null}
                   {item.text}
                   <span className="meta">
+                    {item.channel === 'email' ? '✉️ письмо · ' : ''}
                     {item.from === 'student' ? 'ученик' : (item.by || 'школа')} · {fmt(item.at)}
                   </span>
                 </div>
@@ -385,6 +387,18 @@ export default async function ClientPage({ params, searchParams }) {
             <button className="primary" type="submit">Отправить</button>
           </form>
           {!booking.chatId && <p className="muted">У этого ученика нет чата с ботом — только почта.</p>}
+          {booking.email && (
+            <form method="post" action="/api/admin/action" style={{ marginTop: 14 }}>
+              <input type="hidden" name="action" value="mail-reply" />
+              <input type="hidden" name="id" value={booking.id} />
+              <input type="hidden" name="back" value={back} />
+              <div className="field">
+                <label>Ответить письмом на {booking.email}</label>
+                <textarea name="text" placeholder="Письмо уйдёт от info@sayyestoenglish.com с вашим именем в строке «От кого»" />
+              </div>
+              <button type="submit">✉️ Ответить письмом</button>
+            </form>
+          )}
         </div>
 
         <p className="muted"><a href="/admin/work">← ко всем записям</a></p>

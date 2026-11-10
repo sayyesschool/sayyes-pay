@@ -7,7 +7,7 @@ import { notifyUsers } from '@/lib/managers';
 import {
   markAttendance, cancelBooking, rescheduleBooking,
   sendPayLink, markPaid, messageStudent, archiveUnmarked, restoreBooking,
-  resendConfirmation, resendAllConfirmations, offerReschedule
+  resendConfirmation, resendAllConfirmations, offerReschedule, replyByEmail
 } from '@/lib/adminActions';
 import { blockSlots, openSlots, setWeekHours } from '@/lib/schedule';
 import { attachPayment, detachPayment, unskipPayment } from '@/lib/stripePayments';
@@ -67,7 +67,7 @@ export async function POST(request) {
       }
 
       for (const name of form.getAll('profile').map(String)) {
-        profiles[name] = { name: form.get(name + '__name') || '', email: form.get(name + '__email') || '' };
+        profiles[name] = { name: form.get(name + '__name') || '' };
       }
 
       const p = await saveProfiles(profiles, by);
@@ -86,6 +86,7 @@ export async function POST(request) {
     else if (action === 'resend-mail-all') {
       result = await resendAllConfirmations(by, form.getAll('pick').map(String).filter(Boolean));
     }
+    else if (action === 'mail-reply') result = await replyByEmail(id, String(form.get('text') || ''), by);
     else if (action === 'offer-launch') result = await launchOffer(id, String(form.get('manager') || ''), by);
     else if (action === 'offer-stop') result = await stopOffer(id, by);
     else if (action === 'offer-reschedule') result = await offerReschedule(id, by);

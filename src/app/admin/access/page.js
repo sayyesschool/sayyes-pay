@@ -65,9 +65,6 @@ export default async function AccessPage({ searchParams }) {
         <input type="hidden" name="profile" value={name} />
         <input type="text" name={name + '__name'} defaultValue={(prof[name] && prof[name].name) || ''} placeholder="Кристина" aria-label={'Имя для клиентов @' + name} />
       </td>
-      <td>
-        <input type="email" name={name + '__email'} defaultValue={(prof[name] && prof[name].email) || ''} placeholder="name@sayyes.school" aria-label={'Почта для ответов @' + name} />
-      </td>
     </>
   );
 
@@ -87,7 +84,6 @@ export default async function AccessPage({ searchParams }) {
                   <th>Telegram</th>
                   {RIGHTS.map(r => <th key={r}>{RIGHT_LABEL[r]}</th>)}
                   <th>Имя для клиентов</th>
-                  <th>Почта для ответов</th>
                   <th></th>
                 </tr>
               </thead>
@@ -134,8 +130,9 @@ export default async function AccessPage({ searchParams }) {
             <button type="submit" name="action" value="access-save">Сохранить</button>
           </div>
           <p className="muted">
-            «Имя для клиентов» подписывает сообщения оффера после пробного («Это Кристина из Say Yes!»),
-            на «Почту для ответов» приходят ответы на письма оффера. Без имени сотрудника нельзя выбрать при запуске оффера.
+            «Имя для клиентов» подписывает сообщения оффера после пробного («Это Кристина из Say Yes!») и стоит
+            в строке «От кого» писем («Кристина | Say Yes!»). Без имени сотрудника нельзя выбрать при запуске оффера.
+            Ответы на письма приходят в общий ящик info@ и появляются в карточке ученика.
           </p>
         </form>
       </div>

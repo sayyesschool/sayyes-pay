@@ -270,11 +270,21 @@ async function sendStep(booking, step, nowMs) {
       subject: t.subject,
       paragraphs: t.mail,
       link: t.noButton ? null : offerLink(booking),
-      managerName: offer.manager.name,
-      replyTo: offer.manager.email || null
+      managerName: offer.manager.name
     });
 
-    if (mail && mail.ok) channel = 'mail';
+    if (mail && mail.ok) {
+      channel = 'mail';
+      // Письмо видно в переписке карточки; тема и Message-ID нужны, чтобы ответ
+      // менеджера из карточки продолжил ту же цепочку писем (10.11.2026).
+      const plain = (t.mail || []).map(p => String(p).replace(/<br>/g, '\n').replace(/<[^>]+>/g, '')).join('\n\n');
+
+      await addMessage(booking.id, {
+        from: 'manager', by: offer.manager.name, channel: 'email', subject: t.subject,
+        text: plain + (t.noButton ? '' : '\n\n[Забронировать: ' + offerLink(booking) + ']')
+      });
+      await updateBooking(booking.id, { mailLastSubject: t.subject, mailLastOutId: mail.messageId, mailThread: true });
+    }
   }
 
   return channel;
