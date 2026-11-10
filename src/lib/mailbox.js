@@ -105,7 +105,8 @@ async function handleMessage(source) {
 
   if (auto && String(auto).toLowerCase() !== 'no') return null;
 
-  const bookingId = bookingFromHeaders(parsed) || await bookingFromSender(fromAddr);
+  const byHeaders = bookingFromHeaders(parsed);
+  const bookingId = byHeaders || await bookingFromSender(fromAddr);
 
   if (!bookingId) return null;
 
@@ -123,7 +124,9 @@ async function handleMessage(source) {
     mailLastInboundId: parsed.messageId || null,
     mailLastReferences: Array.isArray(parsed.references) ? parsed.references.join(' ') : (parsed.references || null),
     mailLastSubject: subject || booking.mailLastSubject || null,
-    mailLastInboundAt: new Date().toISOString()
+    mailLastInboundAt: new Date().toISOString(),
+    // Как привязали: по метке в заголовках или по адресу (для проверки ZeptoMail).
+    mailLastMatch: byHeaders ? 'headers' : 'sender'
   };
 
   // Ответ ученика ставит цепочку оффера на паузу: дальше пишет менеджер.

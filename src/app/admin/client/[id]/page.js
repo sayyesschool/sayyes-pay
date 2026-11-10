@@ -392,6 +392,12 @@ export default async function ClientPage({ params, searchParams }) {
               <input type="hidden" name="action" value="mail-reply" />
               <input type="hidden" name="id" value={booking.id} />
               <input type="hidden" name="back" value={back} />
+              {booking.mailLastInboundAt && (
+                <p className="muted">
+                  Последний ответ письмом: {fmt(booking.mailLastInboundAt)}
+                  {booking.mailLastMatch === 'headers' ? ' (привязан по метке письма)' : ' (привязан по адресу ученика)'}.
+                </p>
+              )}
               <div className="field">
                 <label>Ответить письмом на {booking.email}</label>
                 <textarea name="text" placeholder="Письмо уйдёт от info@sayyestoenglish.com с вашим именем в строке «От кого»" />
