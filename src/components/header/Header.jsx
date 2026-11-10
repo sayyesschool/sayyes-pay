@@ -6,7 +6,8 @@ export default function Header({ user }) {
             <div className="header__main">
                 <div className="header__container">
                     <a className="header__logo logo" href="/">
-                        <img src="/static/images/logos/sayyes-english-school_purple.svg" alt="Логотип Say Yes" />
+                        {/* 10.11.2026: хранилище s3.regru.cloud (/static/*) перестало отдавать файлы, логотип берём со старого сайта через /wp/. */}
+                        <img src="/wp/themes/sayyes/static/images/logo-purple.svg" alt="Логотип Say Yes" />
                     </a>
                     {/* 
                     <nav className="header__buttons">
