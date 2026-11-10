@@ -7,6 +7,9 @@ const withMDX = createMDX({
 export default withMDX({
     pageExtensions: ['js', 'jsx', 'md', 'mdx', 'ts', 'tsx'],
     reactStrictMode: true,
+    // Почтовые библиотеки (забор ответов из info@ по IMAP) не упаковываем в бандл:
+    // imapflow тянет pino с тестовыми файлами, и сборка Next на них падает (10.11.2026).
+    serverExternalPackages: ['imapflow', 'mailparser', 'pino', 'thread-stream'],
         async rewrites() {
                     return [
       // Картинки старого сайта отдаются только по своему домену (защита от хотлинка),
