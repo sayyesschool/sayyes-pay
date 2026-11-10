@@ -41,7 +41,8 @@ function generateAvailableSlots(bookedSlots) {
 
   // Горизонт записи три недели — столько же показывает воронка,
   // иначе при переносе человек видел бы меньше вариантов, чем при записи.
-  for (let dayOffset = 0; dayOffset < 7; dayOffset++) {
+  // 10.11.2026: две недели вперёд, как в воронке (getNextWeekdays(12)).
+  for (let dayOffset = 0; dayOffset < 14; dayOffset++) {
     const date = new Date(now);
     date.setDate(date.getDate() + dayOffset);
 

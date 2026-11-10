@@ -987,7 +987,7 @@ async function showSlotTaken(takenKey, takenLabel, ids) {
 
   const nowTs = Date.now();
   const free = [];
-  getNextWeekdays(6).forEach(date => {
+  getNextWeekdays(12).forEach(date => {
     generateSlots(date).forEach(mskMin => {
       const local = mskMinutesToLocal(mskMin, date);
       if (local.getTime() - nowTs < 3 * 60 * 60 * 1000) return;
@@ -1668,7 +1668,8 @@ function renderSlotGrid() {
         // дают ровно семь календарных: одно воскресенье пропускается.
         // Дальний горизонт не нужен: чем дальше урок, тем больше шансов, что человек
         // передумает, а слот всё это время занят.
-        const days = getNextWeekdays(6);
+        // 10.11.2026 (Дима): две недели вперёд, ближайшая неделя забита.
+        const days = getNextWeekdays(12);
   const userTZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const DAYS_FULL = ['Воскресенье','Понедельник','Вторник','Среда','Четверг','Пятница','Суббота'];
 
