@@ -67,7 +67,11 @@ export async function GET(request) {
       ad: {},
       unconfirmedByLead: {},
       confirmedByLead: {},
-      quiz: {}
+      quiz: {},
+      weekday: {},
+      hourMsk: {},
+      leadDays: {},
+      createdWeekday: {}
     };
     const quizFields = ['Страна', 'Возраст', 'Уровень', 'Цель', 'Формат', 'Готовность', 'Бюджет', 'Стаж', 'Время в неделю'];
 
@@ -117,6 +121,16 @@ export async function GET(request) {
       put(groups.confirmation, booking.confirmed ? 'подтвердил' : 'не подтвердил');
       put(groups.bot, booking.chatId ? 'открыл бота' : 'без бота');
       put(groups.leadTime, bucketLead(leadHours));
+
+      // 10.11.2026: разрезы для разбора доходимости (день недели и час урока по МСК,
+      // за сколько дней записались, в какой день недели оставили заявку).
+      const WD = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
+      const mskStart = new Date(start + 3 * 3600 * 1000);
+
+      put(groups.weekday, WD[mskStart.getUTCDay()]);
+      put(groups.hourMsk, String(mskStart.getUTCHours()).padStart(2, '0') + ':00');
+      put(groups.leadDays, leadHours === null ? 'неизвестно' : leadHours < 24 ? '0 (в тот же/след. день <24ч)' : Math.floor(leadHours / 24) + ' дн.');
+      if (createdMs) put(groups.createdWeekday, WD[new Date(createdMs + 3 * 3600 * 1000).getUTCDay()]);
 
       // Главная проверка для правила снятия: правило не трогает тех, кто записался
       // меньше чем за 8 часов. Если все дошедшие без подтверждения сидят именно там,
@@ -176,6 +190,10 @@ export async function GET(request) {
       confirmedByLead: finish(groups.confirmedByLead),
       source: finish(groups.source),
       ad: finish(groups.ad),
+      weekday: finish(groups.weekday),
+      hourMsk: finish(groups.hourMsk),
+      leadDays: finish(groups.leadDays),
+      createdWeekday: finish(groups.createdWeekday),
       quiz
     }, { headers: { 'Access-Control-Allow-Origin': '*' } });
   } catch (e) {
