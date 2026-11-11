@@ -362,13 +362,14 @@ export async function GET(request) {
 
       if (releaseBase && ((leadHours >= 12 && hoursUntil < 12) || (leadHours >= 4 && leadHours < 12 && hoursUntil < 2))) {
         const t = await threadSince(booking.id, createdAtMs);
-        const H = 60 * 60 * 1000;
-
         if (leadHours >= 12) {
           if (hoursUntil < 6) {
             if (!t.studentAt && dayHoursToConfirm() >= 6) releaseReason = 'standard';
-          } else if (t.managerAt && now.getTime() - t.managerAt >= 2 * H && !(t.studentAt > t.managerAt)
-            && !(t.studentAt && !t.managerAt) && dayHoursToConfirm() >= 6) {
+          } else if (t.managerAt && !(t.studentAt > t.managerAt)
+            // 2 часа считаем дневными часами ученика: сообщение, отправленное ему
+            // поздно вечером, он увидит только утром.
+            && clientDayHoursBetween(booking, t.managerAt, now.getTime()) >= 2
+            && dayHoursToConfirm() >= 6) {
             releaseReason = 'manager_no_reply';
           }
         } else if (!t.studentAt && dayHoursToConfirm() >= 2) {
