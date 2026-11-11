@@ -176,6 +176,76 @@ export async function GET(request) {
 
     const lessonsPast = inWindow.filter(b => b.status !== 'cancelled' && slotStartMs(b) <= now).length;
 
+    // Автоснятие неподтверждённых: заняли ли освободившееся время (11.11.2026).
+    // Слот вмещает одного ученика, поэтому любая заявка на то же время, сделанная
+    // или перенесённая туда после снятия, - это занятое освободившееся место.
+    const bySlot = new Map();
+
+    for (const b of all) {
+      if (!b.slot || b.slot === 'no_time') continue;
+      if (!bySlot.has(b.slot)) bySlot.set(b.slot, []);
+      bySlot.get(b.slot).push(b);
+    }
+
+    const refill = {
+      released: 0, refilled: 0, refilledAttended: 0, releasedPersonCameLater: 0,
+      releasedHoursBefore: {}, refillAfterReleaseHours: {}, refilledByLessonHour: {}, releasedByLessonHour: {}
+    };
+    const hourMsk = b => String(b.slot).split('_')[1] || '?';
+
+    for (const b of cancelled) {
+      if (!(b.cancelSource === 'auto_unconfirmed' || b.releasedUnconfirmed)) continue;
+
+      const start = slotStartMs(b);
+      const relMs = b.releasedAt ? new Date(b.releasedAt).getTime() : null;
+
+      refill.released++;
+      inc(refill.releasedByLessonHour, hourMsk(b));
+
+      if (relMs) {
+        const h = (start - relMs) / HOUR;
+
+        inc(refill.releasedHoursBefore, h < 3 ? '<3' : h < 4 ? '3-4' : h < 5 ? '4-5' : h < 6 ? '5-6' : '6+');
+      }
+
+      const takers = (bySlot.get(b.slot) || []).filter(o => {
+        if (o.id === b.id || o.status === 'cancelled' && !o.attended) return false;
+
+        const tookAt = Math.max(
+          o.createdAt ? new Date(o.createdAt).getTime() : 0,
+          o.rescheduledAt ? new Date(o.rescheduledAt).getTime() : 0
+        );
+
+        return relMs && tookAt >= relMs;
+      });
+
+      if (takers.length) {
+        refill.refilled++;
+        inc(refill.refilledByLessonHour, hourMsk(b));
+
+        if (takers.some(o => o.attended === true)) refill.refilledAttended++;
+
+        const first = Math.min(...takers.map(o => Math.max(
+          o.createdAt ? new Date(o.createdAt).getTime() : 0,
+          o.rescheduledAt ? new Date(o.rescheduledAt).getTime() : 0
+        )));
+        const h = (first - relMs) / HOUR;
+
+        inc(refill.refillAfterReleaseHours, h < 1 ? '<1' : h < 2 ? '1-2' : h < 3 ? '2-3' : h < 6 ? '3-6' : '6+');
+      }
+
+      // Снятый всё равно пришёл позже (записался заново и дошёл).
+      const again = new Set();
+
+      for (const key of personKeys(b)) {
+        for (const other of byPerson.get(key) || []) {
+          if (other.id !== b.id && (other.createdAt || '') > (b.createdAt || '') && other.attended === true) again.add(other.id);
+        }
+      }
+
+      if (again.size) refill.releasedPersonCameLater++;
+    }
+
     return NextResponse.json({
       note: 'Отменённые записи с временем урока за последние N суток. Источник без префикса точный, «вероятно» восстановлен по следам в базе.',
       days,
@@ -191,7 +261,8 @@ export async function GET(request) {
       timezone: tzOutside,
       byWeek,
       afterCancel: after,
-      afterCancelBySource: afterBySource
+      afterCancelBySource: afterBySource,
+      releaseRefill: refill
     }, { headers: { 'Access-Control-Allow-Origin': '*' } });
   } catch (e) {
     return NextResponse.json({ error: e.message }, { status: 500 });
