@@ -67,11 +67,11 @@ function generateAvailableSlots(bookedSlots) {
       if (isSlotClosed(slotKey)) continue;
       if (bookedSlots.includes(slotKey)) continue;
 
-      // Check if slot is in the future (at least 2 hours from now)
+      // Не ближе 30 минут (11.11.2026, как в воронке; раньше 2 часа).
       const [h, m] = time.split(':').map(Number);
       const slotDate = new Date(date);
       slotDate.setUTCHours(h - 3, m, 0, 0); // Convert MSK to UTC
-      if (slotDate - now < 2 * 60 * 60 * 1000) continue;
+      if (slotDate - now < 30 * 60 * 1000) continue;
 
       // Format label
       const dayNames = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
@@ -1945,7 +1945,7 @@ async function handleConfirmAllCommand(chatId) {
       await sendMessage(
         booking.chatId,
         `Здравствуйте! Подтвердите, пожалуйста, что будете на пробном уроке ${booking.slotDate || ''} в ${booking.slotLocal || booking.slotMsk || ''}.\n\n` +
-        'Преподаватель готовится к каждому уроку лично, поэтому неподтверждённые времена мы освобождаем за 6 часов до начала.',
+        'Преподаватель готовится к каждому уроку лично, поэтому неподтверждённые времена мы освобождаем заранее.',
         bookingActionsKeyboard(booking.id, booking)
       );
       sent++;
@@ -1954,7 +1954,7 @@ async function handleConfirmAllCommand(chatId) {
     }
   }
 
-  await sendMessage(chatId, `Просьба подтвердить отправлена: ${sent} из ${list.length}.\nНеподтверждённые слоты освободятся автоматически за 6 часов до урока.`);
+  await sendMessage(chatId, `Просьба подтвердить отправлена: ${sent} из ${list.length}.\nНеподтверждённые слоты освободятся автоматически: за 12 ч, если менеджер написал и ответа нет 2 ч, иначе за 6 ч; у записавшихся меньше чем за 12 ч - за 2 ч.`);
 }
 
 // Расписание живёт в UTC+3, поэтому и «сегодня» считаем в нём:

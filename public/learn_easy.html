@@ -990,7 +990,7 @@ async function showSlotTaken(takenKey, takenLabel, ids) {
   getNextWeekdays(12).forEach(date => {
     generateSlots(date).forEach(mskMin => {
       const local = mskMinutesToLocal(mskMin, date);
-      if (local.getTime() - nowTs < 3 * 60 * 60 * 1000) return;
+      if (local.getTime() - nowTs < MIN_LEAD_MS) return;
       const key = ymd(date) + '_' + formatMskTime(mskMin);
       if (bookedSlots.includes(key)) return;
       free.push({
@@ -1546,7 +1546,8 @@ function ymd(date) {
 // Отдельную субботу закрываем через DAY_HOURS в src/lib/capacity.js:
 // пустой список часов закрывает день целиком и в воронке, и в боте.
 //
-// Начинаем с СЕГОДНЯ, если в нём ещё остались слоты минимум через 3 часа.
+// Начинаем с СЕГОДНЯ, если в нём ещё остались слоты минимум через 30 минут.
+const MIN_LEAD_MS = 30 * 60 * 1000;
 // Чем меньше разрыв между записью и уроком, тем выше доходимость.
 function getNextWeekdays(count) {
   const days = [];
@@ -1558,7 +1559,7 @@ function getNextWeekdays(count) {
     const dow = d.getDay();
     if (dow >= 1 && dow <= 6) {
       const isToday = ymd(d) === ymd(now);
-      if (!isToday || mskMinutesToLocal(LAST_MSK_MIN, d) - now > 3 * 60 * 60 * 1000) {
+      if (!isToday || mskMinutesToLocal(LAST_MSK_MIN, d) - now > MIN_LEAD_MS) {
         days.push(new Date(d));
       }
     }
@@ -1689,8 +1690,9 @@ function renderSlotGrid() {
         const slots = generateSlots(date);
     slots.forEach(mskMin => {
       const localDate = mskMinutesToLocal(mskMin, date);
-      // Слот должен начинаться минимум через 3 часа - иначе преподаватель не успеет
-      if (localDate.getTime() - nowTs < 3 * 60 * 60 * 1000) return;
+      // 11.11.2026: записаться можно на ближайший слот, не позже чем за 30 минут
+      // (раньше 3 часа). Ближние дни забиты, а ранняя запись доходит хуже.
+      if (localDate.getTime() - nowTs < MIN_LEAD_MS) return;
       const dateKey = ymd(date) + '_' + formatMskTime(mskMin);
       // Показываем только свободное время (10.10.2026): зачёркнутые слоты
       // растягивали сетку вдвое и ничего не давали.

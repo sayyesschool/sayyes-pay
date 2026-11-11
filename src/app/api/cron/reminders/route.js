@@ -7,6 +7,7 @@ import { reviveTelegram, reviveKeyboard, reviveDueAt } from '@/lib/revive';
 import { isClientNight, clientDayHoursBetween } from '@/lib/time';
 import { processOffer, offerReminderDue } from '@/lib/offerChain';
 import { syncInbox } from '@/lib/mailbox';
+import { getThread } from '@/lib/thread';
 import { kvGet as kvGetRaw } from '@/lib/redis';
 
 // Protect cron endpoint
@@ -63,6 +64,33 @@ async function watchFunnel() {
 
     return null;
   }
+}
+
+// Причина автоснятия - для уведомления менеджерам (11.11.2026).
+const RELEASE_REASON_TEXT = {
+  standard: 'Не подтвердил, до урока меньше 6 часов.',
+  manager_no_reply: 'Не подтвердил и 2 часа не отвечает на сообщение менеджера, до урока меньше 12 часов.',
+  short_lead: 'Записался меньше чем за 12 часов и не подтвердил, до урока меньше 2 часов.'
+};
+
+// Переписка по заявке с момента записи: когда последний раз писал менеджер
+// и когда ученик. Читается только для записей, которые уже подходят под снятие.
+async function threadSince(bookingId, sinceMs) {
+  const out = { managerAt: 0, studentAt: 0 };
+
+  try {
+    for (const m of await getThread(bookingId)) {
+      const at = m && m.at ? new Date(m.at).getTime() : 0;
+
+      if (!at || (sinceMs && at < sinceMs)) continue;
+      if (m.from === 'manager') out.managerAt = Math.max(out.managerAt, at);
+      if (m.from === 'student') out.studentAt = Math.max(out.studentAt, at);
+    }
+  } catch (e) {
+    console.error('Thread read error:', bookingId, e);
+  }
+
+  return out;
 }
 
 export async function GET(request) {
@@ -313,20 +341,49 @@ export async function GET(request) {
       // ближе шести часов, подтверждения нет, условие сошлось. Получилась петля,
       // и ученикам каждый раз уходило письмо «мы освободили ваше время».
       // Решение человека всегда старше автоматики.
-      if (!booking.confirmed
+      //
+      // 11.11.2026 (решение Димы). Ближние дни забиты, а освобождённое за 5-6 часов
+      // время висело в воронке 2-3 часа и занималось лишь в 15% случаев. Теперь:
+      // - записался за 12+ часов: снимаем за 12 часов до урока, если менеджер написал
+      //   ученику, прошло 2 часа, а ответа нет; без сообщения менеджера - как раньше, за 6;
+      // - записался за 4-12 часов: снимаем за 2 часа до урока (записаться теперь
+      //   можно за 30 минут, место успеют занять), если было 2 дневных часа ответить;
+      // - записался меньше чем за 4 часа: не снимаем.
+      // Во всех случаях: просьба подтвердить реально ушла, у ученика не ночь,
+      // и ученик ничего не писал нам после записи (написал - решает менеджер).
+      let releaseReason = null;
+      const releaseBase = !booking.confirmed
         && !booking.releasedUnconfirmed
         && !booking.restoredAt
         && booking.status !== 'cancelled'
-        && leadHours >= 12
-        && hoursUntil > 0 && hoursUntil < 6
-        && !clientNight
-        && dayHoursToConfirm() >= 6) {
+        && (booking.reminded24h || booking.mailed24h)
+        && hoursUntil > 0
+        && !clientNight;
+
+      if (releaseBase && ((leadHours >= 12 && hoursUntil < 12) || (leadHours >= 4 && leadHours < 12 && hoursUntil < 2))) {
+        const t = await threadSince(booking.id, createdAtMs);
+        const H = 60 * 60 * 1000;
+
+        if (leadHours >= 12) {
+          if (hoursUntil < 6) {
+            if (!t.studentAt && dayHoursToConfirm() >= 6) releaseReason = 'standard';
+          } else if (t.managerAt && now.getTime() - t.managerAt >= 2 * H && !(t.studentAt > t.managerAt)
+            && !(t.studentAt && !t.managerAt) && dayHoursToConfirm() >= 6) {
+            releaseReason = 'manager_no_reply';
+          }
+        } else if (!t.studentAt && dayHoursToConfirm() >= 2) {
+          releaseReason = 'short_lead';
+        }
+      }
+
+      if (releaseReason) {
         await updateBooking(booking.id, {
           status: 'cancelled',
           releasedUnconfirmed: true,
           releasedAt: new Date().toISOString(),
           cancelledAt: new Date().toISOString(),
-          cancelSource: 'auto_unconfirmed'
+          cancelSource: 'auto_unconfirmed',
+          releaseReason
         });
 
         if (booking.slot && booking.slot !== 'no_time') await removeBookedSlot(booking.slot);
@@ -348,7 +405,7 @@ export async function GET(request) {
         }
 
         await notifyManagers(
-          '🕕 <b>Снята неподтверждённая запись</b>\n\n' + formatManagerCard(booking) +
+          '🕕 <b>Снята неподтверждённая запись</b>\n' + RELEASE_REASON_TEXT[releaseReason] + '\n\n' + formatManagerCard(booking) +
           '\n\nВернуть: <code>/restore</code>'
         );
 
