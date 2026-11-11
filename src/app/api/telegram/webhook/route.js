@@ -2688,7 +2688,12 @@ async function handleRelayFromManager(managerChatId, message) {
     const who = message.from && message.from.username ? '@' + message.from.username : 'менеджер';
     const lastB = lastBooking ? await getBooking(lastBooking) : null;
 
-    await sendMessage(fromGroup, `✅ Ответ отправлен: ${who} → ${(lastB && lastB.name) || 'ученику'}`);
+    // 11.11.2026 (Дима): в группе виден и сам ответ, а не только факт отправки.
+    const body = message.text
+      ? '\n\n' + String(message.text).slice(0, 1500).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      : '\n\n(вложение)';
+
+    await sendMessage(fromGroup, `✅ Ответ отправлен: ${who} → ${(lastB && lastB.name) || 'ученику'}` + body);
   }
 
   return true;
