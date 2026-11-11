@@ -278,7 +278,7 @@ export default async function ClientPage({ params, searchParams }) {
                     <input type="hidden" name="id" value={booking.id} />
                     <input type="hidden" name="back" value={back} />
                     <button type="submit">⏹ Остановить цепочку</button>
-                    <span className="muted"> Нужна, если ученик ответил на письмо: ответы на почту система не видит.</span>
+                    <span className="muted"> Нужна, если ученик просит не писать или договорились иначе. Ответ ученика в боте или на письмо ставит цепочку на паузу сам.</span>
                   </form>
                 )}
               </>
