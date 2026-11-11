@@ -225,3 +225,18 @@ export function clientDayHoursBetween(booking, fromMs, toMs) {
   }
   return awake / (60 * 60 * 1000);
 }
+
+// Дата «YYYY-MM-DD» в поясе клиента (11.11.2026, утреннее напоминание в день урока).
+export function clientDayKey(booking, date = new Date()) {
+  const { tz } = resolveTz(booking);
+  const p = partsIn(date, tz);
+  if (!p) return date.toISOString().slice(0, 10);
+  return `${p.year}-${p.month}-${p.day}`;
+}
+
+// «16:00 по вашему времени (Берлин, GMT+1)» или «16:00 (CET)», если пояс неизвестен.
+export function clientTimeWithZone(booking) {
+  const local = localSlot(booking);
+  if (!local) return (booking && booking.slotLocal) || '';
+  return local.time + (local.assumed ? ' (CET)' : ' ' + yourTime(booking));
+}

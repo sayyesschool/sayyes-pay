@@ -602,6 +602,38 @@ export async function sendConfirmRequestEmail(booking) {
   return deliver(baseMsg(booking, 'Подтвердите пробный урок — ' + when, html), 'confirm-request');
 }
 
+// Утро дня урока (11.11.2026, макет согласован Димой). Только почта: заменяет
+// второе письмо «подтвердите», чтобы двух писем подряд не было.
+export async function sendMorningReminderEmail(booking) {
+  if (!booking || !booking.email) return { skipped: 'no email' };
+
+  const local = localSlot(booking);
+  const time = local ? local.time + (local.assumed ? ' (CET)' : ' ' + yourTime(booking)) : String(booking.slotLocal || '');
+  const html = booking.confirmed
+    ? layout(
+      '<tr><td style="font-size:22px;font-weight:800;line-height:1.3;padding-bottom:14px">'
+      + 'Доброе утро!</td></tr>'
+      + '<tr><td style="font-size:14px;line-height:1.7;color:#444;padding-bottom:18px">'
+      + 'Ждём вас сегодня на пробном уроке в ' + esc(time) + '.<br><br>'
+      + 'Ссылку на Zoom пришлём за час до начала.</td></tr>'
+      + '<tr><td style="font-size:12px;color:#888;line-height:1.6;padding-top:10px">'
+      + 'Планы изменились? Ответьте на это письмо, и мы перенесём урок.</td></tr>'
+    )
+    : layout(
+      '<tr><td style="font-size:22px;font-weight:800;line-height:1.3;padding-bottom:14px">'
+      + 'Доброе утро!</td></tr>'
+      + '<tr><td style="font-size:14px;line-height:1.7;color:#444;padding-bottom:18px">'
+      + 'Сегодня ваш пробный урок английского в ' + esc(time) + '.<br><br>'
+      + 'Всё в силе? Нажмите «Буду на уроке», и время останется за вами.</td></tr>'
+      + button(confirmLink(booking), 'Буду на уроке')
+      + '<tr><td style="font-size:12px;color:#888;line-height:1.6;padding-top:10px">'
+      + 'Планы изменились? Ответьте на это письмо, и мы перенесём урок.</td></tr>'
+    );
+  const subject = 'Сегодня в ' + (local ? local.time : String(booking.slotLocal || '')) + ' ваш пробный урок';
+
+  return deliver(baseMsg(booking, subject, html), 'morning-reminder');
+}
+
 // Слот сняли за неподтверждённость. Письмо не про наказание, а про возврат:
 // единственное, что человеку нужно, — ссылка на выбор нового времени.
 export async function sendSlotReleasedEmail(booking, link) {

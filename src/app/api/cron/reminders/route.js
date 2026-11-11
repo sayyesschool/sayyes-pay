@@ -2,12 +2,13 @@ import { NextResponse } from 'next/server';
 import { getCronBookings, updateBooking, getManagerChatId, removeBookedSlot, kvGet, kvSet } from '@/lib/redis';
 import { sendMessage, formatReminder, formatHandout, bookingActionsKeyboard, formatAttendanceAsk, attendanceKeyboard, formatManagerCard, managerActionsKeyboard } from '@/lib/telegram';
 import { notifyManagers, notifyHost } from '@/lib/managers';
-import { sendHandoutEmail, sendConfirmRequestEmail, sendLessonReminderEmail, sendReviveEmail, sendSlotReleasedEmail } from '@/lib/email';
+import { sendMorningReminderEmail, sendHandoutEmail, sendConfirmRequestEmail, sendLessonReminderEmail, sendReviveEmail, sendSlotReleasedEmail } from '@/lib/email';
 import { reviveTelegram, reviveKeyboard, reviveDueAt } from '@/lib/revive';
-import { isClientNight, clientDayHoursBetween } from '@/lib/time';
+import { isClientNight, clientDayHoursBetween, clientHour, clientDayKey, clientTimeWithZone } from '@/lib/time';
 import { processOffer, offerReminderDue } from '@/lib/offerChain';
 import { syncInbox } from '@/lib/mailbox';
 import { getThread } from '@/lib/thread';
+import { isContactCandidate, postContactList, refreshContactLists } from '@/lib/contactList';
 import { kvGet as kvGetRaw } from '@/lib/redis';
 
 // Protect cron endpoint
@@ -66,15 +67,10 @@ async function watchFunnel() {
   }
 }
 
-// Снятие записавшихся за 4-12 часов включаем только вместе с пингом менеджеру
-// за 3 часа до урока (п.2б, решение Димы 11.11.2026: сначала касания, потом снятие).
-const SHORT_LEAD_RELEASE = false;
-
 // Причина автоснятия - для уведомления менеджерам (11.11.2026).
 const RELEASE_REASON_TEXT = {
-  standard: 'Не подтвердил, до урока меньше 6 часов.',
-  manager_no_reply: 'Не подтвердил и 2 часа не отвечает на сообщение менеджера, до урока меньше 12 часов.',
-  short_lead: 'Записался меньше чем за 12 часов и не подтвердил, до урока меньше 2 часов.'
+  manager_no_reply: 'Не подтвердил и 2 часа (днём по его времени) не отвечает на сообщение менеджера.',
+  short_lead: 'Записался сегодня, не подтвердил и 2 часа (днём по его времени) не отвечает на сообщение менеджера.'
 };
 
 // Переписка по заявке с момента записи: когда последний раз писал менеджер
@@ -92,6 +88,34 @@ async function threadSince(bookingId, sinceMs) {
     }
   } catch (e) {
     console.error('Thread read error:', bookingId, e);
+  }
+
+  return out;
+}
+
+// Три точки списка «не подтвердили» и обновление уже отправленных списков.
+async function sendContactLists({ contactEvening, contactMorning, contactPing, mskToday, mskTomorrow, now, bookings }) {
+  const out = { evening: 0, morning: 0, ping: 0, refreshed: 0 };
+  const bySlot = (a, b) => String(a.slot).localeCompare(String(b.slot));
+
+  if (contactEvening.length && !(await kvGet('clist:sent:evening:' + mskTomorrow))) {
+    await kvSet('clist:sent:evening:' + mskTomorrow, now.toISOString(), 60 * 60 * 48);
+    if (await postContactList('evening', mskTomorrow, contactEvening.sort(bySlot), now)) out.evening = contactEvening.length;
+  }
+
+  if (contactMorning.length && !(await kvGet('clist:sent:morning:' + mskToday))) {
+    await kvSet('clist:sent:morning:' + mskToday, now.toISOString(), 60 * 60 * 48);
+    if (await postContactList('morning', mskToday, contactMorning.sort(bySlot), now)) out.morning = contactMorning.length;
+  }
+
+  for (const b of contactPing) {
+    if (b.contactListAt) continue;
+    if (await postContactList('ping', mskToday, [b], now)) out.ping++;
+  }
+
+  // Статусы в уже отправленных списках: раз в ~15 минут, чтобы не тратить запросы к базе.
+  if (now.getUTCMinutes() % 15 < 5) {
+    out.refreshed = await refreshContactLists(new Map(bookings.map(b => [b.id, b])));
   }
 
   return out;
@@ -118,6 +142,14 @@ export async function GET(request) {
     let mailed = 0;
     let revived = 0;
     let offersSent = 0;
+    let sentMorning = 0;
+    const contactEvening = [];
+    const contactMorning = [];
+    const contactPing = [];
+    const mskNowDate = new Date(now.getTime() + 3 * 60 * 60 * 1000);
+    const mskHourNow = mskNowDate.getUTCHours();
+    const mskToday = mskNowDate.toISOString().slice(0, 10);
+    const mskTomorrow = new Date(mskNowDate.getTime() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
     for (const booking of bookings) {
       if (!booking.slot || booking.slot === 'no_time') continue;
@@ -158,6 +190,62 @@ export async function GET(request) {
         );
         await updateBooking(booking.id, { reminded24h: true });
         sent24h++;
+      }
+
+      // Утро дня урока (11.11.2026, п.3, макет согласован Димой): в 9-12 по времени
+      // ученика, если урок сегодня с 12:00 по его времени и записался он не сегодня.
+      // У тех, кто только с почтой, письмо заменяет второе «подтвердите» (mailed12h).
+      if (!booking.morningSent && !clientNight && booking.status !== 'cancelled' && hoursUntil > 2
+        && (booking.chatId || booking.email)
+        && clientHour(booking, now) < 12
+        && clientDayKey(booking, slotDate) === clientDayKey(booking, now)
+        && clientHour(booking, slotDate) >= 12
+        && (booking.rescheduledAt || booking.createdAt)
+        && clientDayKey(booking, new Date(booking.rescheduledAt || booking.createdAt)) !== clientDayKey(booking, now)) {
+        let delivered = false;
+
+        if (booking.chatId) {
+          const when = clientTimeWithZone(booking);
+          const text = booking.confirmed
+            ? 'Доброе утро! Ждём вас сегодня на пробном уроке в ' + when + '.\n\nСсылку на Zoom пришлём за час до начала.'
+            : 'Доброе утро! Сегодня ваш пробный урок английского в ' + when + '.\n\nВсё в силе? Нажмите «Буду на уроке», и время останется за вами.';
+          const kb = booking.confirmed
+            ? { inline_keyboard: [[{ text: 'Перенести запись', callback_data: 'reschedule:' + booking.id }]] }
+            : { inline_keyboard: [
+              [{ text: '✅ Буду на уроке', callback_data: 'confirm:' + booking.id }],
+              [{ text: 'Перенести запись', callback_data: 'reschedule:' + booking.id }, { text: 'Отменить запись', callback_data: 'cancel:' + booking.id }]
+            ] };
+          const res = await sendMessage(booking.chatId, text, kb);
+
+          delivered = Boolean(res && res.ok);
+        } else {
+          try {
+            const mail = await sendMorningReminderEmail(booking);
+
+            delivered = Boolean(mail && mail.ok);
+          } catch (e) {
+            console.error('Morning email error:', booking.id, e);
+          }
+        }
+
+        if (delivered) {
+          const patch = { morningSent: new Date().toISOString() };
+
+          if (!booking.chatId) patch.mailed12h = true;
+          await updateBooking(booking.id, patch);
+          Object.assign(booking, patch);
+          sentMorning++;
+        }
+      }
+
+      // Кому написать менеджеру (contactList.js): копим кандидатов, отправляем после цикла.
+      if (isContactCandidate(booking) && (booking.reminded24h || booking.mailed24h)) {
+        const startedMs = new Date(booking.rescheduledAt || booking.createdAt || 0).getTime();
+        const settled = now.getTime() - startedMs >= 60 * 60 * 1000;
+
+        if (dateStr === mskTomorrow && mskHourNow >= 20 && mskHourNow < 22) contactEvening.push(booking);
+        else if (dateStr === mskToday && mskHourNow >= 10 && mskHourNow < 12 && hoursUntil >= 3 && settled) contactMorning.push(booking);
+        else if (hoursUntil <= 4 && hoursUntil >= 2.5 && mskHourNow >= 9 && mskHourNow < 21 && settled) contactPing.push(booking);
       }
 
       // Тем, у кого нет чата с ботом, то же самое письмом. Без этого человек
@@ -338,7 +426,6 @@ export async function GET(request) {
       // Снимаем, только если с момента записи у человека было не меньше 6 дневных часов
       // (9:00-22:00 по его поясу) и сейчас у него не ночь.
       // Считается только когда остальные условия снятия уже сошлись (см. ниже).
-      const dayHoursToConfirm = () => (createdAtMs ? clientDayHoursBetween(booking, createdAtMs, now.getTime()) : 999);
 
       // Вернули руками — больше не трогаем. 16.09.2026 это стоило трёх живых уроков:
       // Дима вернул записи через /restore, а крон в ту же минуту снял их снова — урок
@@ -347,14 +434,11 @@ export async function GET(request) {
       // Решение человека всегда старше автоматики.
       //
       // 11.11.2026 (решение Димы). Ближние дни забиты, а освобождённое за 5-6 часов
-      // время висело в воронке 2-3 часа и занималось лишь в 15% случаев. Теперь:
-      // - записался за 12+ часов: снимаем за 12 часов до урока, если менеджер написал
-      //   ученику, прошло 2 часа, а ответа нет; без сообщения менеджера - как раньше, за 6;
-      // - записался за 4-12 часов: снимаем за 2 часа до урока (записаться теперь
-      //   можно за 30 минут, место успеют занять), если было 2 дневных часа ответить;
-      // - записался меньше чем за 4 часа: не снимаем.
-      // Во всех случаях: просьба подтвердить реально ушла, у ученика не ночь,
-      // и ученик ничего не писал нам после записи (написал - решает менеджер).
+      // время висело в воронке 2-3 часа и занималось лишь в 15% случаев. Прежнее
+      // правило «за 6 часов без подтверждения» снято: теперь сначала касания
+      // (просьба бота, сообщение менеджера по списку из contactList.js), потом снятие,
+      // не раньше чем за 12 часов до урока. Просьба подтвердить должна реально уйти,
+      // у ученика не ночь, ответил после менеджера - не снимаем.
       let releaseReason = null;
       const releaseBase = !booking.confirmed
         && !booking.releasedUnconfirmed
@@ -364,20 +448,16 @@ export async function GET(request) {
         && hoursUntil > 0
         && !clientNight;
 
-      if (releaseBase && ((leadHours >= 12 && hoursUntil < 12) || (SHORT_LEAD_RELEASE && leadHours >= 4 && leadHours < 12 && hoursUntil < 2))) {
+      // 11.11.2026 (Дима: «сначала касания, потом снятие»): снимаем только после
+      // сообщения менеджера по списку «не подтвердили» и 2 дневных часов тишины.
+      // Без сообщения менеджера запись не снимается. Ближе часа до урока не снимаем.
+      if (releaseBase && booking.contactListAt && hoursUntil > 1 && hoursUntil < 12) {
         const t = await threadSince(booking.id, createdAtMs);
-        if (leadHours >= 12) {
-          if (hoursUntil < 6) {
-            if (!t.studentAt && dayHoursToConfirm() >= 6) releaseReason = 'standard';
-          } else if (t.managerAt && !(t.studentAt > t.managerAt)
-            // 2 часа считаем дневными часами ученика: сообщение, отправленное ему
-            // поздно вечером, он увидит только утром.
-            && clientDayHoursBetween(booking, t.managerAt, now.getTime()) >= 2
-            && dayHoursToConfirm() >= 6) {
-            releaseReason = 'manager_no_reply';
-          }
-        } else if (!t.studentAt && dayHoursToConfirm() >= 2) {
-          releaseReason = 'short_lead';
+
+        if (t.managerAt && !(t.studentAt > t.managerAt)
+          // Дневные часы ученика: сообщение поздно вечером он увидит только утром.
+          && clientDayHoursBetween(booking, t.managerAt, now.getTime()) >= 2) {
+          releaseReason = leadHours >= 12 ? 'manager_no_reply' : 'short_lead';
         }
       }
 
@@ -390,6 +470,7 @@ export async function GET(request) {
           cancelSource: 'auto_unconfirmed',
           releaseReason
         });
+        Object.assign(booking, { status: 'cancelled', releasedUnconfirmed: true });
 
         if (booking.slot && booking.slot !== 'no_time') await removeBookedSlot(booking.slot);
 
@@ -503,6 +584,15 @@ export async function GET(request) {
       }
     }
 
+    // Списки «не подтвердили» в группу менеджеров (11.11.2026).
+    let contactLists = null;
+
+    try {
+      contactLists = await sendContactLists({ contactEvening, contactMorning, contactPing, mskToday, mskTomorrow, now, bookings });
+    } catch (e) {
+      console.error('Contact lists error:', e);
+    }
+
     const funnelAlert = await watchFunnel();
 
     // Ответы учеников на письма (ящик info@ по IMAP, src/lib/mailbox.js).
@@ -519,6 +609,8 @@ export async function GET(request) {
       checked: bookings.length,
       full,
       offersSent,
+      sentMorning,
+      contactLists,
       funnelAlert,
       mail,
       sent24h,

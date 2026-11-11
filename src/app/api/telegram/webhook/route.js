@@ -29,6 +29,7 @@ import {
 } from '@/lib/telegram';
 import { notifyManagers, isManagerChat, getManagerChatIds, getManagerChatMap } from '@/lib/managers';
 import { isBotManager, managerUsernames, superUsernames } from '@/lib/access';
+import { claimContact } from '@/lib/contactList';
 
 // Verify webhook secret (optional extra security)
 const WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET;
@@ -1954,7 +1955,7 @@ async function handleConfirmAllCommand(chatId) {
     }
   }
 
-  await sendMessage(chatId, `Просьба подтвердить отправлена: ${sent} из ${list.length}.\nНеподтверждённые слоты освободятся автоматически: за 12 ч, если менеджер написал и ответа нет 2 ч, иначе за 6 ч; записавшихся меньше чем за 12 ч не снимаем.`);
+  await sendMessage(chatId, `Просьба подтвердить отправлена: ${sent} из ${list.length}.\nНеподтверждённую запись снимаем, только если менеджер написал ученику по списку «не подтвердили» и тот 2 дневных часа молчит, не раньше чем за 12 ч до урока.`);
 }
 
 // Расписание живёт в UTC+3, поэтому и «сегодня» считаем в нём:
@@ -2751,7 +2752,10 @@ async function handleMgrWriteFromGroup(groupChatId, bookingId, callbackQueryId, 
   await kvSet(`mgr_last:${personal}`, String(booking.id), 86400);
   await kvSet(`mgr_from_group:${personal}`, String(groupChatId), 86400);
   await answerCallback(callbackQueryId, 'Напишите ответ боту в личку');
-  await sendMessage(groupChatId, `✍️ @${username} отвечает ${booking.name || 'ученику'}`);
+
+  // Из списка «не подтвердили» (contactList.js): «пишет @…» появляется в самом списке.
+  if (booking.contactList) await claimContact(booking, username);
+  else await sendMessage(groupChatId, `✍️ @${username} отвечает ${booking.name || 'ученику'}`);
 }
 
 // --- Main webhook handler ---
