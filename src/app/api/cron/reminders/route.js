@@ -66,6 +66,10 @@ async function watchFunnel() {
   }
 }
 
+// Снятие записавшихся за 4-12 часов включаем только вместе с пингом менеджеру
+// за 3 часа до урока (п.2б, решение Димы 11.11.2026: сначала касания, потом снятие).
+const SHORT_LEAD_RELEASE = false;
+
 // Причина автоснятия - для уведомления менеджерам (11.11.2026).
 const RELEASE_REASON_TEXT = {
   standard: 'Не подтвердил, до урока меньше 6 часов.',
@@ -360,7 +364,7 @@ export async function GET(request) {
         && hoursUntil > 0
         && !clientNight;
 
-      if (releaseBase && ((leadHours >= 12 && hoursUntil < 12) || (leadHours >= 4 && leadHours < 12 && hoursUntil < 2))) {
+      if (releaseBase && ((leadHours >= 12 && hoursUntil < 12) || (SHORT_LEAD_RELEASE && leadHours >= 4 && leadHours < 12 && hoursUntil < 2))) {
         const t = await threadSince(booking.id, createdAtMs);
         if (leadHours >= 12) {
           if (hoursUntil < 6) {
