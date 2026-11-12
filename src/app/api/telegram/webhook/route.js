@@ -182,7 +182,12 @@ async function handleStart(chatId, username, args) {
     }
 
     if (!(await isBotManager(username))) {
-      await sendMessage(chatId, 'Этот аккаунт не в списке менеджеров школы — в админку он не пускает.');
+      // 12.11.2026: раньше страница входа в этом случае ждала вечно, и казалось,
+      // что «кнопка не работает». Теперь страница сразу показывает отказ.
+      await kvSet('adminlogin:' + nonce, { ...pending, denied: true, username: username ? String(username).toLowerCase() : null }, 600);
+      await sendMessage(chatId, username
+        ? 'Аккаунт @' + username + ' не в списке сотрудников школы, в админку он не пускает. Попросите супер-админа добавить его в разделе «Доступы».'
+        : 'У этого телеграм-аккаунта нет имени пользователя (@username), поэтому войти нельзя. Задайте его в настройках Telegram и попробуйте снова.');
 
       return;
     }

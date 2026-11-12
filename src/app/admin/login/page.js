@@ -14,6 +14,8 @@ const LIFE = 9 * 60 * 1000;
 export default function AdminLogin() {
   const [link, setLink] = useState(null);
   const [state, setState] = useState('start');
+  const [deniedAs, setDeniedAs] = useState(null);
+  const [sameTab, setSameTab] = useState(false);
   const timer = useRef(null);
   const nonce = useRef(null);
 
@@ -33,6 +35,7 @@ export default function AdminLogin() {
 
       if (result.error === 'no-access') {
         sessionStorage.removeItem(KEY);
+        setDeniedAs(result.username || null);
         setState('denied');
 
         return true;
@@ -53,6 +56,11 @@ export default function AdminLogin() {
 
   useEffect(() => {
     let stopped = false;
+
+    // 12.11.2026: во встроенном браузере Telegram и на телефонах ссылка в новой вкладке
+    // часто не открывается вовсе («кнопка не нажимается»). Там уходим в той же вкладке:
+    // код лежит в sessionStorage и подхватится при возврате.
+    setSameTab(/Telegram|Android|iPhone|iPad|Mobile/i.test(navigator.userAgent || ''));
 
     async function begin() {
       let saved = null;
@@ -144,7 +152,7 @@ export default function AdminLogin() {
             </p>
             <a
               href={link}
-              target="_blank"
+              target={sameTab ? undefined : '_blank'}
               rel="noopener noreferrer"
               style={{
                 display: 'inline-block', background: '#229ED9', color: '#fff', textDecoration: 'none',
@@ -154,6 +162,14 @@ export default function AdminLogin() {
               Войти через Telegram
             </a>
             <p style={{ color: '#a1a1aa', fontSize: 12, marginBottom: 4 }}>Ждём подтверждения…</p>
+            {link && (
+              <p style={{ color: '#71717a', fontSize: 12, margin: '10px 0 4px' }}>
+                Кнопка не открывает Telegram? Откройте @SY_school_bot и отправьте ему:<br />
+                <code style={{ userSelect: 'all', background: '#f4f4f5', padding: '2px 6px', borderRadius: 6 }}>
+                  /start {String(link).split('start=')[1] || ''}
+                </code>
+              </p>
+            )}
             <button
               onClick={check}
               style={{ background: 'none', border: 'none', color: '#6d28d9', fontSize: 13, cursor: 'pointer' }}
@@ -164,9 +180,18 @@ export default function AdminLogin() {
         )}
 
         {state === 'denied' && (
-          <p style={{ color: '#b91c1c' }}>
-            Этот телеграм-аккаунт не в списке менеджеров школы. Попросите добавить его в боте.
-          </p>
+          <>
+            <p style={{ color: '#b91c1c' }}>
+              {deniedAs ? 'Аккаунт @' + deniedAs : 'Этот телеграм-аккаунт'} не в списке сотрудников школы.
+              Попросите супер-админа добавить его в разделе «Доступы».
+            </p>
+            <button
+              onClick={restart}
+              style={{ background: '#16161a', color: '#fff', border: 'none', padding: '10px 18px', borderRadius: 10, cursor: 'pointer' }}
+            >
+              Попробовать снова
+            </button>
+          </>
         )}
 
         {state === 'expired' && (

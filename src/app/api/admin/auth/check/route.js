@@ -11,6 +11,12 @@ export async function GET(request) {
   const record = await kvGet('adminlogin:' + nonce);
 
   if (!record) return NextResponse.json({ ok: false, error: 'expired' });
+  if (record.denied) {
+    await kvDel('adminlogin:' + nonce);
+
+    return NextResponse.json({ ok: false, error: 'no-access', username: record.username || null });
+  }
+
   if (!record.username) return NextResponse.json({ ok: false });
 
   const rights = await rightsOf(record.username);
@@ -20,7 +26,7 @@ export async function GET(request) {
   if (!rights.length) {
     await kvDel('adminlogin:' + nonce);
 
-    return NextResponse.json({ ok: false, error: 'no-access' });
+    return NextResponse.json({ ok: false, error: 'no-access', username: record.username });
   }
 
   await kvDel('adminlogin:' + nonce);
