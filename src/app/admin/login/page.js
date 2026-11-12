@@ -161,6 +161,18 @@ export default function AdminLogin() {
             >
               Войти через Telegram
             </a>
+            {link && !sameTab && (
+              <div style={{ marginTop: 10 }}>
+                <a
+                  href={'https://web.telegram.org/k/#?tgaddr=' + encodeURIComponent('tg://resolve?domain=SY_school_bot&start=' + (String(link).split('start=')[1] || ''))}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ color: '#229ED9', fontSize: 14, fontWeight: 600, textDecoration: 'none' }}
+                >
+                  Нет Telegram на компьютере? Войти через Telegram Web
+                </a>
+              </div>
+            )}
             <p style={{ color: '#a1a1aa', fontSize: 12, marginBottom: 4 }}>Ждём подтверждения…</p>
             {link && (
               <p style={{ color: '#71717a', fontSize: 12, margin: '10px 0 4px' }}>
