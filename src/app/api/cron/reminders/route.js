@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getCronBookings, updateBooking, getManagerChatId, removeBookedSlot, kvGet, kvSet } from '@/lib/redis';
-import { sendMessage, formatReminder, formatHandout, bookingActionsKeyboard, formatAttendanceAsk, attendanceKeyboard, formatManagerCard, managerActionsKeyboard } from '@/lib/telegram';
-import { notifyManagers, notifyHost } from '@/lib/managers';
+import { sendMessage, formatReminder, formatHandout, bookingActionsKeyboard, formatAttendanceAsk, attendanceKeyboard, formatManagerCard, managerActionsKeyboard, hostListLabel } from '@/lib/telegram';
+import { notifyManagers, notifyHost, hostChatId } from '@/lib/managers';
+import { hostUsernames } from '@/lib/access';
 import { sendMorningReminderEmail, sendHandoutEmail, sendConfirmRequestEmail, sendLessonReminderEmail, sendReviveEmail, sendSlotReleasedEmail } from '@/lib/email';
 import { reviveTelegram, reviveKeyboard, reviveDueAt } from '@/lib/revive';
 import { isClientNight, clientDayHoursBetween, clientHour, clientDayKey, clientTimeWithZone } from '@/lib/time';
@@ -121,6 +122,40 @@ async function sendContactLists({ contactEvening, contactMorning, contactPing, m
   return out;
 }
 
+// Уроки без ведущего: одно сообщение каждому ведущему, кнопка на каждый урок.
+async function remindHosts(kind, dateKey, list) {
+  if (!list.length) return 0;
+
+  const flag = 'hostremind:' + kind + ':' + dateKey;
+
+  if (await kvGet(flag)) return 0;
+  await kvSet(flag, new Date().toISOString(), 60 * 60 * 48);
+
+  const [, m, d] = dateKey.split('-').map(Number);
+  const MONTHS = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
+  const day = d + ' ' + MONTHS[m - 1];
+  const sorted = [...list].sort((a, b) => String(a.slot).localeCompare(String(b.slot)));
+  const text = '👤 <b>Уроки ' + (kind === 'evening' ? 'на завтра' : 'сегодня') + ' без ведущего, ' + day + '</b>\n\n'
+    + 'Нажмите на урок, чтобы взять его себе. Время МСК.';
+  const keyboard = { inline_keyboard: sorted.map(b => [{ text: hostListLabel(b), callback_data: 'host:' + b.id }]) };
+  let sent = 0;
+
+  for (const username of await hostUsernames()) {
+    const chat = await hostChatId(username);
+
+    if (!chat) continue;
+
+    const r = await sendMessage(chat, text, keyboard);
+
+    if (r && r.ok) sent++;
+  }
+
+  // Ни одному ведущему не дошло - пусть увидят менеджеры.
+  if (!sent) sent = await notifyManagers(text + '\n\nВедущие не запускали бота: сообщение не дошло до них.', keyboard);
+
+  return sent;
+}
+
 export async function GET(request) {
   // Verify cron secret (Vercel sends this header)
   const authHeader = request.headers.get('authorization');
@@ -144,6 +179,8 @@ export async function GET(request) {
     let offersSent = 0;
     let sentMorning = 0;
     const contactEvening = [];
+    const hostlessTomorrow = [];
+    const hostlessToday = [];
     const contactMorning = [];
     const contactPing = [];
     const mskNowDate = new Date(now.getTime() + 3 * 60 * 60 * 1000);
@@ -236,6 +273,13 @@ export async function GET(request) {
           Object.assign(booking, patch);
           sentMorning++;
         }
+      }
+
+      // Уроки без ведущего: напоминание ведущим в 20:00 (на завтра) и 10:00 МСК (на сегодня).
+      if (!booking.hostUsername && booking.status !== 'cancelled' && !booking.archived && !booking.introTest
+        && hoursUntil > 0.5) {
+        if (dateStr === mskTomorrow && mskHourNow >= 20 && mskHourNow < 22) hostlessTomorrow.push(booking);
+        if (dateStr === mskToday && mskHourNow >= 10 && mskHourNow < 12) hostlessToday.push(booking);
       }
 
       // Кому написать менеджеру (contactList.js): копим кандидатов, отправляем после цикла.
@@ -354,9 +398,11 @@ export async function GET(request) {
       // крон дёргается раз в 15 минут и GitHub Actions регулярно опаздывает.
       const minutesUntil = hoursUntil * 60;
       if (!booking.hostBriefed && minutesUntil > -15 && minutesUntil < 90) {
+        // Есть ведущий - бриф только ему, нет - всем ведущим (17.11.2026).
         const briefed = await notifyHost(
           `⏰ <b>Пробный урок через ${Math.round(minutesUntil)} мин</b>\n\n` + formatManagerCard(booking),
-          managerActionsKeyboard(booking.id, null, { late: true })
+          managerActionsKeyboard(booking.id, booking, { late: true }),
+          booking
         );
         if (briefed) {
           await updateBooking(booking.id, { hostBriefed: true });
@@ -510,10 +556,19 @@ export async function GET(request) {
         const stage = hoursUntil <= -24 ? 3 : (hoursUntil <= -4 ? 2 : 1);
 
         if ((booking.attendanceAskedStage || 0) < stage) {
-          const asked = await notifyManagers(
-            formatAttendanceAsk(booking) + (stage > 1 ? '\n\n⚠️ Урок до сих пор без отметки.' : ''),
-            attendanceKeyboard(booking.id)
-          );
+          // Первый вопрос - ведущему урока, если он назначен; дальше, если отметки
+          // так и нет, - всем менеджерам (17.11.2026).
+          const askText = formatAttendanceAsk(booking) + (stage > 1 ? '\n\n⚠️ Урок до сих пор без отметки.' : '');
+          const hostChat = booking.hostUsername ? await hostChatId(booking.hostUsername) : null;
+          let asked = 0;
+
+          if (hostChat) {
+            const r = await sendMessage(hostChat, askText, attendanceKeyboard(booking.id));
+
+            if (r && r.ok) asked = 1;
+          }
+
+          if (!hostChat || stage > 1) asked += await notifyManagers(askText, attendanceKeyboard(booking.id));
 
           if (asked) {
             await updateBooking(booking.id, { attendanceAsked: true, attendanceAskedStage: stage });
@@ -585,6 +640,16 @@ export async function GET(request) {
       }
     }
 
+    // Напоминание ведущим про уроки без ведущего (17.11.2026).
+    let hostReminders = 0;
+
+    try {
+      hostReminders += await remindHosts('evening', mskTomorrow, hostlessTomorrow);
+      hostReminders += await remindHosts('morning', mskToday, hostlessToday);
+    } catch (e) {
+      console.error('Host reminder error:', e);
+    }
+
     // Списки «не подтвердили» в группу менеджеров (11.11.2026).
     let contactLists = null;
 
@@ -612,6 +677,7 @@ export async function GET(request) {
       offersSent,
       sentMorning,
       contactLists,
+      hostReminders,
       funnelAlert,
       mail,
       sent24h,

@@ -73,6 +73,41 @@ export async function editMessage(chatId, messageId, text, options = {}) {
   }
 }
 
+export async function editReplyMarkup(chatId, messageId, replyMarkup) {
+  try {
+    const resp = await fetch(apiUrl('editMessageReplyMarkup'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, message_id: messageId, reply_markup: replyMarkup })
+    });
+    return await resp.json();
+  } catch (e) {
+    console.error('Telegram editReplyMarkup error:', e);
+    return null;
+  }
+}
+
+// Ведущий урока (17.11.2026): кто ведёт, имя из «Доступов» или @username.
+export function hostLabel(booking) {
+  if (!booking || !booking.hostUsername) return null;
+
+  return booking.hostName || '@' + booking.hostUsername;
+}
+
+// Кнопка урока в напоминании «уроки без ведущего»: «🙋 16:00 Анна» / «✅ 16:00 Анна · Роман».
+export function hostListLabel(booking) {
+  const who = hostLabel(booking);
+  const name = String(booking.name || 'ученик').trim().split(/\s+/)[0];
+
+  return (who ? '✅ ' : '🙋 ') + (booking.slotMsk || '') + ' ' + name + (who ? ' · ' + who : '');
+}
+
+export function hostButton(booking, bookingId) {
+  const name = hostLabel(booking);
+
+  return { text: name ? '👤 Ведущий: ' + name : '👤 Ведущий: не назначен', callback_data: `host:${bookingId}` };
+}
+
 export async function answerCallback(callbackQueryId, text) {
   try {
     await fetch(apiUrl('answerCallbackQuery'), {
@@ -182,7 +217,8 @@ export function managerActionsKeyboard(bookingId, booking, options = {}) {
           : []),
         [
           { text: '✍️ Написать ученику', callback_data: `mgr_write:${bookingId}` }
-        ]
+        ],
+        [hostButton(booking, bookingId)]
       ].concat(options.late
         // Только в брифе ведущей перед уроком (04.11.2026): ученик не вышел вовремя.
         ? [[{ text: '⏰ Не вышел, напомнить', callback_data: `mgr_late:${bookingId}` }]]
@@ -283,6 +319,9 @@ export function formatManagerCard(booking) {
     `TG: ${booking.telegram || '—'} · тел.: ${booking.phone || '—'}\n` +
     `${booking.email || '—'}\n` +
     `Код: <code>${booking.id}</code>` +
+    (booking.slot && booking.slot !== 'no_time'
+      ? (hostLabel(booking) ? `\n👤 Ведёт: ${hostLabel(booking)}` : '\n👤 Ведущий не назначен')
+      : '') +
     (quizLine ? `\n${quizLine}` : '') +
     (marks.length ? `\n${marks.join(', ')}` : '');
 }

@@ -1,7 +1,7 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { SESSION_COOKIE, readSession, can } from '@/lib/adminAuth';
-import { buildAnalytics, shiftDay, today, loadBookings } from '@/lib/analytics';
+import { buildAnalytics, shiftDay, today, loadBookings, slotStartMs } from '@/lib/analytics';
 import { OFFER_REASONS } from '@/lib/offerChain';
 import { getAdsInsights } from '@/lib/metaAds';
 import { Shell } from '@/lib/adminShell';
@@ -108,6 +108,34 @@ export default async function AdminPage({ searchParams }) {
       offerReasons.total++;
       offerReasons.byCode[r.code] = (offerReasons.byCode[r.code] || 0) + 1;
     }
+  }
+
+  // Ведущие (17.11.2026): прошедшие уроки периода по тому, кто их вёл.
+  let hostStats = null;
+
+  if (tab === 'work') {
+    const rows = {};
+    const nowMs = Date.now();
+
+    for (const b of await loadBookings()) {
+      if (!b.slot || b.slot === 'no_time' || b.status === 'cancelled') continue;
+
+      const day = String(b.slot).slice(0, 10);
+      const start = slotStartMs(b);
+
+      if (day < from || day > to || !start || start > nowMs) continue;
+
+      const key = b.hostUsername ? (b.hostName || '@' + b.hostUsername) : 'Без ведущего';
+      const r = rows[key] || (rows[key] = { name: key, lessons: 0, attended: 0, noshow: 0, offers: 0, paid: 0 });
+
+      r.lessons++;
+      if (b.attended === true) r.attended++;
+      if (b.attended === false) r.noshow++;
+      if (b.attended === true && b.offer) r.offers++;
+      if (b.attended === true && (b.paid || b.introPaid)) r.paid++;
+    }
+
+    hostStats = Object.values(rows).sort((a, b) => (a.name === 'Без ведущего') - (b.name === 'Без ведущего') || b.lessons - a.lessons);
   }
 
   const source = ['meta', 'telegram', 'google', 'organic'].includes(params?.source) ? params.source : 'all';
@@ -424,6 +452,44 @@ export default async function AdminPage({ searchParams }) {
                 </table>
               </div>
             </div>
+
+            {hostStats && (
+              <div className="card">
+                <h2>По ведущим</h2>
+                {hostStats.length === 0 ? (
+                  <p className="muted">За период прошедших уроков нет.</p>
+                ) : (
+                  <div className="scroll">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Ведущий</th><th>Уроков</th><th>Пришли</th><th>Не пришли</th><th>Доходимость</th>
+                          <th>Оффер запущен</th>{owner && <th>Оплатили</th>}{owner && <th>Оплата от пришедших</th>}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {hostStats.map(r => (
+                          <tr key={r.name}>
+                            <td>{r.name}</td>
+                            <td>{r.lessons}</td>
+                            <td className={r.attended ? 'ok' : ''}>{r.attended}</td>
+                            <td>{r.noshow}</td>
+                            <td>{r.attended + r.noshow ? Math.round(r.attended / (r.attended + r.noshow) * 100) + '%' : '—'}</td>
+                            <td>{r.offers} из {r.attended}</td>
+                            {owner && <td>{r.paid}</td>}
+                            {owner && <td>{r.attended ? Math.round(r.paid / r.attended * 100) + '%' : '—'}</td>}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                <p className="muted">
+                  Ведущих отмечают с 17.11.2026: более ранние уроки попадают в «Без ведущего». Доходимость считается
+                  от отмеченных уроков (пришёл или не пришёл), оплата - любая оплата пришедших на пробный.
+                </p>
+              </div>
+            )}
 
             <div className={'card' + (data.health.unmarkedOld ? ' warn' : '')}>
               <h2>Что требует внимания</h2>

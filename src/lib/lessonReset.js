@@ -25,6 +25,10 @@ export const LESSON_RESET = {
   contactList: null,
   contactClaimBy: null,
   contactClaimAt: null,
+  // Ведущий брал прошлое время: на новое время урок берут заново
+  hostUsername: null,
+  hostName: null,
+  hostAssignedAt: null,
   // Отметки прошлого урока
   attended: null,
   attendedBy: null,

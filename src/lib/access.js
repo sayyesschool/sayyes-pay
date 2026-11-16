@@ -8,6 +8,8 @@ import { kvGet, kvSet } from '@/lib/redis';
 //   finance  - аналитика с оплатами и рекламой, страница «Оплаты»
 //   schedule - открыть и закрыть слоты, часы недели
 //   super    - всё, плюс «Объявления» и «Доступы»
+//   host     - ведущий пробных уроков (17.11.2026): берёт уроки себе в боте, получает
+//              бриф и вопрос о явке по своим урокам. Отдельная роль, супер-админ её не получает.
 //
 // Супер-админы из переменной OWNER_TG_USERNAMES (Дима и Оля) задаются на сервере
 // и из админки не снимаются: так никто не закроет доступ владельцам по ошибке.
@@ -15,8 +17,9 @@ import { kvGet, kvSet } from '@/lib/redis';
 // Пока в базе пусто, список берётся из MANAGER_TG_USERNAMES с правом base:
 // так права у всех остаются ровно такими, какими были до этого раздела.
 
-export const RIGHTS = ['base', 'finance', 'schedule', 'super'];
-export const RIGHT_LABEL = { base: 'Базовый', finance: 'Финансы', schedule: 'Расписание', super: 'Супер-админ' };
+export const RIGHTS = ['base', 'finance', 'schedule', 'super', 'host'];
+const ADMIN_RIGHTS = ['base', 'finance', 'schedule', 'super'];
+export const RIGHT_LABEL = { base: 'Базовый', finance: 'Финансы', schedule: 'Расписание', super: 'Супер-админ', host: 'Ведущий' };
 
 const USERS_KEY = 'admin:users';
 const LOG_KEY = 'admin:access:log';
@@ -75,16 +78,40 @@ export async function rightsOf(username) {
   const name = clean(username);
 
   if (!name) return [];
-  if (SUPER_USERNAMES.includes(name)) return [...RIGHTS];
+  if (SUPER_USERNAMES.includes(name)) return [...ADMIN_RIGHTS];
 
   const users = await getUsers();
   const rights = normalize(users[name] && users[name].rights);
 
-  return rights.includes('super') ? [...RIGHTS] : rights;
+  // Супер-админ получает все права админки, но не роль ведущего: её ставят отдельно.
+  return rights.includes('super') ? [...ADMIN_RIGHTS, ...(rights.includes('host') ? ['host'] : [])] : rights;
 }
 
 export function has(rights, right) {
-  return Array.isArray(rights) && (rights.includes('super') || rights.includes(right));
+  if (!Array.isArray(rights)) return false;
+  if (right === 'host') return rights.includes('host');
+
+  return rights.includes('super') || rights.includes(right);
+}
+
+// Ведущие пробных уроков. Пока ни у кого в «Доступах» нет галочки «Ведущий»,
+// ведущие - Роман и Анастасия (решение Димы 17.11.2026). Старую переменную
+// TRIAL_HOST_USERNAMES не читаем: там были менеджеры, а это теперь разные роли.
+const ENV_HOSTS = ['sayyes_roman', 'kandaurchik9'];
+
+export async function hostUsernames() {
+  const users = await getUsers();
+  const names = Object.entries(users)
+    .filter(([, u]) => normalize(u && u.rights).includes('host'))
+    .map(([name]) => name);
+
+  return names.length ? names : [...ENV_HOSTS];
+}
+
+export async function isHost(username) {
+  const name = clean(username);
+
+  return Boolean(name) && (await hostUsernames()).includes(name);
 }
 
 // Менеджеры бота: супер-админы и все, у кого есть base.
@@ -106,7 +133,9 @@ export async function isBotManager(username) {
 
   if (!name) return false;
 
-  return (await managerUsernames()).includes(name);
+  // Ведущий без права «Базовый» тоже работает кнопками в боте (отметки, напоминание),
+  // но уведомления менеджеров (заявки, отмены) ему не приходят.
+  return (await managerUsernames()).includes(name) || (await hostUsernames()).includes(name);
 }
 
 export async function superUsernames() {

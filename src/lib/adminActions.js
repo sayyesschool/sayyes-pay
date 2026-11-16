@@ -1,5 +1,6 @@
 import { getBooking, updateBooking, addBookedSlot, removeBookedSlot, getBookedSlots, kvSet, kvGet, kvKeys } from '@/lib/redis';
 import { LESSON_RESET } from '@/lib/lessonReset';
+import { isHost } from '@/lib/access';
 import { sendMessage, formatManagerCard, bookingActionsKeyboard } from '@/lib/telegram';
 import { clientWhen } from '@/lib/time';
 import { notifyManagers } from '@/lib/managers';
@@ -642,4 +643,31 @@ export async function replyByEmail(bookingId, text, by) {
   await updateBooking(booking.id, { mailThread: true, mailLastOutId: res.messageId, mailLastSubject: subject.replace(/^re:\s*/i, '') });
 
   return { ok: true, message: 'Письмо отправлено от ' + (managerName ? managerName + ' | ' : '') + 'Say Yes!' };
+}
+
+
+// Ведущий берёт урок себе или снимается с него из карточки в админке (17.11.2026).
+// Та же логика, что у кнопки «👤 Ведущий» в боте.
+export async function hostPick(bookingId, by) {
+  const username = String(by || '').replace(/^@/, '').toLowerCase();
+
+  if (!(await isHost(username))) return { ok: false, error: 'Брать уроки могут только ведущие' };
+
+  const booking = await getBooking(bookingId);
+
+  if (!booking || !booking.slot || booking.slot === 'no_time') return { ok: false, error: 'У записи нет времени урока' };
+  if (booking.status === 'cancelled') return { ok: false, error: 'Запись отменена' };
+
+  if (booking.hostUsername === username) {
+    await updateBooking(booking.id, { hostUsername: null, hostName: null, hostAssignedAt: null });
+    return { ok: true, message: 'Вы сняты с урока' };
+  }
+
+  if (booking.hostUsername) return { ok: false, error: 'Урок уже ведёт ' + (booking.hostName || '@' + booking.hostUsername) };
+
+  const profile = (await getProfiles()).find(p => p.username === username);
+
+  await updateBooking(booking.id, { hostUsername: username, hostName: (profile && profile.name) || null, hostAssignedAt: new Date().toISOString() });
+
+  return { ok: true, message: 'Урок ваш' };
 }

@@ -26,10 +26,10 @@ import {
   bookingActionsKeyboard, confirmCancelKeyboard, slotsKeyboard,
   managerActionsKeyboard, formatBookingConfirmation, formatBookingForManager,
   formatReminder, attendanceKeyboard, makeDeepLink, MANAGER_USERNAME,
-  formatManagerCard, formatLateNudge, lateNudgeKeyboard
+  formatManagerCard, formatLateNudge, lateNudgeKeyboard, editReplyMarkup, hostButton, hostLabel, hostListLabel
 } from '@/lib/telegram';
 import { notifyManagers, isManagerChat, getManagerChatIds, getManagerChatMap } from '@/lib/managers';
-import { isBotManager, managerUsernames, superUsernames } from '@/lib/access';
+import { isBotManager, managerUsernames, superUsernames, isHost, hostUsernames } from '@/lib/access';
 import { claimContact } from '@/lib/contactList';
 
 // Verify webhook secret (optional extra security)
@@ -2438,6 +2438,67 @@ async function handleMgrLate(chatId, bookingId, callbackQueryId, from) {
   );
 }
 
+// Ведущий урока (17.11.2026, решение Димы): ведущие (Роман, Анастасия, право «Ведущий»
+// в «Доступах») берут уроки себе сами. Нажатие на свою кнопку снимает с урока.
+// Кнопка обновляется в том сообщении, где её нажали: в карточке урока и в напоминании.
+async function handleHostPick(chatId, messageId, message, bookingId, callbackQueryId, from) {
+  const username = from && from.username ? String(from.username).toLowerCase() : '';
+
+  if (!username || !(await isHost(username))) {
+    const names = (await hostUsernames()).map(u => '@' + u).join(', ');
+
+    await answerCallback(callbackQueryId, 'Ведущие берут уроки себе сами (' + names + ')');
+    return;
+  }
+
+  const booking = await getBooking(bookingId);
+
+  if (!booking || !booking.slot || booking.slot === 'no_time') {
+    await answerCallback(callbackQueryId, 'У записи нет времени урока');
+    return;
+  }
+
+  if (booking.status === 'cancelled') {
+    await answerCallback(callbackQueryId, 'Запись отменена');
+    return;
+  }
+
+  let patch;
+  let note;
+
+  if (booking.hostUsername === username) {
+    patch = { hostUsername: null, hostName: null, hostAssignedAt: null };
+    note = 'Вы сняты с урока';
+  } else if (booking.hostUsername) {
+    await answerCallback(callbackQueryId, 'Урок уже ведёт ' + hostLabel(booking));
+    return;
+  } else {
+    const profile = (await getProfiles()).find(p => p.username === username);
+
+    patch = { hostUsername: username, hostName: (profile && profile.name) || null, hostAssignedAt: new Date().toISOString() };
+    note = 'Урок ваш: ' + (booking.slotDate || '') + ' ' + (booking.slotMsk || '') + ' МСК';
+  }
+
+  const updated = await updateBooking(booking.id, patch) || { ...booking, ...patch };
+
+  await answerCallback(callbackQueryId, note);
+
+  // Подменяем кнопку этого урока в сообщении, остальные кнопки не трогаем.
+  const markup = message && message.reply_markup;
+
+  if (markup && Array.isArray(markup.inline_keyboard)) {
+    const isCard = markup.inline_keyboard.some(row => row.some(b => String(b.callback_data || '').startsWith('attended:')));
+    const rows = markup.inline_keyboard.map(row => row.map(b => {
+      if (b.callback_data !== 'host:' + booking.id) return b;
+      if (isCard) return hostButton(updated, booking.id);
+
+      return { text: hostListLabel(updated), callback_data: b.callback_data };
+    }));
+
+    await editReplyMarkup(chatId, messageId, { inline_keyboard: rows });
+  }
+}
+
 async function handleMgrWrite(chatId, bookingId, callbackQueryId) {
   const booking = await getBooking(bookingId);
 
@@ -2891,6 +2952,9 @@ export async function POST(request) {
         }
         case 'mgr_late':
           await handleMgrLate(chatId, bookingId, callbackId, from);
+          break;
+        case 'host':
+          await handleHostPick(chatId, messageId, message, bookingId, callbackId, from);
           break;
         case 'mgr_reschedule':
           await handleMgrReschedule(chatId, bookingId, callbackId);

@@ -2,8 +2,7 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { SESSION_COOKIE, readSession, can } from '@/lib/adminAuth';
 import { Shell } from '@/lib/adminShell';
-import { RIGHTS, RIGHT_LABEL, SUPER_USERNAMES, getUsers, getAccessLog, getProfiles } from '@/lib/access';
-import { TRIAL_HOST_USERNAMES } from '@/lib/managers';
+import { RIGHTS, RIGHT_LABEL, SUPER_USERNAMES, getUsers, getAccessLog, getProfiles, hostUsernames } from '@/lib/access';
 import { kvGet } from '@/lib/redis';
 
 export const dynamic = 'force-dynamic';
@@ -51,11 +50,12 @@ export default async function AccessPage({ searchParams }) {
   const log = await getAccessLog(15);
   const prof = Object.fromEntries((await getProfiles()).map(p => [p.username, p]));
   const bot = {};
+  const hosts = await hostUsernames();
 
   for (const name of [...SUPER_USERNAMES, ...names]) bot[name] = await botStatus(name);
 
   const note = name => [
-    TRIAL_HOST_USERNAMES.includes(name) ? 'ведёт уроки' : '',
+    hosts.includes(name) ? 'ведёт уроки' : '',
     bot[name] ? 'бот ✓' : 'бот не запущен'
   ].filter(Boolean).join(' · ');
 
@@ -93,6 +93,7 @@ export default async function AccessPage({ searchParams }) {
                     <td>@{name}<div className="muted">из настроек сервера · {note(name)}</div></td>
                     <td>✓</td><td>✓</td><td>✓</td>
                     <td><span className="sa">супер-админ</span></td>
+                    <td className="muted">—</td>
                     {profileCells(name)}
                     <td className="muted">нельзя снять</td>
                   </tr>
@@ -178,7 +179,9 @@ export default async function AccessPage({ searchParams }) {
         <div className="muted" style={{ marginTop: 8 }}>
           Права: «Базовый» - управление заявками и уроками, ссылки и проведение оплат, база знаний, уведомления в боте.
           «Финансы» - аналитика с оплатами и рекламой, страница «Оплаты». «Расписание» - открыть и закрыть слоты,
-          часы недели. «Супер-админ» - всё, плюс «Объявления» и «Доступы».
+          часы недели. «Супер-админ» - всё, плюс «Объявления» и «Доступы». «Ведущий» - ведёт пробные уроки:
+          берёт уроки себе в боте, получает бриф перед уроком и вопрос «пришёл?» по своим урокам. Это отдельная
+          роль: менеджерские уведомления (заявки, отмены) ведущему без «Базового» не приходят.
         </div>
       </div>
     </Shell>

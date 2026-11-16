@@ -149,7 +149,7 @@ export function Shell({ session, active, activeTab, title, children }) {
   const has = right => Array.isArray(session.rights) && (session.rights.includes('super') || session.rights.includes(right));
   const owner = has('finance');
   const tabs = ANALYTICS_TABS.filter(tab => owner || !tab.owner);
-  const label = has('super') ? 'супер-админ' : (session.rights || []).map(r => ({ base: 'базовый', finance: 'финансы', schedule: 'расписание' })[r]).filter(Boolean).join(', ');
+  const label = has('super') ? 'супер-админ' : (session.rights || []).map(r => ({ base: 'базовый', finance: 'финансы', schedule: 'расписание', host: 'ведущий' })[r]).filter(Boolean).join(', ');
 
   return (
     <div className="syad">

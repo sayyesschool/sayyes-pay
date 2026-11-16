@@ -1,6 +1,6 @@
 import { getManagerChatId, kvGet } from '@/lib/redis';
 import { sendMessage } from '@/lib/telegram';
-import { managerUsernames } from '@/lib/access';
+import { managerUsernames, hostUsernames } from '@/lib/access';
 
 // Telegram не даёт боту писать человеку первым, поэтому chat id менеджера
 // появляется только после того, как он сам написал боту. Храним его по username.
@@ -39,35 +39,34 @@ export async function getManagerChatIds() {
   return ids;
 }
 
-// Ведущие пробных уроков. Им уходит карточка клиента перед звонком:
-// остальным этот шум не нужен. Уроки ведёт не один человек, поэтому список,
-// а не единственный username. Меняется переменной окружения.
-export const TRIAL_HOST_USERNAMES = (
-  process.env.TRIAL_HOST_USERNAMES ||
-  process.env.TRIAL_HOST_USERNAME ||
-  'sayyes_kristina,sayyes_roman,sayesstephanie'
-)
-  .split(',')
-  .map(name => name.trim().replace(/^@/, '').toLowerCase())
-  .filter(Boolean);
+// Ведущие пробных уроков (17.11.2026: отдельная роль «Ведущий» в «Доступах»).
+// Урок, у которого есть ведущий (booking.hostUsername), - только ему.
+// Ведущего нет или его чат неизвестен - всем ведущим. Ни одного чата ведущих - менеджерам.
+export async function hostChatId(username) {
+  if (!username) return null;
 
-// Первый в списке — на случай, если где-то нужно одно имя.
-export const TRIAL_HOST_USERNAME = TRIAL_HOST_USERNAMES[0];
+  const name = String(username).replace(/^@/, '').toLowerCase();
+  const id = (await kvGet(`manager_chat:${name}`)) || (await kvGet(`user_chat:${name}`));
 
-// Сообщение ведущим. Если ничей чат боту неизвестен (никто не нажимал «Начать»),
-// молчать нельзя — так уже терялись уведомления. Тогда шлём всем менеджерам.
-export async function notifyHost(text, keyboard) {
-  const map = await getManagerChatMap();
+  return id ? String(id) : null;
+}
+
+export async function notifyHost(text, keyboard, booking) {
+  const own = booking && booking.hostUsername ? await hostChatId(booking.hostUsername) : null;
   const ids = [];
 
-  for (const username of TRIAL_HOST_USERNAMES) {
-    const id = map[username];
+  if (own) {
+    ids.push(own);
+  } else {
+    for (const username of await hostUsernames()) {
+      const id = await hostChatId(username);
 
-    if (id && !ids.includes(id)) ids.push(id);
+      if (id && !ids.includes(id)) ids.push(id);
+    }
   }
 
   if (!ids.length) {
-    console.warn('Trial host chats unknown:', TRIAL_HOST_USERNAMES.join(','));
+    console.warn('Trial host chats unknown');
     return notifyManagers(text, keyboard);
   }
 

@@ -99,6 +99,20 @@ export default async function ClientPage({ params, searchParams }) {
             )}
             <div><b>Заявка</b> {fmt(booking.createdAt)}</div>
             <div><b>Отметка</b> {booking.attendanceMarkedAt ? fmt(booking.attendanceMarkedAt) + ' · ' + (booking.attendedBy || '') : '—'}</div>
+            {booking.slot && booking.slot !== 'no_time' && (
+              <div>
+                <b>Ведёт</b> {booking.hostUsername ? (booking.hostName || '@' + booking.hostUsername) : 'ведущий не назначен'}
+                {(session.rights || []).includes('host') && booking.status !== 'cancelled'
+                  && (!booking.hostUsername || booking.hostUsername === session.username) && (
+                  <form method="post" action="/api/admin/action" style={{ display: 'inline', marginLeft: 8 }}>
+                    <input type="hidden" name="action" value="host-pick" />
+                    <input type="hidden" name="id" value={booking.id} />
+                    <input type="hidden" name="back" value={back} />
+                    <button type="submit">{booking.hostUsername ? 'Снять себя' : '🙋 Беру урок'}</button>
+                  </form>
+                )}
+              </div>
+            )}
             <div><b>Оплата</b> {booking.paid
               ? Math.round(Number(booking.paidAmount || 0) / 100) + ' EUR · ' + (booking.paidPack || '') + ' · ' + (booking.paidVia === 'manual' ? 'мимо кассы' : 'Stripe')
                 + (Number(booking.paymentsCount || 1) > 1 ? ' · всего оплат ' + booking.paymentsCount + ' на ' + Math.round(Number(booking.paidTotal || 0) / 100) + ' EUR' : '')
