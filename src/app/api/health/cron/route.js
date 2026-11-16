@@ -10,6 +10,7 @@ export async function GET() {
   const active = await kvGet('cron:active');
   const mailState = await kvGet('mailsync:state');
   const mailError = await kvGet('mailsync:error');
+  const lastRun = await kvGet('cron:reminders:lastRun');
 
   return NextResponse.json({
     dailySummary: last || { note: 'запусков с записью статуса ещё не было' },
@@ -18,6 +19,8 @@ export async function GET() {
     reminders: active && active.at
       ? { lastFullScan: new Date(Number(active.at)).toISOString(), activeIds: (active.ids || []).length }
       : { note: 'полного чтения ещё не было' },
+    // Последний запуск крона напоминаний и откуда он пришёл (QStash, GitHub, Vercel).
+    remindersLastRun: lastRun || null,
     // Забор ответов из ящика info@ (без содержимого писем).
     mailbox: {
       configured: Boolean(process.env.ZOHO_IMAP_USER && process.env.ZOHO_IMAP_PASSWORD),

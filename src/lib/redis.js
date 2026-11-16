@@ -373,6 +373,20 @@ async function kvCommand(parts) {
   }
 }
 
+// Замок от двух одновременных запусков крона (17.11.2026: QStash каждые 5 минут
+// плюс старый цикл в GitHub Actions). Без него два запуска могли отправить одно
+// напоминание дважды: оба читают флаг до того, как другой его поставил.
+// Если хранилище не ответило, замок не мешает запуску.
+export async function acquireCronLock(name, seconds) {
+  const res = await kvCommand(['set', 'lock:' + name, String(Date.now()), 'NX', 'EX', String(seconds)]);
+
+  return res === 'OK' || res === null;
+}
+
+export async function releaseCronLock(name) {
+  await kvCommand(['del', 'lock:' + name]);
+}
+
 export async function markCronFresh(bookingId) {
   if (!bookingId) return;
   await kvCommand(['sadd', CRON_FRESH, String(bookingId)]);

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getCronBookings, updateBooking, getManagerChatId, removeBookedSlot, kvGet, kvSet } from '@/lib/redis';
+import { getCronBookings, updateBooking, getManagerChatId, removeBookedSlot, kvGet, kvSet, acquireCronLock, releaseCronLock } from '@/lib/redis';
 import { sendMessage, formatReminder, formatHandout, bookingActionsKeyboard, formatAttendanceAsk, attendanceKeyboard, formatManagerCard, managerActionsKeyboard, hostListLabel } from '@/lib/telegram';
 import { notifyManagers, notifyHost, hostChatId } from '@/lib/managers';
 import { hostUsernames } from '@/lib/access';
@@ -161,6 +161,10 @@ export async function GET(request) {
   const authHeader = request.headers.get('authorization');
   if (CRON_SECRET && authHeader !== `Bearer ${CRON_SECRET}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  if (!(await acquireCronLock('reminders', 240))) {
+    return NextResponse.json({ ok: true, skipped: 'another run in progress' });
   }
 
   try {
@@ -659,6 +663,13 @@ export async function GET(request) {
       console.error('Contact lists error:', e);
     }
 
+    // Когда и кто запускал крон: видно в /api/health/cron (17.11.2026, переход на QStash).
+    const ua = String(request.headers.get('user-agent') || '');
+    const via = request.headers.get('upstash-schedule-id') || /upstash|qstash/i.test(ua) ? 'qstash'
+      : /vercel-cron/i.test(ua) ? 'vercel' : /curl|github/i.test(ua) ? 'github' : 'other';
+
+    await kvSet('cron:reminders:lastRun', { at: now.toISOString(), via, checked: bookings.length }, 60 * 60 * 24 * 7);
+
     const funnelAlert = await watchFunnel();
 
     // Ответы учеников на письма (ящик info@ по IMAP, src/lib/mailbox.js).
@@ -693,5 +704,12 @@ export async function GET(request) {
   } catch (e) {
     console.error('Reminder cron error:', e);
     return NextResponse.json({ error: e.message }, { status: 500 });
+  } finally {
+    await releaseCronLock('reminders');
   }
+}
+
+// QStash по умолчанию шлёт POST (17.11.2026): тот же запуск, та же проверка секрета.
+export async function POST(request) {
+  return GET(request);
 }
