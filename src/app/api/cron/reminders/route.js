@@ -392,6 +392,7 @@ export async function GET(request) {
       // Ведущая нажала «Не вышел, напомнить» (handleMgrLate), прошло 10 минут,
       // а отметки всё нет: напоминаем ей отметить приход или неприход (04.11.2026).
       if (booking.lateNudgedAt && !booking.lateFollowupSent && booking.lateNudgeChat
+        && !(booking.rescheduledAt && booking.rescheduledAt > booking.lateNudgedAt)
         && (booking.attended === undefined || booking.attended === null)
         && now.getTime() - new Date(booking.lateNudgedAt).getTime() >= 10 * 60 * 1000) {
         const name = String(booking.name || '').trim().split(' ')[0];

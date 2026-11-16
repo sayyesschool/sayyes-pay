@@ -1,4 +1,5 @@
 import { getBooking, updateBooking, addBookedSlot, removeBookedSlot, getBookedSlots, kvSet, kvGet, kvKeys } from '@/lib/redis';
+import { LESSON_RESET } from '@/lib/lessonReset';
 import { sendMessage, formatManagerCard, bookingActionsKeyboard } from '@/lib/telegram';
 import { clientWhen } from '@/lib/time';
 import { notifyManagers } from '@/lib/managers';
@@ -303,6 +304,7 @@ export async function rescheduleBooking(bookingId, slotKey, by) {
     slotMsk: time,
     status: 'confirmed',
     rescheduledAt: new Date().toISOString(),
+    ...LESSON_RESET,
     rescheduledBy: '@' + by,
     // Новое время — новая цепочка касаний: старые флаги напоминаний сбрасываем.
     reminded24h: false,

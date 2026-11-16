@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { LESSON_RESET } from '@/lib/lessonReset';
 import {
   getBooking, updateBooking, getBookedSlots, removeBookedSlot, addBookedSlot,
   getManagerChatId
@@ -59,6 +60,7 @@ export async function POST(request) {
       // от автоснятия: после переноса человек получает просьбу подтвердить
       // заново, и времени у него ровно столько же, сколько у новой записи.
       rescheduledAt: new Date().toISOString(),
+      ...LESSON_RESET,
       reminded24h: false,
       reminded1h: false,
       mailed24h: false,

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { LESSON_RESET } from '@/lib/lessonReset';
 import { sendBookingConfirmation, mailProvider, sendIntroOfferEmail, sendLateNudgeEmail } from '@/lib/email';
 import { getProducts, stripe } from '@/services/stripe';
 import { getIntroProducts, getIntroProduct, introActive, introExpiry, nextIntroExpiry, introSendPatch, introUsedByPerson, introDeadlineFor } from '@/services/intro';
@@ -424,6 +425,7 @@ async function applyNewSlot(bookingId, newSlotKey) {
     // человек получает просьбу подтвердить заново и времени у него столько же,
     // сколько у только что записавшегося.
     rescheduledAt: new Date().toISOString(),
+    ...LESSON_RESET,
     reminded24h: false,
     reminded1h: false,
     mailed24h: false,
@@ -2396,7 +2398,8 @@ async function handleMgrLate(chatId, bookingId, callbackQueryId, from) {
     return;
   }
 
-  if (booking.lateNudgedAt) {
+  // Напоминание по прошлому времени урока (до переноса) не считается.
+  if (booking.lateNudgedAt && !(booking.rescheduledAt && booking.rescheduledAt > booking.lateNudgedAt)) {
     await answerCallback(callbackQueryId, 'Уже отправлено в ' + mskTime(new Date(booking.lateNudgedAt).getTime()));
     return;
   }
