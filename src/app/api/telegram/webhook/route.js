@@ -26,7 +26,7 @@ import {
   bookingActionsKeyboard, confirmCancelKeyboard, slotsKeyboard,
   managerActionsKeyboard, formatBookingConfirmation, formatBookingForManager,
   formatReminder, attendanceKeyboard, makeDeepLink, MANAGER_USERNAME,
-  formatManagerCard, formatLateNudge, lateNudgeKeyboard, editReplyMarkup, hostButton, hostLabel, hostListLabel
+  formatManagerCard, formatLateNudge, lateNudgeKeyboard, editReplyMarkup, hostButton, hostLabel, hostListLabel, hostCallback
 } from '@/lib/telegram';
 import { notifyManagers, isManagerChat, getManagerChatIds, getManagerChatMap } from '@/lib/managers';
 import { isBotManager, managerUsernames, superUsernames, isHost, hostUsernames } from '@/lib/access';
@@ -2441,7 +2441,7 @@ async function handleMgrLate(chatId, bookingId, callbackQueryId, from) {
 // Ведущий урока (17.11.2026, решение Димы): ведущие (Роман, Анастасия, право «Ведущий»
 // в «Доступах») берут уроки себе сами. Нажатие на свою кнопку снимает с урока.
 // Кнопка обновляется в том сообщении, где её нажали: в карточке урока и в напоминании.
-async function handleHostPick(chatId, messageId, message, bookingId, callbackQueryId, from) {
+async function handleHostPick(chatId, messageId, message, bookingId, callbackQueryId, from, buttonSlot) {
   const username = from && from.username ? String(from.username).toLowerCase() : '';
 
   if (!username || !(await isHost(username))) {
@@ -2460,6 +2460,27 @@ async function handleHostPick(chatId, messageId, message, bookingId, callbackQue
 
   if (booking.status === 'cancelled') {
     await answerCallback(callbackQueryId, 'Запись отменена');
+    if (message) message.__hostData = 'host:' + bookingId + (buttonSlot ? ':' + buttonSlot : '');
+    await markHostButton(chatId, messageId, message, '❌ отменена');
+    return;
+  }
+
+  // Кнопка из сообщения, отправленного до переноса: урок уже в другое время.
+  // У кнопок до 17.11.2026 времени в данных нет: сверяем со временем в подписи.
+  const pressedData = 'host:' + bookingId + (buttonSlot ? ':' + buttonSlot : '');
+  const pressed = message && message.reply_markup && message.reply_markup.inline_keyboard
+    ? message.reply_markup.inline_keyboard.flat().find(b => b.callback_data === pressedData) : null;
+  const labelTime = pressed ? (String(pressed.text).match(/\b(\d{1,2}:\d{2})\b/) || [])[1] : null;
+  const slotTime = String(booking.slot).split('_')[1];
+  const staleOld = !buttonSlot && labelTime && labelTime.padStart(5, '0') !== slotTime;
+
+  if (message) message.__hostData = pressedData;
+
+  if ((buttonSlot && buttonSlot !== booking.slot) || staleOld) {
+    const [d, t] = String(booking.slot).split('_');
+
+    await answerCallback(callbackQueryId, 'Урок перенесён на ' + d.slice(8) + '.' + d.slice(5, 7) + ' ' + t + ' МСК. Возьмите его из карточки урока');
+    await markHostButton(chatId, messageId, message, '📅 перенесён на ' + d.slice(8) + '.' + d.slice(5, 7) + ' ' + t);
     return;
   }
 
@@ -2489,14 +2510,30 @@ async function handleHostPick(chatId, messageId, message, bookingId, callbackQue
   if (markup && Array.isArray(markup.inline_keyboard)) {
     const isCard = markup.inline_keyboard.some(row => row.some(b => String(b.callback_data || '').startsWith('attended:')));
     const rows = markup.inline_keyboard.map(row => row.map(b => {
-      if (b.callback_data !== 'host:' + booking.id) return b;
+      if (!String(b.callback_data || '').startsWith('host:' + booking.id)) return b;
       if (isCard) return hostButton(updated, booking.id);
 
-      return { text: hostListLabel(updated), callback_data: b.callback_data };
+      return { text: hostListLabel(updated), callback_data: hostCallback(updated) };
     }));
 
     await editReplyMarkup(chatId, messageId, { inline_keyboard: rows });
   }
+}
+
+// Устаревшая кнопка ведущего: дописываем к ней, что с уроком, и больше не даём нажать по старому времени.
+async function markHostButton(chatId, messageId, message, note) {
+  const markup = message && message.reply_markup;
+  const data = message && message.__hostData;
+
+  if (!markup || !Array.isArray(markup.inline_keyboard) || !data) return;
+
+  const rows = markup.inline_keyboard.map(row => row.map(b => {
+    if (!String(b.callback_data || '').startsWith('host:') || b.callback_data !== data) return b;
+
+    return { text: String(b.text).replace(/^(🙋|✅) /, '').split(' · ')[0] + ' · ' + note, callback_data: 'noop' };
+  }));
+
+  await editReplyMarkup(chatId, messageId, { inline_keyboard: rows });
 }
 
 async function handleMgrWrite(chatId, bookingId, callbackQueryId) {
@@ -2953,8 +2990,11 @@ export async function POST(request) {
         case 'mgr_late':
           await handleMgrLate(chatId, bookingId, callbackId, from);
           break;
+        case 'noop':
+          await answerCallback(callbackId, 'Неактуально');
+          break;
         case 'host':
-          await handleHostPick(chatId, messageId, message, bookingId, callbackId, from);
+          await handleHostPick(chatId, messageId, message, bookingId, callbackId, from, params.slice(1).join(':'));
           break;
         case 'mgr_reschedule':
           await handleMgrReschedule(chatId, bookingId, callbackId);

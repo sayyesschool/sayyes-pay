@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getCronBookings, updateBooking, getManagerChatId, removeBookedSlot, kvGet, kvSet, acquireCronLock, releaseCronLock } from '@/lib/redis';
-import { sendMessage, formatReminder, formatHandout, bookingActionsKeyboard, formatAttendanceAsk, attendanceKeyboard, formatManagerCard, managerActionsKeyboard, hostListLabel } from '@/lib/telegram';
+import { sendMessage, formatReminder, formatHandout, bookingActionsKeyboard, formatAttendanceAsk, attendanceKeyboard, formatManagerCard, managerActionsKeyboard, hostListLabel, hostCallback } from '@/lib/telegram';
 import { notifyManagers, notifyHost, hostChatId } from '@/lib/managers';
 import { hostUsernames } from '@/lib/access';
 import { sendMorningReminderEmail, sendHandoutEmail, sendConfirmRequestEmail, sendLessonReminderEmail, sendReviveEmail, sendSlotReleasedEmail } from '@/lib/email';
@@ -137,7 +137,7 @@ async function remindHosts(kind, dateKey, list) {
   const sorted = [...list].sort((a, b) => String(a.slot).localeCompare(String(b.slot)));
   const text = '👤 <b>Уроки ' + (kind === 'evening' ? 'на завтра' : 'сегодня') + ' без ведущего, ' + day + '</b>\n\n'
     + 'Нажмите на урок, чтобы взять его себе. Время МСК.';
-  const keyboard = { inline_keyboard: sorted.map(b => [{ text: hostListLabel(b), callback_data: 'host:' + b.id }]) };
+  const keyboard = { inline_keyboard: sorted.map(b => [{ text: hostListLabel(b), callback_data: hostCallback(b) }]) };
   let sent = 0;
 
   for (const username of await hostUsernames()) {

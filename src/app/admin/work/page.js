@@ -71,6 +71,9 @@ function Row({ booking, time }) {
           <a href={'/admin/client/' + booking.id}>{booking.name || 'Без имени'}</a>
         </div>
         <div className="sub">{booking.telegram || booking.email || booking.phone || 'контактов нет'}</div>
+        {booking.slot && booking.slot !== 'no_time' && booking.status !== 'cancelled' && (
+          <div className="sub">👤 {booking.hostUsername ? (booking.hostName || '@' + booking.hostUsername) : 'ведущий не назначен'}</div>
+        )}
         <div style={{ marginTop: 4 }}>
           {statusTags(booking).map(([cls, label], i) => (
             <span key={i} className={'tag ' + cls}>{label}</span>

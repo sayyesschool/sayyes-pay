@@ -99,13 +99,24 @@ export function hostListLabel(booking) {
   const who = hostLabel(booking);
   const name = String(booking.name || 'ученик').trim().split(/\s+/)[0];
 
-  return (who ? '✅ ' : '🙋 ') + (booking.slotMsk || '') + ' ' + name + (who ? ' · ' + who : '');
+  const time = String(booking.slot || '').split('_')[1] || booking.slotMsk || '';
+
+  return (who ? '✅ ' : '🙋 ') + time + ' ' + name + (who ? ' · ' + who : '');
+}
+
+// В кнопке ведущего зашито время урока (17.11.2026): если урок перенесли, старая
+// кнопка не назначит ведущего на новое время. 16.11 Анастасия нажала «14:00 Светлана»
+// в списке на 17.11, а запись уже переехала на 23.11 10:00 - урок 23.11 стал её.
+export function hostCallback(booking, bookingId) {
+  const slot = booking && booking.slot && booking.slot !== 'no_time' ? ':' + booking.slot : '';
+
+  return 'host:' + (bookingId || (booking && booking.id)) + slot;
 }
 
 export function hostButton(booking, bookingId) {
   const name = hostLabel(booking);
 
-  return { text: name ? '👤 Ведущий: ' + name : '👤 Ведущий: не назначен', callback_data: `host:${bookingId}` };
+  return { text: name ? '👤 Ведущий: ' + name : '👤 Ведущий: не назначен', callback_data: hostCallback(booking, bookingId) };
 }
 
 export async function answerCallback(callbackQueryId, text) {
