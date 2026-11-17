@@ -125,8 +125,8 @@ export default async function AdminPage({ searchParams }) {
 
       if (day < from || day > to || !start || start > nowMs) continue;
 
-      const key = b.hostUsername ? (b.hostName || '@' + b.hostUsername) : 'Без ведущего';
-      const r = rows[key] || (rows[key] = { name: key, lessons: 0, attended: 0, noshow: 0, offers: 0, paid: 0 });
+      const key = b.hostUsername || '';
+      const r = rows[key] || (rows[key] = { name: b.hostUsername ? (b.hostName || '@' + b.hostUsername) : 'Без ведущего', lessons: 0, attended: 0, noshow: 0, offers: 0, paid: 0 });
 
       r.lessons++;
       if (b.attended === true) r.attended++;

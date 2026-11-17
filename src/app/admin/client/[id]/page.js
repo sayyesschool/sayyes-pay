@@ -66,7 +66,8 @@ export default async function ClientPage({ params, searchParams }) {
   for (let i = 0; i < 14; i++) days.push(shiftDay(today(), i));
   const answers = booking.quizAnswers || {};
   const offerUntil = introExpiry(booking);
-  const offerNames = booking.attended === true && !booking.offer ? (await getProfiles()).filter(p => p.name) : [];
+  const profiles = await getProfiles();
+  const offerNames = booking.attended === true && !booking.offer ? profiles.filter(p => p.name) : [];
   const offer = booking.offer || null;
   const offerState = !offer ? '' : offer.stopped ? 'остановлена' : booking.introPaid ? 'оплачено' : offer.done ? 'завершена' : offer.paused ? 'на паузе: ученик ответил, дальше пишет менеджер' : 'идёт';
   const stepLine = n => {
@@ -101,7 +102,7 @@ export default async function ClientPage({ params, searchParams }) {
             <div><b>Отметка</b> {booking.attendanceMarkedAt ? fmt(booking.attendanceMarkedAt) + ' · ' + (booking.attendedBy || '') : '—'}</div>
             {booking.slot && booking.slot !== 'no_time' && (
               <div>
-                <b>Ведёт</b> {booking.hostUsername ? (booking.hostName || '@' + booking.hostUsername) : 'ведущий не назначен'}
+                <b>Ведёт</b> {booking.hostUsername ? (((profiles.find(p => p.username === booking.hostUsername) || {}).name) || booking.hostName || '@' + booking.hostUsername) : 'ведущий не назначен'}
                 {(session.rights || []).includes('host') && booking.status !== 'cancelled'
                   && (!booking.hostUsername || booking.hostUsername === session.username) && (
                   <form method="post" action="/api/admin/action" style={{ display: 'inline', marginLeft: 8 }}>

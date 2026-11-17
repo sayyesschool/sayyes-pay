@@ -57,8 +57,14 @@ export async function loadBookings() {
   // читалась отдельно, и одно открытие аналитики стоило столько же обращений
   // к хранилищу. Именно так школа встала 16.09.2026.
   const values = await kvMGet(keys);
+  // Имя ведущего берём текущее из «Доступов», а не сохранённое в момент назначения:
+  // иначе один ведущий выглядит то как @username, то как имя (17.11.2026).
+  const profiles = (await kvGet('admin:profiles')) || {};
 
   for (const booking of values) {
+    if (booking && booking.hostUsername && profiles[booking.hostUsername] && profiles[booking.hostUsername].name) {
+      booking.hostName = profiles[booking.hostUsername].name;
+    }
 
     // Архив — заявки до запуска рекламы, introTest — проверки спецпредложения.
     // И то и другое портит любую конверсию, поэтому в аналитику не берём.
