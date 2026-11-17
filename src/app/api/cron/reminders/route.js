@@ -8,6 +8,7 @@ import { reviveTelegram, reviveKeyboard, reviveDueAt } from '@/lib/revive';
 import { isClientNight, clientDayHoursBetween, clientHour, clientDayKey, clientTimeWithZone } from '@/lib/time';
 import { processOffer, offerReminderDue } from '@/lib/offerChain';
 import { syncInbox } from '@/lib/mailbox';
+import { verifyQstash } from '@/lib/qstashAuth';
 import { getThread } from '@/lib/thread';
 import { isContactCandidate, postContactList, refreshContactLists } from '@/lib/contactList';
 import { kvGet as kvGetRaw } from '@/lib/redis';
@@ -156,10 +157,13 @@ async function remindHosts(kind, dateKey, list) {
   return sent;
 }
 
-export async function GET(request) {
-  // Verify cron secret (Vercel sends this header)
+export async function GET(request, rawBody = '') {
+  // Пускаем по секрету крона (Vercel, GitHub Actions) или по подписи QStash.
   const authHeader = request.headers.get('authorization');
-  if (CRON_SECRET && authHeader !== `Bearer ${CRON_SECRET}`) {
+  const bySecret = !CRON_SECRET || authHeader === `Bearer ${CRON_SECRET}`;
+  const byQstash = !bySecret && verifyQstash(request.headers.get('upstash-signature'), typeof rawBody === 'string' ? rawBody : '');
+
+  if (!bySecret && !byQstash) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -711,5 +715,7 @@ export async function GET(request) {
 
 // QStash по умолчанию шлёт POST (17.11.2026): тот же запуск, та же проверка секрета.
 export async function POST(request) {
-  return GET(request);
+  const raw = await request.text().catch(() => '');
+
+  return GET(request, raw);
 }
