@@ -40,7 +40,7 @@ export function CohortsTab({ data, linkFor }) {
             <thead>
               <tr>
                 <th>Когорта</th><th>Расход</th><th>Заявок</th><th>Пришли</th><th>Оплатили</th>
-                <th>Выручка факт</th><th>Выручка / расход</th><th>ROMI</th><th>Цена оплатившего</th>
+                <th>Выручка факт</th><th>Прибыль</th><th>Выручка / расход</th><th>ROMI</th><th>Цена оплатившего</th>
               </tr>
             </thead>
             <tbody>
@@ -52,6 +52,7 @@ export function CohortsTab({ data, linkFor }) {
                   <td>{r.attended}</td>
                   <td>{r.payers}</td>
                   <td>{eur(r.revenue)}</td>
+                  <td className={r.revenue - r.spend >= 0 ? 'pos' : 'neg'}>{eur(r.revenue - r.spend)}</td>
                   <td>{ratio(r.ratio)}</td>
                   <td className={r.romi === null ? '' : r.romi >= 0 ? 'pos' : 'neg'}>{romi(r.romi)}</td>
                   <td>{eur(r.cac)}</td>
@@ -64,6 +65,7 @@ export function CohortsTab({ data, linkFor }) {
                 <td>{t.attended}</td>
                 <td>{t.payers}</td>
                 <td>{eur(t.revenue)}</td>
+                <td className={t.revenue - t.spend >= 0 ? 'pos' : 'neg'}>{eur(t.revenue - t.spend)}</td>
                 <td>{ratio(t.ratio)}</td>
                 <td className={t.romi === null ? '' : t.romi >= 0 ? 'pos' : 'neg'}>{romi(t.romi)}</td>
                 <td>{eur(t.cac)}</td>
@@ -73,7 +75,7 @@ export function CohortsTab({ data, linkFor }) {
         </div>
         <p className="muted">
           Когорта - заявки, оставленные в этот период; расход за те же дни. Выручка - все оплаты этих людей до сегодня
-          за вычетом комиссии Stripe и возвратов. ROMI = (выручка - расход) / расход.
+          за вычетом комиссии Stripe и возвратов. Прибыль = выручка - расход на рекламу (без зарплат преподавателей и других расходов). ROMI = прибыль / расход.
           {data.unlinked.count > 0 && <> Оплаты без заявки за период: {data.unlinked.count} на {eur(data.unlinked.revenue)} (в когорты не входят).</>}
           {data.feesPending > 0 && <> Комиссия Stripe ещё не подгружена для {data.feesPending} оплат: обновите страницу.</>}
         </p>
