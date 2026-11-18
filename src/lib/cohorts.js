@@ -1,4 +1,4 @@
-import { loadBookings, loadPayments, dayKey, dayList } from '@/lib/analytics';
+import { loadBookings, loadPayments, dayKey, dayList, slotStartMs } from '@/lib/analytics';
 import { getAdsInsights } from '@/lib/metaAds';
 import { listTgSpend } from '@/lib/tgPerformance';
 import { GADS_DAILY } from '@/lib/googlePerformance';
@@ -89,7 +89,7 @@ export async function buildCohorts({ from, to, step = 'week', source = 'all' }) 
 
   const rows = {};
   const get = key => rows[key] || (rows[key] = {
-    key, label: periodLabel(key, step), spend: 0, leads: 0, booked: 0, confirmed: 0, attended: 0, payers: 0, revenue: 0,
+    key, label: periodLabel(key, step), spend: 0, leads: 0, booked: 0, pastBooked: 0, confirmed: 0, attended: 0, payers: 0, revenue: 0,
     pay1: 0, pay2: 0, pay3: 0,
     weeks: Array(WEEK_COLS).fill(0), firstDay: null
   });
@@ -101,6 +101,8 @@ export async function buildCohorts({ from, to, step = 'week', source = 'all' }) 
 
     r.leads++;
     if (b.slot && b.slot !== 'no_time') r.booked++;
+    // Для доходимости - только записи, чей урок уже прошёл: будущие уроки её занижают.
+    if (b.slot && b.slot !== 'no_time' && (slotStartMs(b) || Infinity) < Date.now()) r.pastBooked++;
     // Подтверждение: флаг сбрасывается при переносе, поэтому учитываем и пришедших.
     if (b.confirmed || b.confirmedAt || b.attended === true) r.confirmed++;
     if (b.attended === true) r.attended++;
@@ -171,10 +173,10 @@ export async function buildCohorts({ from, to, step = 'week', source = 'all' }) 
   }
 
   const total = list.reduce((t, r) => {
-    for (const k of ['spend', 'leads', 'booked', 'confirmed', 'attended', 'payers', 'revenue', 'pay1', 'pay2', 'pay3']) t[k] += r[k];
+    for (const k of ['spend', 'leads', 'booked', 'pastBooked', 'confirmed', 'attended', 'payers', 'revenue', 'pay1', 'pay2', 'pay3']) t[k] += r[k];
 
     return t;
-  }, { spend: 0, leads: 0, booked: 0, confirmed: 0, attended: 0, payers: 0, revenue: 0, pay1: 0, pay2: 0, pay3: 0 });
+  }, { spend: 0, leads: 0, booked: 0, pastBooked: 0, confirmed: 0, attended: 0, payers: 0, revenue: 0, pay1: 0, pay2: 0, pay3: 0 });
 
   total.ratio = total.spend ? total.revenue / total.spend : null;
   total.romi = total.spend ? Math.round(((total.revenue - total.spend) / total.spend) * 100) : null;

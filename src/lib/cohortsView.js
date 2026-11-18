@@ -97,7 +97,7 @@ export function CohortsTab({ data, linkFor }) {
                   <td>{r.booked}</td>
                   <td>{r.confirmed}{r.booked ? <span className="muted"> · {pct(r.confirmed, r.booked)}</span> : null}</td>
                   <td>{r.attended}</td>
-                  <td>{pct(r.attended, r.booked)}</td>
+                  <td>{pct(r.attended, r.pastBooked)}</td>
                   <td>{r.pay1}{r.attended ? <span className="muted"> · {pct(r.pay1, r.attended)}</span> : null}</td>
                   <td>{r.pay2}{r.pay1 ? <span className="muted"> · {pct(r.pay2, r.pay1)}</span> : null}</td>
                   <td>{r.pay3}{r.pay2 ? <span className="muted"> · {pct(r.pay3, r.pay2)}</span> : null}</td>
@@ -108,7 +108,7 @@ export function CohortsTab({ data, linkFor }) {
         </div>
         <p className="muted">
           Записались - заявки с выбранным временем урока. Подтвердили - нажали «Буду на уроке» (или пришли).
-          Доходимость - дошли от записавшихся. Проценты у оплат: 1-я от дошедших, 2-я от сделавших 1-ю, 3-я от сделавших 2-ю.
+          Доходимость - дошли от записей, чей урок уже прошёл. Проценты у оплат: 1-я от дошедших, 2-я от сделавших 1-ю, 3-я от сделавших 2-ю.
         </p>
       </div>
 
