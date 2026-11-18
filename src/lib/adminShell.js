@@ -142,7 +142,8 @@ export const ANALYTICS_TABS = [
   { key: 'creatives', label: 'Креативы', owner: true },
   { key: 'funnel', label: 'Воронка', owner: false },
   { key: 'work', label: 'Заявки и уроки', owner: false },
-  { key: 'money', label: 'Финансы', owner: true }
+  { key: 'money', label: 'Финансы', owner: true },
+  { key: 'cohorts', label: 'Когорты', owner: true }
 ];
 
 export function Shell({ session, active, activeTab, title, children }) {

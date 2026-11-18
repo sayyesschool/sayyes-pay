@@ -11,6 +11,8 @@ import { buildTgPerformance } from '@/lib/tgPerformance';
 import { TgPerformanceTab } from '@/lib/tgPerformanceView';
 import { buildGooglePerformance } from '@/lib/googlePerformance';
 import { GooglePerformanceTab } from '@/lib/googlePerformanceView';
+import { buildCohorts } from '@/lib/cohorts';
+import { CohortsTab } from '@/lib/cohortsView';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,7 +40,8 @@ const TABS = [
   { key: 'creatives', label: 'Креативы', owner: true },
   { key: 'funnel', label: 'Воронка', owner: false },
   { key: 'work', label: 'Заявки и уроки', owner: false },
-  { key: 'money', label: 'Финансы', owner: true }
+  { key: 'money', label: 'Финансы', owner: true },
+  { key: 'cohorts', label: 'Когорты', owner: true }
 ];
 
 function money(cents) {
@@ -94,6 +97,11 @@ export default async function AdminPage({ searchParams }) {
   const creatives = tab === 'creatives' ? await buildCreatives({ from, to }) : null;
   const tgPerf = tab === 'telegram' ? await buildTgPerformance({ from, to }) : null;
   const gPerf = tab === 'google' ? await buildGooglePerformance({ from, to }) : null;
+  const cohortStep = ['day', 'week', 'month'].includes(params?.step) ? params.step : 'week';
+  const cohortSource = ['all', 'meta', 'telegram', 'google', 'organic'].includes(params?.csrc) ? params.csrc : 'all';
+  const cohorts = tab === 'cohorts' ? await buildCohorts({ from, to, step: cohortStep, source: cohortSource }) : null;
+  const cohortLink = change => '/admin?tab=cohorts&from=' + from + '&to=' + to
+    + '&step=' + (change.step || cohortStep) + '&csrc=' + (change.csrc || cohortSource);
   // Ответы «что помешало» из цепочки после пробного (06.11.2026), по дате ответа.
   let offerReasons = null;
 
@@ -164,6 +172,8 @@ export default async function AdminPage({ searchParams }) {
     <Shell session={session} active="admin" activeTab={tab} title="Аналитика">
         <form className="dates" method="get">
           <input type="hidden" name="tab" value={tab} />
+          {tab === 'cohorts' && <input type="hidden" name="step" value={cohortStep} />}
+          {tab === 'cohorts' && <input type="hidden" name="csrc" value={cohortSource} />}
           <label className="muted">с</label>
           <input type="date" name="from" defaultValue={from} />
           <label className="muted">по</label>
@@ -284,6 +294,8 @@ export default async function AdminPage({ searchParams }) {
         )}
 
         {tab === 'google' && gPerf && <GooglePerformanceTab data={gPerf} />}
+
+        {tab === 'cohorts' && cohorts && <CohortsTab data={cohorts} linkFor={cohortLink} />}
 
         {tab === 'creatives' && creatives && (
           <CreativesTab
