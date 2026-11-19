@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import { getCronBookings, updateBooking, getManagerChatId, removeBookedSlot, kvGet, kvSet, acquireCronLock, releaseCronLock } from '@/lib/redis';
 import { sendMessage, formatReminder, formatHandout, bookingActionsKeyboard, formatAttendanceAsk, attendanceKeyboard, formatManagerCard, managerActionsKeyboard, hostListLabel, hostCallback } from '@/lib/telegram';
-import { notifyManagers, notifyHost, hostChatId } from '@/lib/managers';
-import { hostUsernames } from '@/lib/access';
+import { notifyManagers, notifyHost, hostChatId, notifyUsers } from '@/lib/managers';
+import { hostUsernames, superUsernames } from '@/lib/access';
+import { buildReview } from '@/lib/threadReview';
 import { sendMorningReminderEmail, sendHandoutEmail, sendConfirmRequestEmail, sendLessonReminderEmail, sendReviveEmail, sendSlotReleasedEmail } from '@/lib/email';
 import { reviveTelegram, reviveKeyboard, reviveDueAt } from '@/lib/revive';
 import { isClientNight, clientDayHoursBetween, clientHour, clientDayKey, clientTimeWithZone } from '@/lib/time';
@@ -156,6 +157,8 @@ async function remindHosts(kind, dateKey, list) {
 
   return sent;
 }
+
+export const maxDuration = 300;
 
 export async function GET(request, rawBody = '') {
   // Пускаем по секрету крона (Vercel, GitHub Actions) или по подписи QStash.
@@ -648,6 +651,39 @@ export async function GET(request, rawBody = '') {
       }
     }
 
+    // Разбор переписки менеджеров раз в неделю, понедельник 10-12 МСК (19.11.2026):
+    // лично супер-админам. Не дольше одного раза в неделю.
+    let review = null;
+
+    if (mskNowDate.getUTCDay() === 1 && mskHourNow >= 10 && mskHourNow < 12 && !(await kvGet('review:sent:' + mskToday))) {
+      await kvSet('review:sent:' + mskToday, now.toISOString(), 60 * 60 * 24 * 8);
+
+      try {
+        const r = await buildReview(7);
+        const esc = t => String(t || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const text = r.ok
+          ? '🗣 <b>Разбор переписки с учениками за неделю</b>\n'
+            + 'Ответили на ' + r.speed.answered + ' из ' + r.speed.questions + ', медиана ожидания '
+            + (r.speed.medianMin === null ? '-' : r.speed.medianMin + ' мин') + ', без ответа: ' + r.speed.unanswered.length + '\n\n'
+            + esc(r.text) + '\n\nПодробно: https://www.sayyestoenglish.com/admin/review'
+          : '🗣 Разбор переписки не собрался: ' + esc(r.error);
+        const supers = await superUsernames();
+
+        // Режем по строкам, чтобы не разорвать тег или &amp;.
+        const parts = [];
+        let cur = '';
+
+        for (const line of text.split('\n')) {
+          if ((cur + '\n' + line).length > 3800 && cur) { parts.push(cur); cur = line; } else cur = cur ? cur + '\n' + line : line;
+        }
+        if (cur) parts.push(cur);
+        for (const part of parts) await notifyUsers(supers, part);
+        review = r.ok ? 'sent' : r.error;
+      } catch (e) {
+        console.error('Weekly review error:', e);
+      }
+    }
+
     // Напоминание ведущим про уроки без ведущего (17.11.2026).
     let hostReminders = 0;
 
@@ -693,6 +729,7 @@ export async function GET(request, rawBody = '') {
       sentMorning,
       contactLists,
       hostReminders,
+      review,
       funnelAlert,
       mail,
       sent24h,
