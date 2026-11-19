@@ -16,6 +16,14 @@ const msk = iso => {
   return d.slice(8, 10) + '.' + d.slice(5, 7) + ' ' + d.slice(11, 16);
 };
 
+// Сообщения, которые ответа не ждут: «спасибо», «ок», пустые письма.
+const noReplyNeeded = m => {
+  const t = String(m.text || '').trim().toLowerCase();
+
+  return !t || t === '(письмо без текста)'
+    || (t.length <= 40 && /^(спасибо|благодарю|ок|окей|ok|хорошо|отлично|понятно|договорились|до встречи|👍|🙏|❤️)[\s!.,)🙂😊]*([а-яё ]{0,25})$/i.test(t));
+};
+
 // Автоматические записи в переписке - не ответы менеджера.
 const isAuto = m => m.from === 'system'
   || /^(🎁 Оффер|📅 Предложение перенести урок|🔄 Перенос)/.test(String(m.text || ''))
@@ -32,6 +40,8 @@ export async function collectDialogs(days = 14) {
     const recent = list.filter(m => m && m.at && new Date(m.at).getTime() >= since);
 
     if (!recent.some(m => m.from === 'student' && !isAuto(m))) return;
+    // Тестовые заявки сотрудников.
+    if (/^тест/i.test(String(b.name || '').trim())) return;
 
     dialogs.push({ booking: b, messages: list.filter(m => m && m.at && new Date(m.at).getTime() >= since - 3 * 24 * H) });
   });
@@ -56,7 +66,7 @@ export function speedStats(dialogs) {
     for (let i = 0; i < msgs.length; i++) {
       const m = msgs[i];
 
-      if (m.from !== 'student' || isAuto(m)) continue;
+      if (m.from !== 'student' || isAuto(m) || noReplyNeeded(m)) continue;
       // Несколько сообщений ученика подряд - ждём ответа на первое.
       if (i > 0 && msgs[i - 1].from === 'student') continue;
 
@@ -132,6 +142,12 @@ const SYSTEM = [
   '3) продажа (предложили ли пакет и следующий шаг, отработали ли сомнения и цену, довели ли до оплаты),',
   '4) запись и доходимость (помогли ли записаться или перенести, напомнили ли про урок).',
   'Пиши по-русски, коротко и конкретно, как для владельца школы. Не используй длинное тире, только дефис.',
+  'Тон спокойный и деловой: описывай действия и их последствия для ученика, без оценок личности, грубых слов и советов',
+  'уволить, перевести или переобучить сотрудника. Проценты и цифры бери только из блока «Цифры», свои не придумывай.',
+  'Оформление - простой текст для Telegram: без markdown, без #, без **, без ---. Заголовки разделов пиши отдельной строкой',
+  'заглавными буквами, пункты начинай с «- ».',
+  'Учитывай, что часть переписки менеджеры ведут в личных сообщениях Telegram, а здесь видно только то, что прошло через',
+  'бота школы, письма и карточку. Не делай вывод «менеджер не работает», если просто мало сообщений.',
   'Формат ответа:',
   'Итог - 3-4 предложения: что в целом хорошо и что главное исправить.',
   'По каждому менеджеру (по подписи @username): что делает хорошо, что исправить - с 1-2 короткими цитатами',
@@ -181,7 +197,8 @@ export async function buildReview(days = 14) {
 
     if (!resp.ok) return { ok: false, error: 'Модель ответила ошибкой: ' + ((data.error && data.error.message) || resp.status) };
 
-    const text = (data.content || []).map(p => p.text || '').join('').trim().replace(/—/g, '-');
+    const text = (data.content || []).map(p => p.text || '').join('').trim()
+      .replace(/—/g, '-').replace(/\*\*/g, '').replace(/^#+\s*/gm, '').replace(/^-{3,}\s*$/gm, '');
     const result = { ok: true, at: new Date().toISOString(), days, speed, dialogs: dialogs.length, text, model: MODEL() };
 
     await kvSet(LAST_KEY, result, 60 * 60 * 24 * 60);
