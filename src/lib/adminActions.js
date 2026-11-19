@@ -1,5 +1,5 @@
 import { getBooking, updateBooking, addBookedSlot, removeBookedSlot, getBookedSlots, kvSet, kvGet, kvKeys } from '@/lib/redis';
-import { LESSON_RESET } from '@/lib/lessonReset';
+import { LESSON_RESET, rescheduleNote } from '@/lib/lessonReset';
 import { isHost } from '@/lib/access';
 import { sendMessage, formatManagerCard, bookingActionsKeyboard } from '@/lib/telegram';
 import { clientWhen } from '@/lib/time';
@@ -295,6 +295,8 @@ export async function rescheduleBooking(bookingId, slotKey, by) {
   }
 
   const [date, time] = slotKey.split('_');
+
+  await addMessage(bookingId, { from: 'system', by: 'система', text: rescheduleNote(booking, slotKey, '@' + by + ', админка') });
 
   if (booking.slot && booking.slot !== 'no_time') await removeBookedSlot(booking.slot);
   await addBookedSlot(slotKey);

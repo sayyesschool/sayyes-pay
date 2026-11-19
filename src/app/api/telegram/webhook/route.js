@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { LESSON_RESET } from '@/lib/lessonReset';
+import { LESSON_RESET, rescheduleNote } from '@/lib/lessonReset';
 import { sendBookingConfirmation, mailProvider, sendIntroOfferEmail, sendLateNudgeEmail } from '@/lib/email';
 import { getProducts, stripe } from '@/services/stripe';
 import { getIntroProducts, getIntroProduct, introActive, introExpiry, nextIntroExpiry, introSendPatch, introUsedByPerson, introDeadlineFor } from '@/services/intro';
@@ -399,9 +399,13 @@ async function handleReschedule(chatId, bookingId, callbackQueryId) {
 }
 
 // Перенос: одна механика для ученика и для менеджера, чтобы они не разъезжались.
-async function applyNewSlot(bookingId, newSlotKey) {
+async function applyNewSlot(bookingId, newSlotKey, actorChatId, how) {
   const booking = await getBooking(bookingId);
   if (!booking) return null;
+
+  const who = how || (actorChatId && String(actorChatId) === String(booking.chatId) ? 'ученик в боте' : 'менеджер в боте');
+
+  await addMessage(bookingId, { from: 'system', by: 'система', text: rescheduleNote(booking, newSlotKey, who) });
 
   // Free old slot
   if (booking.slot && booking.slot !== 'no_time') {
@@ -462,7 +466,7 @@ function clientRescheduledText(booking, newSlotKey, newSlotDate) {
 }
 
 async function handleNewSlot(chatId, bookingId, newSlotKey, callbackQueryId, messageId) {
-  const result = await applyNewSlot(bookingId, newSlotKey);
+  const result = await applyNewSlot(bookingId, newSlotKey, chatId);
   if (!result) {
     await answerCallback(callbackQueryId, 'Запись не найдена');
     return;
@@ -2636,7 +2640,7 @@ async function handleManagerManualTime(chatId, text) {
   }
 
   await kvDel(`mgr_time:${chatId}`);
-  const result = await applyNewSlot(bookingId, slotKey);
+  const result = await applyNewSlot(bookingId, slotKey, chatId, 'менеджер в боте, другое время');
 
   if (!result) {
     await sendMessage(chatId, 'Запись не найдена.');

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { LESSON_RESET } from '@/lib/lessonReset';
+import { LESSON_RESET, rescheduleNote } from '@/lib/lessonReset';
+import { addMessage } from '@/lib/thread';
 import {
   getBooking, updateBooking, getBookedSlots, removeBookedSlot, addBookedSlot,
   getManagerChatId
@@ -31,7 +32,9 @@ export async function POST(request) {
     if (!booking) {
       return NextResponse.json({ error: 'Запись не найдена' }, { status: 404 });
     }
-    if (booking.status !== 'confirmed') {
+    // Снятую или отменённую запись тоже можно перенести: ссылку «выберите новое время»
+    // присылаем именно после снятия. Не переносим только заявку без статуса (битую).
+    if (booking.status !== 'confirmed' && booking.status !== 'cancelled') {
       return NextResponse.json({ error: 'Запись недействительна' }, { status: 400 });
     }
 
@@ -40,6 +43,8 @@ export async function POST(request) {
     if (bookedSlots.includes(slot)) {
       return NextResponse.json({ error: 'Это время уже занято. Выберите другое.' }, { status: 409 });
     }
+
+    await addMessage(bookingId, { from: 'system', by: 'система', text: rescheduleNote(booking, slot, 'ученик по ссылке') });
 
     // Free old slot
     if (booking.slot && booking.slot !== 'no_time') {
