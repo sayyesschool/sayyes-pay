@@ -4,6 +4,7 @@ import { SESSION_COOKIE, readSession, can } from '@/lib/adminAuth';
 import { Shell } from '@/lib/adminShell';
 import { loadBookings } from '@/lib/analytics';
 import { kvMGet } from '@/lib/redis';
+import { fixPlan } from '@/lib/offerFix';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,7 +20,9 @@ function when(iso) {
   return d.slice(8, 10) + '.' + d.slice(5, 7) + ' ' + d.slice(11, 16);
 }
 
-export default async function OfferFixPage() {
+export default async function OfferFixPage({ searchParams }) {
+  const params = await searchParams;
+  const message = params?.msg ? String(params.msg) : null;
   const store = await cookies();
   const session = await readSession(store.get(SESSION_COOKIE)?.value);
 
@@ -51,6 +54,7 @@ export default async function OfferFixPage() {
           С 06.11 по 20.11 ссылка в сообщениях цепочки после пробного вела на главную без пакета за 30 €.
           Ниже все, кому цепочка успела отправить хотя бы одно сообщение со ссылкой.
         </p>
+        {message && <div className={'msg' + (message.startsWith('Ошибка') ? ' err' : '')}>{message}</div>}
         <div className="scroll">
           <table>
             <thead>
@@ -72,6 +76,26 @@ export default async function OfferFixPage() {
             </tbody>
           </table>
         </div>
+      </div>
+
+      <div className="card">
+        <h2>Что уйдёт {unpaid.filter(r => !r.b.offerFixSentAt).length} неоплатившим</h2>
+        <p className="muted">От имени менеджера, запустившего оффер, в бот (у кого нет бота - письмом). Истёкшим срок продлевается на 72 часа от отправки.</p>
+        {unpaid.map(r => {
+          const plan = fixPlan(r.b);
+
+          return (
+            <div className="row" key={r.b.id} style={{ display: 'block' }}>
+              <b>{r.b.name}</b> <span className="muted">· {plan.channel === 'bot' ? 'бот' : 'письмо'} · {plan.expired ? 'срок истёк, продлеваем' : 'срок ещё идёт'}{r.b.offerFixSentAt ? ' · уже отправлено ' + when(r.b.offerFixSentAt) : ''}</span>
+              <div style={{ whiteSpace: 'pre-wrap', marginTop: 6 }}>{plan.text}</div>
+            </div>
+          );
+        })}
+        <form method="post" action="/api/admin/action" style={{ marginTop: 12 }}>
+          <input type="hidden" name="action" value="offer-fix-send" />
+          <input type="hidden" name="back" value="/admin/offer-fix" />
+          <button className="primary" type="submit">Отправить всем неоплатившим</button>
+        </form>
       </div>
     </Shell>
   );

@@ -3,6 +3,7 @@ import { cookies } from 'next/headers';
 import { SESSION_COOKIE, readSession, can } from '@/lib/adminAuth';
 import { addUser, saveRights, removeUser, RIGHTS, superUsernames, saveProfiles } from '@/lib/access';
 import { launchOffer, stopOffer } from '@/lib/offerChain';
+import { sendOfferFix } from '@/lib/offerFix';
 import { notifyUsers } from '@/lib/managers';
 import {
   markAttendance, cancelBooking, rescheduleBooking,
@@ -43,7 +44,7 @@ export async function POST(request) {
     'attach-pi': 'finance', 'detach-pi': 'finance', 'unskip-pi': 'finance',
     'week-hours': 'schedule', 'slot-close': 'schedule', 'slot-open': 'schedule',
     'access-add': 'super', 'access-save': 'super', 'access-del': 'super',
-    'host-pick': 'host'
+    'host-pick': 'host', 'offer-fix-send': 'super'
   };
   const need = NEED[action] || 'base';
 
@@ -91,6 +92,7 @@ export async function POST(request) {
     else if (action === 'offer-launch') result = await launchOffer(id, String(form.get('manager') || ''), by);
     else if (action === 'offer-stop') result = await stopOffer(id, by);
     else if (action === 'host-pick') result = await hostPick(id, by);
+    else if (action === 'offer-fix-send') result = await sendOfferFix(by);
     else if (action === 'offer-reschedule') result = await offerReschedule(id, by);
     else if (action === 'reschedule') result = await rescheduleBooking(id, String(form.get('slot') || ''), by);
     else if (action === 'paylink') result = await sendPayLink(id, String(form.get('pack') || ''), by);
