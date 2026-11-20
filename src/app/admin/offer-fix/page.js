@@ -4,7 +4,7 @@ import { SESSION_COOKIE, readSession, can } from '@/lib/adminAuth';
 import { Shell } from '@/lib/adminShell';
 import { loadBookings } from '@/lib/analytics';
 import { kvMGet } from '@/lib/redis';
-import { fixPlan } from '@/lib/offerFix';
+import { fixPlan, ensureRelayForSent } from '@/lib/offerFix';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,6 +31,7 @@ export default async function OfferFixPage({ searchParams }) {
 
   const all = (await loadBookings()).filter(b => b.offer && String(b.offer.startedAt || '') >= FROM
     && b.offer.sent && Object.keys(b.offer.sent).some(k => /^[1-4]$/.test(k) && String(b.offer.sent[k]) < FIXED_AT));
+  await ensureRelayForSent(all);
   const threads = await kvMGet(all.map(b => 'thread:' + b.id));
   const rows = all.map((b, i) => {
     const t = Array.isArray(threads[i]) ? threads[i] : [];

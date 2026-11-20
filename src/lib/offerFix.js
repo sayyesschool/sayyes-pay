@@ -1,5 +1,5 @@
 import { loadBookings } from '@/lib/analytics';
-import { updateBooking } from '@/lib/redis';
+import { updateBooking, kvSet } from '@/lib/redis';
 import { sendMessage } from '@/lib/telegram';
 import { sendManagerReplyEmail } from '@/lib/email';
 import { addMessage } from '@/lib/thread';
@@ -78,9 +78,15 @@ export async function sendOfferFix(by) {
       introNoExpiry: false,
       offer: { ...b.offer, deadline: new Date(plan.newDeadline).toISOString() }
     });
+    if (b.chatId) await kvSet('relay:' + b.chatId, b.id);
     await addMessage(b.id, { from: 'manager', by: '@' + by, channel: plan.channel === 'email' ? 'email' : undefined, text: plan.text });
     sent++;
   }
 
   return { ok: true, message: 'Отправлено: ' + sent + (failed.length ? '. Не ушло: ' + failed.join(', ') : '') };
+}
+
+// Тем, кому извинение уже ушло до появления relay: ответ ученика должен дойти до группы.
+export async function ensureRelayForSent(list) {
+  for (const b of list) if (b.offerFixSentAt && b.chatId) await kvSet('relay:' + b.chatId, b.id);
 }

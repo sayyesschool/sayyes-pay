@@ -1,4 +1,4 @@
-import { getBooking, updateBooking, kvGet } from '@/lib/redis';
+import { getBooking, updateBooking, kvGet, kvSet } from '@/lib/redis';
 import { sendMessage } from '@/lib/telegram';
 import { resolveTz } from '@/lib/time';
 import { sendOfferChainEmail } from '@/lib/email';
@@ -261,6 +261,8 @@ async function sendStep(booking, step, nowMs) {
 
   if (booking.chatId) {
     const res = await sendMessage(booking.chatId, t.bot, step === 4 ? reasonKeyboard(booking.id) : {});
+    // Ответ ученика на это сообщение должен дойти до менеджеров (relay в webhook).
+    await kvSet('relay:' + booking.chatId, booking.id);
 
     if (res && res.ok) channel = 'bot';
   }

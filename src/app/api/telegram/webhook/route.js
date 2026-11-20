@@ -2671,7 +2671,20 @@ async function handleManagerManualTime(chatId, text) {
 // --- Relay messages ---
 
 async function handleRelayFromUser(chatId, message) {
-  const relayBookingId = await kvGet(`relay:${chatId}`);
+  let relayBookingId = await kvGet(`relay:${chatId}`);
+
+  // 20.11.2026: ученик отвечал прямо на сообщение бота (оффер, извинение, «ответьте на это
+  // сообщение»), не нажимая «Связаться с менеджером», и получал меню «Что хотите сделать?»,
+  // а менеджеры его ответ не видели. Теперь любой текст ученика с записью уходит в группу.
+  if (!relayBookingId && !(message.text && message.text.trim().startsWith('/'))) {
+    const own = await getUserBooking(chatId);
+
+    if (own) {
+      relayBookingId = own;
+      await kvSet(`relay:${chatId}`, own);
+    }
+  }
+
   if (!relayBookingId) return false;
 
   const booking = await getBooking(relayBookingId);
