@@ -60,8 +60,11 @@ export default function Checkout({ products, groupId, packId, knownEmail, emailH
     // Спецпредложение — ровно то, которое выбрал менеджер. Второй интро-пакет
     // клиенту показывать не нужно: формат обсудили на уроке.
     const packs = preselected?.intro ? [preselected] : groupProducts;
-    const groupName = preselected?.intro ? preselected.name : groupProducts[0]?.name;
-    const deadline = preselected?.intro && introExpiresAt ? formatDeadline(introExpiresAt) : null;
+    // Ссылка из цепочки без конкретного пакета: оба интро-пакета на выбор.
+    const introGroup = !preselected && groupId === 'INTRO';
+    const groupName = preselected?.intro ? preselected.name
+        : introGroup ? 'Спецпредложение после пробного: 2 урока за 30 €' : groupProducts[0]?.name;
+    const deadline = (preselected?.intro || introGroup) && introExpiresAt ? formatDeadline(introExpiresAt) : null;
     const emailIsValid = EMAIL_PATTERN.test(contact.email.trim());
 
     if (!packs.length) return null;

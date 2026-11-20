@@ -43,12 +43,22 @@ export default function Home() {
 
 	// Прайс приезжает асинхронно, поэтому группу пакета узнаём только после загрузки.
 	useEffect(() => {
-		if (!preselectedPackId || !products) return;
+		if (!products) return;
+
+		// 20.11.2026: ссылка из цепочки после пробного (?b=код без &p=) открывала обычную
+		// главную - спецпредложение 2 урока за 30 € в каталог не попадает, и ученики
+		// писали «не нашла кнопку». Если по коду заявки есть интро-пакеты, сразу открываем их.
+		if (!preselectedPackId) {
+			if (!defaultGroupId && products.some(item => item.intro)) setGroupId('INTRO');
+			return;
+		}
 
 		const product = products.find(item => item.external_id === preselectedPackId);
 
 		if (product) setGroupId(product.group_id);
 	}, [products]);
+
+	const hasIntro = Boolean(products && products.some(item => item.intro));
 
 	if (!catalog) {
 		return <Loader size="lg" />;
@@ -66,6 +76,12 @@ export default function Home() {
 				image={<img className="image" src="/images/hero.png" alt="Команда мечты" />}
 			>
 				<div className="hero__actions mt-xxl mb-xxl">
+					{hasIntro &&
+						<Button color="yellow" onClick={() => setGroupId('INTRO')}>
+							Оплатить 2 урока за 30 €
+						</Button>
+					}
+
 					<Button color="yellow" onClick={scrollToProducts}>
 						Выбрать курс и оплатить
 					</Button>
