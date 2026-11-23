@@ -12,6 +12,13 @@ export const INTRO_PRODUCTS = {
   INTRO_GRP: process.env.STRIPE_INTRO_GRP_PRODUCT || 'prod_VAm8uI94bMXv5x'
 };
 
+// Подписи пакетов в окне оплаты (23.11.2026, Дима): «Пробная неделя занятий» и
+// «2 занятия всего за 30 евро» из Stripe были непонятны рядом друг с другом.
+const INTRO_LABELS = {
+  INTRO_IND: '2 индивидуальных занятия',
+  INTRO_GRP: '2 занятия в онлайн-группе'
+};
+
 export function isIntroPack(packId) {
   return Boolean(packId && INTRO_PRODUCTS[String(packId).toUpperCase()]);
 }
@@ -41,7 +48,7 @@ export async function getIntroProducts() {
         product_id: product.id,
         group_id: 'INTRO',
         name: product.name,
-        description: product.description || '',
+        description: INTRO_LABELS[externalId] || product.description || '',
         amount: price.unit_amount,
         currency: price.currency,
         price: price.unit_amount,
