@@ -264,7 +264,17 @@ async function sendStep(booking, step, nowMs) {
     // Ответ ученика на это сообщение должен дойти до менеджеров (relay в webhook).
     await kvSet('relay:' + booking.chatId, booking.id);
 
-    if (res && res.ok) channel = 'bot';
+    if (res && res.ok) {
+      channel = 'bot';
+      // 24.11.2026: сообщения цепочки в бот не попадали в переписку карточки, и никто не видел,
+      // что именно получил ученик (Лина w351k5s7). Пишем полный текст со ссылкой.
+      const buttons = step === 4 ? '\n\n[Кнопки: ' + Object.values(OFFER_REASONS).join(' / ') + ']' : '';
+
+      await addMessage(booking.id, {
+        from: 'manager', by: offer.manager.name,
+        text: '🎁 Оффер, сообщение ' + step + ' (бот):\n\n' + t.bot + buttons
+      });
+    }
   }
 
   if (!channel && booking.email) {
@@ -349,7 +359,6 @@ export async function launchOffer(bookingId, managerUsername, by) {
         introSentAt: new Date().toISOString(),
         payLinkSentAt: booking.payLinkSentAt || new Date().toISOString()
       });
-      await addMessage(booking.id, { from: 'manager', text: '🎁 Оффер: сообщение 1 отправлено (' + (channel === 'bot' ? 'бот' : 'почта') + ')', by: '@' + by });
       result = 'сообщение 1 ушло сейчас';
     } else {
       result = 'сообщение 1 не ушло, крон попробует снова';
@@ -358,7 +367,11 @@ export async function launchOffer(bookingId, managerUsername, by) {
     result = 'сообщение 1 уйдёт ' + mskText(plan.at[1]) + ' МСК (у клиента ночь)';
   }
 
-  return { ok: true, message: '🎁 Оффер запущен от имени ' + profile.name + ': ' + result + '. Конец оффера ' + mskText(deadline) + ' МСК.' };
+  const message = '🎁 Оффер запущен от имени ' + profile.name + ': ' + result + '. Конец оффера ' + mskText(deadline) + ' МСК.';
+
+  await addMessage(booking.id, { from: 'system', by: '@' + by, text: message });
+
+  return { ok: true, message };
 }
 
 export function mskText(ms) {

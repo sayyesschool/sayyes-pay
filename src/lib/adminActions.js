@@ -417,6 +417,14 @@ export async function sendPayLink(bookingId, packId, by) {
     payLinkBy: '@' + by
   });
 
+  // 24.11.2026: отправленная ссылка видна в переписке карточки (раньше не писалась никуда).
+  if (sent) {
+    await addMessage(bookingId, {
+      from: 'manager', by: '@' + by,
+      text: '💳 Ссылка на оплату (' + (sent === 'письмом' ? 'почта' : 'бот') + '):\n\n' + text
+    });
+  }
+
   if (!sent) return { ok: true, message: 'Ссылка готова, но отправить некуда: ни чата, ни почты', link };
 
   return { ok: true, message: 'Ссылка отправлена ' + sent, link };
