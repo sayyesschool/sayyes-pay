@@ -73,6 +73,20 @@ export async function editMessage(chatId, messageId, text, options = {}) {
   }
 }
 
+export async function deleteMessage(chatId, messageId) {
+  try {
+    const resp = await fetch(apiUrl('deleteMessage'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, message_id: messageId })
+    });
+    return await resp.json();
+  } catch (e) {
+    console.error('Telegram deleteMessage error:', e);
+    return null;
+  }
+}
+
 export async function editReplyMarkup(chatId, messageId, replyMarkup) {
   try {
     const resp = await fetch(apiUrl('editMessageReplyMarkup'), {

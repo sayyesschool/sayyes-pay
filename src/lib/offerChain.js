@@ -3,7 +3,7 @@ import { sendMessage } from '@/lib/telegram';
 import { resolveTz } from '@/lib/time';
 import { sendOfferChainEmail } from '@/lib/email';
 import { getProfiles } from '@/lib/access';
-import { addMessage } from '@/lib/thread';
+import { addMessage, tgRef } from '@/lib/thread';
 
 // Цепочка после пробного урока: оффер «2 урока за 30 €» (06.11.2026, документ
 // «Цепочка после пробного урока итоговая.docx», согласован Димой).
@@ -260,7 +260,8 @@ async function sendStep(booking, step, nowMs) {
   let channel = '';
 
   if (booking.chatId) {
-    const res = await sendMessage(booking.chatId, t.bot, step === 4 ? reasonKeyboard(booking.id) : {});
+    const kb = step === 4 ? reasonKeyboard(booking.id) : {};
+    const res = await sendMessage(booking.chatId, t.bot, kb);
     // Ответ ученика на это сообщение должен дойти до менеджеров (relay в webhook).
     await kvSet('relay:' + booking.chatId, booking.id);
 
@@ -272,7 +273,8 @@ async function sendStep(booking, step, nowMs) {
 
       await addMessage(booking.id, {
         from: 'manager', by: offer.manager.name,
-        text: '🎁 Оффер, сообщение ' + step + ' (бот):\n\n' + t.bot + buttons
+        text: '🎁 Оффер, сообщение ' + step + ' (бот):\n\n' + t.bot + buttons,
+        tg: tgRef(res, booking.chatId, t.bot, kb.reply_markup || null)
       });
     }
   }

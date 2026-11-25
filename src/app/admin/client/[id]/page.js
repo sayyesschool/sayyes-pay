@@ -7,7 +7,7 @@ import { getBooking, getBookedSlots } from '@/lib/redis';
 import { isSlotClosed } from '@/lib/capacity';
 import { today, shiftDay, slotStartMs } from '@/lib/analytics';
 import { getThread } from '@/lib/thread';
-import { listPacks, payLink } from '@/lib/adminActions';
+import { listPacks, payLink, canDeleteTg } from '@/lib/adminActions';
 import { introActive, introExpiry } from '@/services/intro';
 import { sourceLine } from '@/lib/leadSource';
 import { getProfiles } from '@/lib/access';
@@ -379,13 +379,52 @@ export default async function ClientPage({ params, searchParams }) {
           {thread.length > 0 ? (
             <div className="thread">
               {thread.map((item, index) => (
-                <div className={'bubble ' + (item.from === 'student' ? 'in' : 'out')} key={index} style={{ whiteSpace: 'pre-wrap' }}>
+                <div className={'bubble ' + (item.from === 'student' ? 'in' : 'out')} key={item.id || index} style={{ whiteSpace: 'pre-wrap' }}>
                   {item.channel === 'email' && item.subject ? <b style={{ display: 'block', marginBottom: 4 }}>✉️ {item.subject}</b> : null}
-                  {item.text}
+                  <span style={item.deletedAt ? { textDecoration: 'line-through', opacity: 0.6 } : null}>{item.text}</span>
                   <span className="meta">
                     {item.channel === 'email' ? '✉️ письмо · ' : ''}
                     {item.from === 'student' ? 'ученик' : (item.by || 'школа')} · {fmt(item.at)}
+                    {item.tg ? ' · бот' : ''}
+                    {item.channel === 'email' && item.from === 'manager' ? ' · исправить нельзя' : ''}
                   </span>
+                  {item.deletedAt && <span className="meta">🗑 удалено у ученика {item.deletedBy} · {fmt(item.deletedAt)}</span>}
+                  {item.editedAt && !item.deletedAt && <span className="meta">✏️ изменено {item.editedBy} · {fmt(item.editedAt)}</span>}
+                  {Array.isArray(item.history) && item.history.length > 0 && (
+                    <details style={{ marginTop: 4 }}>
+                      <summary className="muted">было</summary>
+                      {item.history.map((h, i) => <div key={i} className="muted" style={{ marginTop: 4 }}>{h.text}</div>)}
+                    </details>
+                  )}
+                  {item.tg && item.id && !item.deletedAt && (
+                    <div style={{ display: 'flex', gap: 8, marginTop: 6, flexWrap: 'wrap', whiteSpace: 'normal' }}>
+                      <details>
+                        <summary style={{ cursor: 'pointer' }}>✏️ Изменить</summary>
+                        <form method="post" action="/api/admin/action">
+                          <input type="hidden" name="action" value="msg-edit" />
+                          <input type="hidden" name="id" value={booking.id} />
+                          <input type="hidden" name="item" value={item.id} />
+                          <input type="hidden" name="back" value={back} />
+                          <div className="field"><textarea name="text" defaultValue={item.tg.text || item.text} /></div>
+                          <button type="submit">Сохранить</button>
+                          <span className="muted"> Отмена - нажмите «✏️ Изменить» ещё раз</span>
+                        </form>
+                      </details>
+                      {canDeleteTg(item) && (
+                        <details>
+                          <summary style={{ cursor: 'pointer' }}>🗑 Удалить</summary>
+                          <form method="post" action="/api/admin/action">
+                            <input type="hidden" name="action" value="msg-delete" />
+                            <input type="hidden" name="id" value={booking.id} />
+                            <input type="hidden" name="item" value={item.id} />
+                            <input type="hidden" name="back" value={back} />
+                            <p className="muted">Удалить у ученика? Отменить нельзя.</p>
+                            <button type="submit">Удалить</button>
+                          </form>
+                        </details>
+                      )}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

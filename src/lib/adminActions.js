@@ -1,7 +1,7 @@
 import { getBooking, updateBooking, addBookedSlot, removeBookedSlot, getBookedSlots, kvSet, kvGet, kvKeys } from '@/lib/redis';
 import { LESSON_RESET, rescheduleNote } from '@/lib/lessonReset';
 import { isHost } from '@/lib/access';
-import { sendMessage, formatManagerCard, bookingActionsKeyboard } from '@/lib/telegram';
+import { sendMessage, editMessage, deleteMessage, formatManagerCard, bookingActionsKeyboard } from '@/lib/telegram';
 import { clientWhen } from '@/lib/time';
 import { notifyManagers } from '@/lib/managers';
 import { sendTrialAttended, sendPurchase } from '@/lib/meta';
@@ -10,7 +10,7 @@ import { getProducts } from '@/services/stripe';
 import { sendIntroOfferEmail, sendBookingConfirmation, sendRescheduleOfferEmail, sendManagerReplyEmail } from '@/lib/email';
 import { getProfiles } from '@/lib/access';
 import { getAllActiveBookings } from '@/lib/redis';
-import { addMessage } from '@/lib/thread';
+import { addMessage, getThread, updateThreadItem, tgRef } from '@/lib/thread';
 
 // Действия менеджера из веба. Делают ровно то же, что кнопки бота, и теми же
 // полями заявки: иначе две половины системы начнут расходиться в цифрах.
@@ -398,9 +398,12 @@ export async function sendPayLink(bookingId, packId, by) {
     + (intro && !noExpiry ? '\n\nПредложение действует трое суток после урока.' : '');
 
   let sent = null;
+  let tg = null;
 
   if (booking.chatId) {
-    await sendMessage(booking.chatId, text);
+    const res = await sendMessage(booking.chatId, text);
+
+    tg = tgRef(res, booking.chatId, text);
     sent = 'в Telegram';
   } else if (booking.email) {
     await sendIntroOfferEmail(booking, link, name, null);
@@ -421,7 +424,9 @@ export async function sendPayLink(bookingId, packId, by) {
   if (sent) {
     await addMessage(bookingId, {
       from: 'manager', by: '@' + by,
-      text: '💳 Ссылка на оплату (' + (sent === 'письмом' ? 'почта' : 'бот') + '):\n\n' + text
+      text: '💳 Ссылка на оплату (' + (sent === 'письмом' ? 'почта' : 'бот') + '):\n\n' + text,
+      ...(sent === 'письмом' ? { channel: 'email' } : {}),
+      tg
     });
   }
 
@@ -566,9 +571,11 @@ export async function messageStudent(bookingId, text, by) {
   if (!text || !text.trim()) return { ok: false, error: 'Пустое сообщение' };
   if (!booking.chatId) return { ok: false, error: 'У ученика нет чата с ботом — напишите на почту' };
 
-  await sendMessage(booking.chatId, text.trim());
+  const res = await sendMessage(booking.chatId, text.trim());
 
-  await addMessage(bookingId, { from: 'manager', text: text.trim(), by: '@' + by });
+  if (!res || !res.ok) return { ok: false, error: 'Telegram не принял сообщение' + (res && res.description ? ': ' + res.description : '') };
+
+  await addMessage(bookingId, { from: 'manager', text: text.trim(), by: '@' + by, tg: tgRef(res, booking.chatId, text.trim()) });
   await updateBooking(bookingId, { lastManagerMessageAt: new Date().toISOString() });
   await notifyManagers('✍️ @' + by + ' написал(а) ученику ' + (booking.name || booking.id) + ':\n\n' + text.trim());
 
@@ -596,13 +603,16 @@ export async function offerReschedule(bookingId, by) {
   const text = hi + ', что не получилось встретиться 🙂 Ваше место за вами: выберите новое время'
     + ' для пробного урока, это займёт минуту.';
   let channel = '';
+  let tg = null;
 
   if (booking.chatId) {
-    const res = await sendMessage(booking.chatId, text, {
-      reply_markup: { inline_keyboard: [[{ text: '📅 Выбрать новое время', url: link }]] }
-    });
+    const markup = { inline_keyboard: [[{ text: '📅 Выбрать новое время', url: link }]] };
+    const res = await sendMessage(booking.chatId, text, { reply_markup: markup });
 
-    if (res && res.ok) channel = 'Telegram';
+    if (res && res.ok) {
+      channel = 'Telegram';
+      tg = tgRef(res, booking.chatId, text, markup);
+    }
   }
 
   if (!channel && booking.email) {
@@ -613,7 +623,11 @@ export async function offerReschedule(bookingId, by) {
 
   if (!channel) return { ok: false, error: 'Некуда отправить: нет ни чата с ботом, ни рабочей почты', link };
 
-  await addMessage(bookingId, { from: 'manager', text: '📅 Предложение перенести урок: ' + link, by: '@' + by });
+  await addMessage(bookingId, {
+    from: 'manager', by: '@' + by, tg,
+    ...(tg ? { text: '📅 Предложение перенести урок (бот):\n\n' + text + '\n\n[Кнопка: 📅 Выбрать новое время → ' + link + ']' }
+      : { text: '📅 Предложение перенести урок (почта): ' + link, channel: 'email' })
+  });
   await updateBooking(bookingId, { rescheduleOfferedAt: new Date().toISOString(), rescheduleOfferedBy: '@' + by });
 
   return { ok: true, message: '📅 Ссылка на перенос отправлена ' + (booking.name || 'ученику') + ' (' + channel + ')', link };
@@ -680,4 +694,80 @@ export async function hostPick(bookingId, by) {
   await updateBooking(booking.id, { hostUsername: username, hostName: (profile && profile.name) || null, hostAssignedAt: new Date().toISOString() });
 
   return { ok: true, message: 'Урок ваш' };
+}
+
+// --- Изменить / удалить сообщение у ученика (25.11.2026, макет согласован Димой) ---
+// Работает только для сообщений в бот, отправленных после 25.11.2026: у них в переписке
+// сохранён номер сообщения в Telegram. Письма отозвать нельзя.
+const DELETE_WINDOW_MS = 48 * 60 * 60 * 1000;
+
+export function canDeleteTg(item, nowMs = Date.now()) {
+  return Boolean(item && item.tg && !item.deletedAt && nowMs - Date.parse(item.at) < DELETE_WINDOW_MS - 5 * 60 * 1000);
+}
+
+async function threadItem(bookingId, itemId) {
+  const item = (await getThread(bookingId)).find(x => x && x.id === itemId);
+
+  if (!item) return { error: 'Сообщение не найдено' };
+  if (!item.tg) return { error: 'Это сообщение нельзя изменить: оно ушло письмом или до 25.11.2026' };
+  if (item.deletedAt) return { error: 'Сообщение уже удалено у ученика' };
+
+  return { item };
+}
+
+export async function editStudentMessage(bookingId, itemId, text, by) {
+  const booking = await getBooking(bookingId);
+
+  if (!booking) return { ok: false, error: 'Запись не найдена' };
+
+  const next = String(text || '').trim();
+
+  if (!next) return { ok: false, error: 'Пустой текст. Чтобы убрать сообщение, нажмите «Удалить»' };
+
+  const { item, error } = await threadItem(bookingId, itemId);
+
+  if (error) return { ok: false, error };
+  if (next === item.tg.text) return { ok: true, message: 'Текст не изменился' };
+
+  const res = await editMessage(item.tg.chatId, item.tg.messageId, next, item.tg.markup ? { reply_markup: item.tg.markup } : {});
+
+  if (!res || !res.ok) {
+    return { ok: false, error: 'Telegram не дал изменить' + (res && res.description ? ': ' + res.description : '') };
+  }
+
+  const at = new Date().toISOString();
+
+  await updateThreadItem(bookingId, itemId, cur => ({
+    ...cur,
+    text: next,
+    tg: { ...cur.tg, text: next },
+    history: [...(cur.history || []), { text: cur.text, at, by: '@' + by }],
+    editedAt: at,
+    editedBy: '@' + by
+  }));
+  await notifyManagers('✏️ @' + by + ' изменил(а) сообщение ученику ' + (booking.name || booking.id) + ':\n\n' + next);
+
+  return { ok: true, message: 'Сообщение у ученика изменено' };
+}
+
+export async function deleteStudentMessage(bookingId, itemId, by) {
+  const booking = await getBooking(bookingId);
+
+  if (!booking) return { ok: false, error: 'Запись не найдена' };
+
+  const { item, error } = await threadItem(bookingId, itemId);
+
+  if (error) return { ok: false, error };
+  if (!canDeleteTg(item)) return { ok: false, error: 'Прошло больше 48 часов: Telegram не даёт удалить. Можно изменить текст' };
+
+  const res = await deleteMessage(item.tg.chatId, item.tg.messageId);
+
+  if (!res || !res.ok) {
+    return { ok: false, error: 'Telegram не дал удалить' + (res && res.description ? ': ' + res.description : '') };
+  }
+
+  await updateThreadItem(bookingId, itemId, { deletedAt: new Date().toISOString(), deletedBy: '@' + by });
+  await notifyManagers('🗑 @' + by + ' удалил(а) у ученика ' + (booking.name || booking.id) + ' сообщение:\n\n' + (item.tg.text || item.text));
+
+  return { ok: true, message: 'Сообщение удалено у ученика' };
 }

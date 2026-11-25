@@ -8,7 +8,8 @@ import { notifyUsers } from '@/lib/managers';
 import {
   markAttendance, cancelBooking, rescheduleBooking,
   sendPayLink, markPaid, messageStudent, archiveUnmarked, restoreBooking,
-  resendConfirmation, resendAllConfirmations, offerReschedule, replyByEmail, hostPick
+  resendConfirmation, resendAllConfirmations, offerReschedule, replyByEmail, hostPick,
+  editStudentMessage, deleteStudentMessage
 } from '@/lib/adminActions';
 import { blockSlots, openSlots, setWeekHours } from '@/lib/schedule';
 import { attachPayment, detachPayment, unskipPayment } from '@/lib/stripePayments';
@@ -98,6 +99,8 @@ export async function POST(request) {
     else if (action === 'paylink') result = await sendPayLink(id, String(form.get('pack') || ''), by);
     else if (action === 'paid') result = await markPaid(id, form.get('amount'), String(form.get('pack') || ''), by);
     else if (action === 'message') result = await messageStudent(id, String(form.get('text') || ''), by);
+    else if (action === 'msg-edit') result = await editStudentMessage(id, String(form.get('item') || ''), String(form.get('text') || ''), by);
+    else if (action === 'msg-delete') result = await deleteStudentMessage(id, String(form.get('item') || ''), by);
     else if (action === 'archive-unmarked') result = await archiveUnmarked(form.get('days'), by);
     // Оплата есть в Stripe, а заявке о ней ничего не известно: счёт выставили
     // руками, вебхук не дошёл, платили не по нашей ссылке. Связываем их здесь.
