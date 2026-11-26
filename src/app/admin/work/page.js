@@ -199,14 +199,19 @@ export default async function ManagePage({ searchParams }) {
     return start && start < now && (booking.attended === undefined || booking.attended === null);
   }).sort((a, b) => slotStartMs(b) - slotStartMs(a));
 
-  const noLink = active.filter(booking => booking.attended === true && !booking.paid && !booking.payLinkSentAt);
-  const waitingPay = active.filter(booking => booking.attended === true && !booking.paid && booking.payLinkSentAt);
+  // «Отказ» (26.11.2026) убирает клиента из списков дожима: менеджеры его больше не дёргают.
+  const refused = booking => booking.training && booking.training.kind === 'refused';
+  const noLink = active.filter(booking => booking.attended === true && !booking.paid && !booking.payLinkSentAt && !refused(booking));
+  const waitingPay = active.filter(booking => booking.attended === true && !booking.paid && booking.payLinkSentAt && !refused(booking));
+  // «Вернуться сегодня»: дата из статуса обучения наступила. Висит, пока дату не сменят или статус не снимут.
+  const returnToday = all.filter(booking => booking.training && booking.training.returnAt && booking.training.returnAt <= todayKey)
+    .sort((a, b) => String(a.training.returnAt).localeCompare(String(b.training.returnAt)));
   const noTime = active.filter(booking => !booking.slot || booking.slot === 'no_time');
   // Письма, которые не ушли: результат отправки пишется в заявку при записи,
   // поэтому список точный. Только будущие живые уроки — по прошедшему письмо
   // «вы записаны» уже не помощь, а путаница.
   const mailFailed = active.filter(booking => needsMailResend(booking, now));
-  const todo = unmarked.length + noLink.length + waitingPay.length + noTime.length + mailFailed.length;
+  const todo = unmarked.length + noLink.length + waitingPay.length + noTime.length + mailFailed.length + returnToday.length;
 
   const todays = byDay[todayKey] || [];
   const week = active
@@ -437,6 +442,12 @@ export default async function ManagePage({ searchParams }) {
               </form>
             </details>
           )}
+
+          <details className="sub" open={returnToday.length > 0}>
+            <summary>Вернуться сегодня <span className="count">{returnToday.length}</span></summary>
+            <p className="muted">Дата из статуса «Отказ» или «Закончил обучение» наступила. Клиент уйдёт отсюда, когда в карточке сменят дату или снимут статус.</p>
+            <List items={returnToday} empty="Сегодня возвращаться не к кому." />
+          </details>
 
           <details className="sub">
             <summary>Уроки без отметки <span className="count">{unmarked.length}</span></summary>

@@ -3,6 +3,7 @@ import { cookies } from 'next/headers';
 import { SESSION_COOKIE, readSession, can } from '@/lib/adminAuth';
 import { addUser, saveRights, removeUser, RIGHTS, superUsernames, saveProfiles } from '@/lib/access';
 import { launchOffer, stopOffer } from '@/lib/offerChain';
+import { setTraining, clearTraining } from '@/lib/training';
 import { sendOfferFix } from '@/lib/offerFix';
 import { notifyUsers } from '@/lib/managers';
 import {
@@ -107,6 +108,15 @@ export async function POST(request) {
 
       result = up.error ? { ok: false, error: up.error } : await messageStudent(id, String(form.get('text') || ''), by, up.file);
     }
+    else if (action === 'training-set') {
+      result = await setTraining(id, {
+        kind: String(form.get('kind') || ''),
+        reason: String(form.get('reason') || ''),
+        comment: String(form.get('comment') || ''),
+        returnAt: String(form.get('returnAt') || '')
+      }, by);
+    }
+    else if (action === 'training-clear') result = await clearTraining(id, by);
     else if (action === 'msg-edit') result = await editStudentMessage(id, String(form.get('item') || ''), String(form.get('text') || ''), by);
     else if (action === 'msg-delete') result = await deleteStudentMessage(id, String(form.get('item') || ''), by);
     else if (action === 'archive-unmarked') result = await archiveUnmarked(form.get('days'), by);

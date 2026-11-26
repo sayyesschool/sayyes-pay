@@ -90,7 +90,7 @@ export async function buildCohorts({ from, to, step = 'week', source = 'all' }) 
   const rows = {};
   const get = key => rows[key] || (rows[key] = {
     key, label: periodLabel(key, step), spend: 0, leads: 0, booked: 0, pastBooked: 0, confirmed: 0, attended: 0, payers: 0, revenue: 0,
-    pay1: 0, pay2: 0, pay3: 0,
+    pay1: 0, pay2: 0, pay3: 0, refused: 0, refusedBy: {}, finished: 0,
     weeks: Array(WEEK_COLS).fill(0), firstDay: null
   });
 
@@ -106,6 +106,12 @@ export async function buildCohorts({ from, to, step = 'week', source = 'all' }) 
     // Подтверждение: флаг сбрасывается при переносе, поэтому учитываем и пришедших.
     if (b.confirmed || b.confirmedAt || b.attended === true) r.confirmed++;
     if (b.attended === true) r.attended++;
+    // Статус обучения из карточки (26.11.2026): считается по дню заявки, как всё в когорте.
+    if (b.training && b.training.kind === 'refused') {
+      r.refused++;
+      r.refusedBy[b.training.reason] = (r.refusedBy[b.training.reason] || 0) + 1;
+    }
+    if (b.training && b.training.kind === 'finished') r.finished++;
   }
 
   const payerSeen = new Set();
@@ -173,10 +179,11 @@ export async function buildCohorts({ from, to, step = 'week', source = 'all' }) 
   }
 
   const total = list.reduce((t, r) => {
-    for (const k of ['spend', 'leads', 'booked', 'pastBooked', 'confirmed', 'attended', 'payers', 'revenue', 'pay1', 'pay2', 'pay3']) t[k] += r[k];
+    for (const k of ['spend', 'leads', 'booked', 'pastBooked', 'confirmed', 'attended', 'payers', 'revenue', 'pay1', 'pay2', 'pay3', 'refused', 'finished']) t[k] += r[k];
+    for (const [k, v] of Object.entries(r.refusedBy || {})) t.refusedBy[k] = (t.refusedBy[k] || 0) + v;
 
     return t;
-  }, { spend: 0, leads: 0, booked: 0, pastBooked: 0, confirmed: 0, attended: 0, payers: 0, revenue: 0, pay1: 0, pay2: 0, pay3: 0 });
+  }, { spend: 0, leads: 0, booked: 0, pastBooked: 0, confirmed: 0, attended: 0, payers: 0, revenue: 0, pay1: 0, pay2: 0, pay3: 0, refused: 0, refusedBy: {}, finished: 0 });
 
   total.ratio = total.spend ? total.revenue / total.spend : null;
   total.romi = total.spend ? Math.round(((total.revenue - total.spend) / total.spend) * 100) : null;

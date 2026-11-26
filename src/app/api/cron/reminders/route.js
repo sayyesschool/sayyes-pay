@@ -9,6 +9,7 @@ import { reviveTelegram, reviveKeyboard, reviveDueAt } from '@/lib/revive';
 import { isClientNight, clientDayHoursBetween, clientHour, clientDayKey, clientTimeWithZone } from '@/lib/time';
 import { processOffer, offerReminderDue } from '@/lib/offerChain';
 import { syncInbox } from '@/lib/mailbox';
+import { remindReturns } from '@/lib/training';
 import { verifyQstash } from '@/lib/qstashAuth';
 import { getThread } from '@/lib/thread';
 import { isContactCandidate, postContactList, refreshContactLists } from '@/lib/contactList';
@@ -701,6 +702,17 @@ export async function GET(request, rawBody = '') {
       contactLists = await sendContactLists({ contactEvening, contactMorning, contactPing, mskToday, mskTomorrow, now, bookings });
     } catch (e) {
       console.error('Contact lists error:', e);
+    }
+
+    // «Вернуться к клиенту» по статусу обучения (26.11.2026), с 10:00 МСК.
+    let trainingReturns = 0;
+
+    if (mskHourNow >= 10) {
+      try {
+        trainingReturns = await remindReturns(mskToday);
+      } catch (e) {
+        console.error('Training return reminder error:', e);
+      }
     }
 
     // Когда и кто запускал крон: видно в /api/health/cron (17.11.2026, переход на QStash).

@@ -1,4 +1,7 @@
 import { WEEK_COLS } from '@/lib/cohorts';
+import { REFUSE_REASONS } from '@/lib/training';
+
+const REASON_SHORT = { 1: 'формат', 2: 'не время', 3: 'дорого', 4: 'другое' };
 
 // Вкладка «Когорты» (макет согласован Димой 18.11.2026).
 const CSS = [
@@ -89,6 +92,7 @@ export function CohortsTab({ data, linkFor }) {
               <tr>
                 <th>Когорта</th><th>Заявок</th><th>Записались</th><th>Подтвердили</th><th>Дошли</th>
                 <th>Доходимость</th><th>1-я оплата</th><th>2-я оплата</th><th>3-я и дальше</th>
+                <th>Отказ</th><th>Закончили</th>
               </tr>
             </thead>
             <tbody>
@@ -103,6 +107,11 @@ export function CohortsTab({ data, linkFor }) {
                   <td>{r.pay1}{r.attended ? <span className="muted"> · {pct(r.pay1, r.attended)}</span> : null}</td>
                   <td>{r.pay2}{r.pay1 ? <span className="muted"> · {pct(r.pay2, r.pay1)}</span> : null}</td>
                   <td>{r.pay3}{r.pay2 ? <span className="muted"> · {pct(r.pay3, r.pay2)}</span> : null}</td>
+                  <td title={Object.entries(r.refusedBy || {}).map(([k, v]) => (REFUSE_REASONS[k] || 'без причины') + ': ' + v).join('\n')}>
+                    {r.refused}{r.attended && r.refused ? <span className="muted"> · {pct(r.refused, r.attended)}</span> : null}
+                    {r.refused ? <div className="muted" style={{ fontSize: 11 }}>{Object.entries(r.refusedBy || {}).map(([k, v]) => (REASON_SHORT[k] || '?') + ' ' + v).join(' · ')}</div> : null}
+                  </td>
+                  <td>{r.finished}{r.pay1 && r.finished ? <span className="muted"> · {pct(r.finished, r.pay1)}</span> : null}</td>
                 </tr>
               ))}
             </tbody>
@@ -111,6 +120,8 @@ export function CohortsTab({ data, linkFor }) {
         <p className="muted">
           Записались - заявки с выбранным временем урока. Подтвердили - нажали «Буду на уроке» (или пришли).
           Доходимость - дошли от записей, чей урок уже прошёл. Проценты у оплат: 1-я от дошедших, 2-я от сделавших 1-ю, 3-я от сделавших 2-ю.
+          Отказ и Закончили - статусы, которые менеджеры ставят в карточке клиента; считаются по дню заявки, отказ в процентах от дошедших,
+          закончили - от сделавших 1-ю оплату. Под отказом причины: формат / не время / дорого / другое.
         </p>
       </div>
 

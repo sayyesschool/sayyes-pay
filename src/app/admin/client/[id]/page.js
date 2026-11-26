@@ -12,6 +12,7 @@ import { introActive, introExpiry } from '@/services/intro';
 import { sourceLine } from '@/lib/leadSource';
 import { getProfiles } from '@/lib/access';
 import { mskText } from '@/lib/offerChain';
+import { trainingLine, REFUSE_REASONS } from '@/lib/training';
 
 export const dynamic = 'force-dynamic';
 
@@ -85,6 +86,7 @@ export default async function ClientPage({ params, searchParams }) {
         <div className="card">
           <div style={{ marginBottom: 8 }}>
             {statusTags(booking).map(([cls, label], i) => <span key={i} className={'tag ' + cls}>{label}</span>)}
+            {booking.training && <span className="tag">{trainingLine(booking.training)}</span>}
           </div>
           <div className="kv">
             <div><b>Код</b> {booking.id}</div>
@@ -122,6 +124,74 @@ export default async function ClientPage({ params, searchParams }) {
               <div><b>Спецоффер</b> {booking.introNoExpiry ? (booking.introPaid ? 'оплачен' : 'ссылка без срока, до оплаты') : introActive(booking) ? 'активен до ' + fmt(offerUntil) : 'окно закрыто ' + fmt(offerUntil)}</div>
             )}
           </div>
+        </div>
+
+        <div className="card">
+          <h2>Статус обучения</h2>
+          {booking.training ? (
+            <>
+              <p><b>{trainingLine(booking.training)}</b></p>
+              {booking.training.comment && <p className="muted" style={{ whiteSpace: 'pre-wrap' }}>{booking.training.comment}</p>}
+              <form method="post" action="/api/admin/action">
+                <input type="hidden" name="action" value="training-clear" />
+                <input type="hidden" name="id" value={booking.id} />
+                <input type="hidden" name="back" value={back} />
+                <button type="submit">Снять статус</button>
+              </form>
+            </>
+          ) : (
+            <p className="muted">Сейчас: {booking.paid ? 'учится' : '—'}</p>
+          )}
+          <div className="btns" style={{ alignItems: 'flex-start', flexWrap: 'wrap' }}>
+            <details>
+              <summary className="btn" style={{ cursor: 'pointer' }}>🚫 Отказ</summary>
+              <form method="post" action="/api/admin/action" style={{ marginTop: 8 }}>
+                <input type="hidden" name="action" value="training-set" />
+                <input type="hidden" name="kind" value="refused" />
+                <input type="hidden" name="id" value={booking.id} />
+                <input type="hidden" name="back" value={back} />
+                <div className="field">
+                  <label>Причина</label>
+                  {Object.entries(REFUSE_REASONS).map(([k, v]) => (
+                    <label key={k} style={{ display: 'block', fontWeight: 'normal' }}>
+                      <input type="radio" name="reason" value={k} required={k === '1'} /> {v}
+                    </label>
+                  ))}
+                </div>
+                <div className="field">
+                  <label>Когда вернуться к клиенту (необязательно)</label>
+                  <input type="date" name="returnAt" />
+                </div>
+                <div className="field">
+                  <label>Комментарий (необязательно)</label>
+                  <textarea name="comment" />
+                </div>
+                <button className="primary" type="submit">Сохранить</button>
+              </form>
+            </details>
+            {booking.paid && (
+              <details>
+                <summary className="btn" style={{ cursor: 'pointer' }}>🎓 Закончил обучение</summary>
+                <form method="post" action="/api/admin/action" style={{ marginTop: 8 }}>
+                  <input type="hidden" name="action" value="training-set" />
+                  <input type="hidden" name="kind" value="finished" />
+                  <input type="hidden" name="id" value={booking.id} />
+                  <input type="hidden" name="back" value={back} />
+                  <div className="field">
+                    <label>Когда вернуться к клиенту (необязательно)</label>
+                    <input type="date" name="returnAt" />
+                  </div>
+                  <div className="field">
+                    <label>Комментарий (необязательно)</label>
+                    <textarea name="comment" />
+                  </div>
+                  <button className="primary" type="submit">Сохранить</button>
+                </form>
+              </details>
+            )}
+          </div>
+          {booking.training && <p className="muted">Новый статус заменит текущий.</p>}
+          {!booking.paid && <p className="muted">«🎓 Закончил обучение» появится после первой оплаты.</p>}
         </div>
 
         {Object.keys(answers).length > 0 && (
