@@ -381,6 +381,15 @@ export default async function ClientPage({ params, searchParams }) {
               {thread.map((item, index) => (
                 <div className={'bubble ' + (item.from === 'student' ? 'in' : 'out')} key={item.id || index} style={{ whiteSpace: 'pre-wrap' }}>
                   {item.channel === 'email' && item.subject ? <b style={{ display: 'block', marginBottom: 4 }}>✉️ {item.subject}</b> : null}
+                  {item.file && (
+                    <div style={{ marginBottom: item.text ? 4 : 0 }}>
+                      📎 {item.file.fileId
+                        ? <a href={'/api/admin/tgfile?b=' + encodeURIComponent(booking.id) + '&item=' + encodeURIComponent(item.id)} target="_blank" rel="noreferrer">{item.file.name}</a>
+                        : item.file.name}
+                      {item.file.size ? <span className="muted"> · {item.file.size >= 1048576 ? (item.file.size / 1048576).toFixed(1) + ' МБ' : Math.max(1, Math.round(item.file.size / 1024)) + ' КБ'}</span> : null}
+                      {item.file.fileId ? <span className="muted"> · открыть</span> : <span className="muted"> · во вложении письма</span>}
+                    </div>
+                  )}
                   <span style={item.deletedAt ? { textDecoration: 'line-through', opacity: 0.6 } : null}>{item.text}</span>
                   <span className="meta">
                     {item.channel === 'email' ? '✉️ письмо · ' : ''}
@@ -399,7 +408,7 @@ export default async function ClientPage({ params, searchParams }) {
                   {item.tg && item.id && !item.deletedAt && (
                     <div style={{ display: 'flex', gap: 8, marginTop: 6, flexWrap: 'wrap', whiteSpace: 'normal' }}>
                       <details>
-                        <summary style={{ cursor: 'pointer' }}>✏️ Изменить</summary>
+                        <summary style={{ cursor: 'pointer' }}>{item.file ? '✏️ Изменить подпись' : '✏️ Изменить'}</summary>
                         <form method="post" action="/api/admin/action">
                           <input type="hidden" name="action" value="msg-edit" />
                           <input type="hidden" name="id" value={booking.id} />
@@ -431,18 +440,22 @@ export default async function ClientPage({ params, searchParams }) {
           ) : (
             <p className="muted">Переписки пока нет. Здесь будут и ответы ученика из бота, и ваши сообщения.</p>
           )}
-          <form method="post" action="/api/admin/action">
+          <form method="post" action="/api/admin/action" encType="multipart/form-data">
             <input type="hidden" name="action" value="message" />
             <input type="hidden" name="id" value={booking.id} />
             <input type="hidden" name="back" value={back} />
             <div className="field">
               <textarea name="text" placeholder="Сообщение уйдёт в бот от имени школы" />
             </div>
+            <div className="field">
+              <label>📎 Файл (необязательно, до 4 МБ: фото, PDF, документ)</label>
+              <input type="file" name="file" />
+            </div>
             <button className="primary" type="submit">Отправить</button>
           </form>
           {!booking.chatId && <p className="muted">У этого ученика нет чата с ботом — только почта.</p>}
           {booking.email && (
-            <form method="post" action="/api/admin/action" style={{ marginTop: 14 }}>
+            <form method="post" action="/api/admin/action" encType="multipart/form-data" style={{ marginTop: 14 }}>
               <input type="hidden" name="action" value="mail-reply" />
               <input type="hidden" name="id" value={booking.id} />
               <input type="hidden" name="back" value={back} />
@@ -455,6 +468,10 @@ export default async function ClientPage({ params, searchParams }) {
               <div className="field">
                 <label>Ответить письмом на {booking.email}</label>
                 <textarea name="text" placeholder="Письмо уйдёт от info@sayyestoenglish.com с вашим именем в строке «От кого»" />
+              </div>
+              <div className="field">
+                <label>📎 Вложение (необязательно, до 4 МБ)</label>
+                <input type="file" name="file" />
               </div>
               <button type="submit">✉️ Ответить письмом</button>
             </form>

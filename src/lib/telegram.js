@@ -87,6 +87,65 @@ export async function deleteMessage(chatId, messageId) {
   }
 }
 
+// Файл ученику из карточки (26.11.2026). file: { name, type, buffer }. Картинку шлём как фото
+// (видна сразу в чате), остальное документом. Подпись до 1024 знаков - ограничение Telegram.
+const PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+
+export async function sendFile(chatId, file, caption = '') {
+  try {
+    const asPhoto = PHOTO_TYPES.includes(file.type) && file.buffer.length <= 10 * 1024 * 1024;
+    const form = new FormData();
+
+    form.append('chat_id', String(chatId));
+    if (caption) {
+      form.append('caption', caption);
+      form.append('parse_mode', 'HTML');
+    }
+    form.append(asPhoto ? 'photo' : 'document', new Blob([file.buffer], { type: file.type || 'application/octet-stream' }), file.name || 'file');
+
+    const resp = await fetch(apiUrl(asPhoto ? 'sendPhoto' : 'sendDocument'), { method: 'POST', body: form });
+    const data = await resp.json();
+
+    if (data && data.ok) {
+      const r = data.result || {};
+      const fileId = asPhoto ? (r.photo && r.photo.length ? r.photo[r.photo.length - 1].file_id : null) : (r.document ? r.document.file_id : null);
+
+      data.fileId = fileId;
+      data.kind = asPhoto ? 'photo' : 'document';
+    }
+
+    return data;
+  } catch (e) {
+    console.error('Telegram sendFile error:', e);
+    return null;
+  }
+}
+
+export async function editCaption(chatId, messageId, caption, options = {}) {
+  try {
+    const resp = await fetch(apiUrl('editMessageCaption'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, message_id: messageId, caption, parse_mode: 'HTML', ...options })
+    });
+    return await resp.json();
+  } catch (e) {
+    console.error('Telegram editCaption error:', e);
+    return null;
+  }
+}
+
+// Ссылка на скачивание файла с серверов Telegram (живёт около часа). Наружу не отдаём:
+// в ней токен бота, файл проксирует /api/admin/tgfile.
+export async function fileDownloadUrl(fileId) {
+  const resp = await fetch(apiUrl('getFile') + '?file_id=' + encodeURIComponent(fileId));
+  const data = await resp.json();
+
+  if (!data || !data.ok || !data.result || !data.result.file_path) return null;
+
+  return `https://api.telegram.org/file/bot${BOT_TOKEN()}/${data.result.file_path}`;
+}
+
 export async function editReplyMarkup(chatId, messageId, replyMarkup) {
   try {
     const resp = await fetch(apiUrl('editMessageReplyMarkup'), {

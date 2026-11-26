@@ -9,7 +9,7 @@ import {
   markAttendance, cancelBooking, rescheduleBooking,
   sendPayLink, markPaid, messageStudent, archiveUnmarked, restoreBooking,
   resendConfirmation, resendAllConfirmations, offerReschedule, replyByEmail, hostPick,
-  editStudentMessage, deleteStudentMessage
+  editStudentMessage, deleteStudentMessage, readUpload
 } from '@/lib/adminActions';
 import { blockSlots, openSlots, setWeekHours } from '@/lib/schedule';
 import { attachPayment, detachPayment, unskipPayment } from '@/lib/stripePayments';
@@ -89,7 +89,11 @@ export async function POST(request) {
     else if (action === 'resend-mail-all') {
       result = await resendAllConfirmations(by, form.getAll('pick').map(String).filter(Boolean));
     }
-    else if (action === 'mail-reply') result = await replyByEmail(id, String(form.get('text') || ''), by);
+    else if (action === 'mail-reply') {
+      const up = await readUpload(form.get('file'));
+
+      result = up.error ? { ok: false, error: up.error } : await replyByEmail(id, String(form.get('text') || ''), by, up.file);
+    }
     else if (action === 'offer-launch') result = await launchOffer(id, String(form.get('manager') || ''), by);
     else if (action === 'offer-stop') result = await stopOffer(id, by);
     else if (action === 'host-pick') result = await hostPick(id, by);
@@ -98,7 +102,11 @@ export async function POST(request) {
     else if (action === 'reschedule') result = await rescheduleBooking(id, String(form.get('slot') || ''), by);
     else if (action === 'paylink') result = await sendPayLink(id, String(form.get('pack') || ''), by);
     else if (action === 'paid') result = await markPaid(id, form.get('amount'), String(form.get('pack') || ''), by);
-    else if (action === 'message') result = await messageStudent(id, String(form.get('text') || ''), by);
+    else if (action === 'message') {
+      const up = await readUpload(form.get('file'));
+
+      result = up.error ? { ok: false, error: up.error } : await messageStudent(id, String(form.get('text') || ''), by, up.file);
+    }
     else if (action === 'msg-edit') result = await editStudentMessage(id, String(form.get('item') || ''), String(form.get('text') || ''), by);
     else if (action === 'msg-delete') result = await deleteStudentMessage(id, String(form.get('item') || ''), by);
     else if (action === 'archive-unmarked') result = await archiveUnmarked(form.get('days'), by);

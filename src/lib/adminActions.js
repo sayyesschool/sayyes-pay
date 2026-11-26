@@ -1,7 +1,7 @@
 import { getBooking, updateBooking, addBookedSlot, removeBookedSlot, getBookedSlots, kvSet, kvGet, kvKeys } from '@/lib/redis';
 import { LESSON_RESET, rescheduleNote } from '@/lib/lessonReset';
 import { isHost } from '@/lib/access';
-import { sendMessage, editMessage, deleteMessage, formatManagerCard, bookingActionsKeyboard } from '@/lib/telegram';
+import { sendMessage, editMessage, deleteMessage, sendFile, editCaption, formatManagerCard, bookingActionsKeyboard } from '@/lib/telegram';
 import { clientWhen } from '@/lib/time';
 import { notifyManagers } from '@/lib/managers';
 import { sendTrialAttended, sendPurchase } from '@/lib/meta';
@@ -563,23 +563,50 @@ export async function archiveUnmarked(olderThanDays, by) {
   return { ok: true, message: 'В архив ушло записей: ' + archived };
 }
 
+// --- Файл из формы карточки (26.11.2026) ---
+// Файл идёт через функцию Vercel, у которой потолок тела запроса 4,5 МБ, поэтому 4 МБ.
+export const MAX_UPLOAD = 4 * 1024 * 1024;
+
+export async function readUpload(file) {
+  if (!file || typeof file === 'string' || !file.size) return { file: null };
+  if (file.size > MAX_UPLOAD) return { error: 'Файл больше 4 МБ: отправьте его сами в Telegram или почтой' };
+
+  const buffer = Buffer.from(await file.arrayBuffer());
+
+  return { file: { name: String(file.name || 'file').slice(0, 120), type: file.type || 'application/octet-stream', size: file.size, buffer } };
+}
+
+function sizeLabel(bytes) {
+  return bytes >= 1024 * 1024 ? (bytes / 1024 / 1024).toFixed(1) + ' МБ' : Math.max(1, Math.round(bytes / 1024)) + ' КБ';
+}
+
 // --- Сообщение ученику ---
-export async function messageStudent(bookingId, text, by) {
+export async function messageStudent(bookingId, text, by, file = null) {
   const booking = await getBooking(bookingId);
+  const body = String(text || '').trim();
 
   if (!booking) return { ok: false, error: 'Запись не найдена' };
-  if (!text || !text.trim()) return { ok: false, error: 'Пустое сообщение' };
+  if (!body && !file) return { ok: false, error: 'Пустое сообщение' };
   if (!booking.chatId) return { ok: false, error: 'У ученика нет чата с ботом — напишите на почту' };
+  if (file && body.length > 1024) return { ok: false, error: 'С файлом подпись до 1024 знаков (ограничение Telegram). Отправьте текст отдельным сообщением' };
 
-  const res = await sendMessage(booking.chatId, text.trim());
+  const res = file ? await sendFile(booking.chatId, file, body) : await sendMessage(booking.chatId, body);
 
   if (!res || !res.ok) return { ok: false, error: 'Telegram не принял сообщение' + (res && res.description ? ': ' + res.description : '') };
 
-  await addMessage(bookingId, { from: 'manager', text: text.trim(), by: '@' + by, tg: tgRef(res, booking.chatId, text.trim()) });
-  await updateBooking(bookingId, { lastManagerMessageAt: new Date().toISOString() });
-  await notifyManagers('✍️ @' + by + ' написал(а) ученику ' + (booking.name || booking.id) + ':\n\n' + text.trim());
+  const tg = tgRef(res, booking.chatId, body);
 
-  return { ok: true, message: 'Сообщение отправлено' };
+  if (tg && file) tg.kind = 'file';
+
+  await addMessage(bookingId, {
+    from: 'manager', text: body, by: '@' + by, tg,
+    ...(file ? { file: { name: file.name, size: file.size, type: file.type, fileId: res.fileId || null } } : {})
+  });
+  await updateBooking(bookingId, { lastManagerMessageAt: new Date().toISOString() });
+  await notifyManagers('✍️ @' + by + ' написал(а) ученику ' + (booking.name || booking.id) + ':\n\n'
+    + (file ? '📎 ' + file.name + ' (' + sizeLabel(file.size) + ')' + (body ? '\n' : '') : '') + body);
+
+  return { ok: true, message: file ? 'Сообщение с файлом отправлено' : 'Сообщение отправлено' };
 }
 
 // «📅 Предложить перенос» (06.11.2026, макет согласован Димой): после неявки ученик
@@ -636,12 +663,12 @@ export async function offerReschedule(bookingId, by) {
 // Ответ ученику письмом из карточки (10.11.2026). Уходит от info@ с именем
 // менеджера, запустившего оффер («Кристина | Say Yes!»), а если оффер не запускали,
 // с именем того, кто отвечает. Продолжает ту же цепочку писем (In-Reply-To).
-export async function replyByEmail(bookingId, text, by) {
+export async function replyByEmail(bookingId, text, by, file = null) {
   const booking = await getBooking(bookingId);
 
   if (!booking) return { ok: false, error: 'Запись не найдена' };
   if (!booking.email) return { ok: false, error: 'У ученика нет почты' };
-  if (!text || !String(text).trim()) return { ok: false, error: 'Пустое письмо' };
+  if (!text || !String(text).trim()) return { ok: false, error: 'Пустое письмо: напишите хотя бы пару слов к файлу' };
 
   let managerName = booking.offer && booking.offer.manager ? booking.offer.manager.name : '';
 
@@ -658,12 +685,16 @@ export async function replyByEmail(bookingId, text, by) {
     managerName,
     subject,
     inReplyTo: booking.mailLastInboundId || booking.mailLastOutId || null,
-    references: booking.mailLastReferences || null
+    references: booking.mailLastReferences || null,
+    files: file ? [{ name: file.name, type: file.type, base64: file.buffer.toString('base64') }] : []
   });
 
   if (!res || !res.ok) return { ok: false, error: 'Письмо не ушло: проблема на стороне почты, попробуйте позже' };
 
-  await addMessage(booking.id, { from: 'manager', by: '@' + by, channel: 'email', subject, text: String(text).trim() });
+  await addMessage(booking.id, {
+    from: 'manager', by: '@' + by, channel: 'email', subject, text: String(text).trim(),
+    ...(file ? { file: { name: file.name, size: file.size, type: file.type } } : {})
+  });
   await updateBooking(booking.id, { mailThread: true, mailLastOutId: res.messageId, mailLastSubject: subject.replace(/^re:\s*/i, '') });
 
   return { ok: true, message: 'Письмо отправлено от ' + (managerName ? managerName + ' | ' : '') + 'Say Yes!' };
@@ -722,14 +753,18 @@ export async function editStudentMessage(bookingId, itemId, text, by) {
 
   const next = String(text || '').trim();
 
-  if (!next) return { ok: false, error: 'Пустой текст. Чтобы убрать сообщение, нажмите «Удалить»' };
-
   const { item, error } = await threadItem(bookingId, itemId);
 
   if (error) return { ok: false, error };
+  if (!next && item.tg.kind !== 'file') return { ok: false, error: 'Пустой текст. Чтобы убрать сообщение, нажмите «Удалить»' };
   if (next === item.tg.text) return { ok: true, message: 'Текст не изменился' };
 
-  const res = await editMessage(item.tg.chatId, item.tg.messageId, next, item.tg.markup ? { reply_markup: item.tg.markup } : {});
+  if (item.tg.kind === 'file' && next.length > 1024) return { ok: false, error: 'Подпись к файлу до 1024 знаков' };
+
+  const opts = item.tg.markup ? { reply_markup: item.tg.markup } : {};
+  const res = item.tg.kind === 'file'
+    ? await editCaption(item.tg.chatId, item.tg.messageId, next, opts)
+    : await editMessage(item.tg.chatId, item.tg.messageId, next, opts);
 
   if (!res || !res.ok) {
     return { ok: false, error: 'Telegram не дал изменить' + (res && res.description ? ': ' + res.description : '') };

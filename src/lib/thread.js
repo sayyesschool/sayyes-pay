@@ -8,8 +8,8 @@ const KEY = bookingId => 'thread:' + bookingId;
 // channel: 'bot' (по умолчанию) или 'email' - письма цепочки и ответы на них (10.11.2026).
 // tg (25.11.2026): {chatId, messageId, text, markup} сообщения, ушедшего в бот. По нему
 // менеджер может изменить или удалить сообщение у ученика из карточки.
-export async function addMessage(bookingId, { from, text, by, channel, subject, tg }) {
-  if (!bookingId || !text) return;
+export async function addMessage(bookingId, { from, text, by, channel, subject, tg, file }) {
+  if (!bookingId || (!text && !file)) return;
 
   try {
     const stored = await kvGet(KEY(bookingId));
@@ -22,7 +22,9 @@ export async function addMessage(bookingId, { from, text, by, channel, subject, 
       by: by || null,
       ...(channel === 'email' ? { channel: 'email', subject: subject ? String(subject).slice(0, 200) : null } : {}),
       ...(tg && tg.chatId && tg.messageId ? { tg } : {}),
-      text: String(text).slice(0, 4000)
+      // file: { name, size, type, fileId? } - вложение; fileId есть только у файлов, ушедших в бот.
+      ...(file && file.name ? { file } : {}),
+      text: String(text || '').slice(0, 4000)
     });
 
     await kvSet(KEY(bookingId), list.slice(-50), 60 * 60 * 24 * 180);

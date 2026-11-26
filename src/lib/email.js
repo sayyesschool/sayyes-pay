@@ -211,6 +211,22 @@ ${hasSlot ? `<tr><td style="padding-bottom:18px;font-size:13px;color:#666;line-h
 </td></tr>`);
 }
 
+// Вложения письма (25.11.2026): календарь .ics и файлы, которые менеджер прикрепил в карточке.
+// Каждый адаптер берёт общий список и раскладывает его в свой формат.
+function mailFiles(msg) {
+  const list = [];
+
+  if (msg.ics) {
+    list.push({ name: 'say-yes-probny-urok.ics', type: 'text/calendar', base64: Buffer.from(msg.ics, 'utf-8').toString('base64') });
+  }
+
+  for (const f of msg.files || []) {
+    if (f && f.base64) list.push({ name: f.name || 'file', type: f.type || 'application/octet-stream', base64: f.base64 });
+  }
+
+  return list;
+}
+
 // --- адаптеры провайдеров ---
 // Каждый получает одинаковый msg: { from:{name,email}, to, replyTo, subject, html, ics }
 
@@ -224,12 +240,12 @@ async function sendPostmark(msg) {
   };
   if (msg.replyTo) body.ReplyTo = msg.replyTo;
   if (msg.headers) body.Headers = Object.entries(msg.headers).map(([Name, Value]) => ({ Name, Value }));
-  if (msg.ics) {
-    body.Attachments = [{
-      Name: 'say-yes-probny-urok.ics',
-      Content: Buffer.from(msg.ics, 'utf-8').toString('base64'),
-      ContentType: 'text/calendar; charset=utf-8; method=PUBLISH'
-    }];
+  if (mailFiles(msg).length) {
+    body.Attachments = mailFiles(msg).map(f => ({
+      Name: f.name,
+      Content: f.base64,
+      ContentType: f.type === 'text/calendar' ? 'text/calendar; charset=utf-8; method=PUBLISH' : f.type
+    }));
   }
   return fetch('https://api.postmarkapp.com/email', {
     method: 'POST',
@@ -251,12 +267,8 @@ async function sendZeptoMail(msg) {
   };
   if (msg.replyTo) body.reply_to = [{ address: msg.replyTo }];
   if (msg.headers) body.mime_headers = msg.headers;
-  if (msg.ics) {
-    body.attachments = [{
-      name: 'say-yes-probny-urok.ics',
-      content: Buffer.from(msg.ics, 'utf-8').toString('base64'),
-      mime_type: 'text/calendar'
-    }];
+  if (mailFiles(msg).length) {
+    body.attachments = mailFiles(msg).map(f => ({ name: f.name, content: f.base64, mime_type: f.type }));
   }
   // Домен и почта школы в европейском датацентре Zoho, поэтому по умолчанию .eu
   const url = process.env.ZEPTOMAIL_URL || 'https://api.zeptomail.eu/v1.1/email';
@@ -280,13 +292,8 @@ async function sendSendGrid(msg) {
   };
   if (msg.replyTo) body.reply_to = { email: msg.replyTo };
   if (msg.headers) body.headers = msg.headers;
-  if (msg.ics) {
-    body.attachments = [{
-      content: Buffer.from(msg.ics, 'utf-8').toString('base64'),
-      filename: 'say-yes-probny-urok.ics',
-      type: 'text/calendar',
-      disposition: 'attachment'
-    }];
+  if (mailFiles(msg).length) {
+    body.attachments = mailFiles(msg).map(f => ({ content: f.base64, filename: f.name, type: f.type, disposition: 'attachment' }));
   }
   return fetch('https://api.sendgrid.com/v3/mail/send', {
     method: 'POST',
@@ -307,11 +314,8 @@ async function sendResend(msg) {
   };
   if (msg.replyTo) body.reply_to = msg.replyTo;
   if (msg.headers) body.headers = msg.headers;
-  if (msg.ics) {
-    body.attachments = [{
-      filename: 'say-yes-probny-urok.ics',
-      content: Buffer.from(msg.ics, 'utf-8').toString('base64')
-    }];
+  if (mailFiles(msg).length) {
+    body.attachments = mailFiles(msg).map(f => ({ filename: f.name, content: f.base64 }));
   }
   return fetch('https://api.resend.com/emails', {
     method: 'POST',
@@ -846,7 +850,7 @@ export async function sendOfferChainEmail(booking, { subject, paragraphs, link, 
 }
 
 // Ответ менеджера из карточки ученика: продолжает ту же цепочку писем.
-export async function sendManagerReplyEmail(booking, { text, managerName, subject, inReplyTo, references }) {
+export async function sendManagerReplyEmail(booking, { text, managerName, subject, inReplyTo, references, files }) {
   if (!booking || !booking.email || !text) return { skipped: 'no email or text' };
 
   const paragraphs = String(text).trim().split(/\n{2,}/).map(p =>
@@ -863,7 +867,7 @@ export async function sendManagerReplyEmail(booking, { text, managerName, subjec
   if (inReplyTo) headers['In-Reply-To'] = inReplyTo;
   if (references || inReplyTo) headers.References = [references, inReplyTo].filter(Boolean).join(' ').slice(-900);
 
-  const msg = { ...baseMsg(booking, subject || 'Say Yes!: ответ на ваше письмо', html), from: infoFrom(managerName), replyTo: INFO_MAIL(), headers };
+  const msg = { ...baseMsg(booking, subject || 'Say Yes!: ответ на ваше письмо', html), from: infoFrom(managerName), replyTo: INFO_MAIL(), headers, files: files || [] };
   const res = await deliver(msg, 'manager-reply');
 
   return { ...res, messageId };
